@@ -11,3 +11,5 @@ clickhouse-connect==0.7.0
 requests==2.31.0
 redis==5.0.1
 neo4j==5.14.1
+great_expectations==0.18.8
+pandas==2.2.0
