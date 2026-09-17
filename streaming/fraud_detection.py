@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fraud.rules.large_amount import apply_large_amount_rule
 from fraud.rules.velocity import apply_velocity_rule
+from fraud.rules.velocity_redis import process_velocity_with_redis
 from aml.rules.structuring import apply_structuring_rule
 
 payment_schema = StructType([
@@ -83,6 +84,15 @@ def start_fraud_engine(spark):
         .outputMode("update") \
         .format("console") \
         .option("truncate", False) \
+        .start()
+
+    # ==========================================
+    # RULE 4: HIGH VELOCITY (REDIS STATEFUL)
+    # ==========================================
+    query_redis = parsed_df \
+        .writeStream \
+        .outputMode("update") \
+        .foreachBatch(process_velocity_with_redis) \
         .start()
 
     spark.streams.awaitAnyTermination()
