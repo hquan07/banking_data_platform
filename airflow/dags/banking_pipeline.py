@@ -30,6 +30,12 @@ run_customer_pipeline = BashOperator(
     dag=dag,
 )
 
+run_warehouse_pipeline = BashOperator(
+    task_id='run_warehouse_pipeline',
+    bash_command='python /opt/airflow/batch/warehouse_pipeline.py',
+    dag=dag,
+)
+
 run_transaction_pipeline = BashOperator(
     task_id='run_transaction_pipeline',
     bash_command='echo "Transaction pipeline would run here..."',
@@ -37,4 +43,4 @@ run_transaction_pipeline = BashOperator(
 )
 
 # Define task dependencies
-run_customer_pipeline >> run_transaction_pipeline
+run_customer_pipeline >> run_warehouse_pipeline >> run_transaction_pipeline

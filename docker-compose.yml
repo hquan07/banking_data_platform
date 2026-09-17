@@ -111,9 +111,26 @@ services:
     networks:
       - banking_network
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: banking_clickhouse
+    ports:
+      - "8123:8123"
+      - "9002:9000"
+    environment:
+      - CLICKHOUSE_DB=banking_warehouse
+      - CLICKHOUSE_USER=banking_user
+      - CLICKHOUSE_PASSWORD=banking_password
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    networks:
+      - banking_network
+
 volumes:
   postgres_data:
   minio_data:
+  clickhouse_data:
 
 networks:
   banking_network:
