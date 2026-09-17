@@ -30,11 +30,23 @@ run_customer_pipeline = BashOperator(
     dag=dag,
 )
 
+run_data_quality_check = BashOperator(
+    task_id='run_data_quality_check',
+    bash_command='python /opt/airflow/data_quality/great_expectations_check.py',
+    dag=dag,
+)
+
+run_warehouse_pipeline = BashOperator(
+    task_id='run_warehouse_pipeline',
+    bash_command='python /opt/airflow/batch/warehouse_pipeline.py',
+    dag=dag,
+)
+
 run_transaction_pipeline = BashOperator(
     task_id='run_transaction_pipeline',
     bash_command='echo "Transaction pipeline would run here..."',
     dag=dag,
 )
 
-# Define task dependencies
-run_customer_pipeline >> run_transaction_pipeline
+# Define task dependencies (Customer -> DQ -> Warehouse -> Transaction)
+run_customer_pipeline >> run_data_quality_check >> run_warehouse_pipeline >> run_transaction_pipeline

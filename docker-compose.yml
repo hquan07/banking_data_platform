@@ -14,11 +14,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
       # Mount thư mục DDL để tự động chạy các script SQL khởi tạo khi container khởi động lần đầu
       - ./warehouse/ddl:/docker-entrypoint-initdb.d
+    command: postgres -c wal_level=logical -c max_replication_slots=4 -c max_wal_senders=4
     networks:
       - banking_network
 
   kafka:
-    image: bitnami/kafka:3.5
+    image: bitnami/kafka:latest
     container_name: banking_kafka
     ports:
       - "9092:9092"
@@ -33,6 +34,24 @@ services:
       - KAFKA_KRAFT_CLUSTER_ID=banking_kafka_cluster_id
       - KAFKA_CFG_NODE_ID=1
       - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+    networks:
+      - banking_network
+
+  debezium:
+    image: quay.io/debezium/connect:2.4
+    container_name: banking_debezium
+    ports:
+      - "8083:8083"
+    environment:
+      - BOOTSTRAP_SERVERS=banking_kafka:9092
+      - GROUP_ID=1
+      - CONFIG_STORAGE_TOPIC=debezium_configs
+      - OFFSET_STORAGE_TOPIC=debezium_offsets
+      - STATUS_STORAGE_TOPIC=debezium_statuses
+    depends_on:
+      - kafka
+      - postgres
     networks:
       - banking_network
 
@@ -111,9 +130,93 @@ services:
     networks:
       - banking_network
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: banking_clickhouse
+    ports:
+      - "8123:8123"
+      - "9002:9000"
+    environment:
+      - CLICKHOUSE_DB=banking_warehouse
+      - CLICKHOUSE_USER=banking_user
+      - CLICKHOUSE_PASSWORD=banking_password
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    networks:
+      - banking_network
+
+  redis:
+    image: redis:latest
+    container_name: banking_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - banking_network
+
+  neo4j:
+    image: neo4j:5.11
+    container_name: banking_neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/banking_password
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - banking_network
+
+  superset:
+    image: apache/superset:latest
+    container_name: banking_superset
+    ports:
+      - "8088:8088"
+    environment:
+      - SUPERSET_SECRET_KEY=banking_secret_key_12345678901234567890
+    user: "root"
+    command: >
+      /bin/sh -c "
+      pip install clickhouse-sqlalchemy psycopg2-binary &&
+      superset db upgrade &&
+      superset fab create-admin --username admin --firstname Admin --lastname User --email admin@superset.com --password admin &&
+      superset init &&
+      /usr/bin/run-server.sh
+      "
+    networks:
+      - banking_network
+
+  dashboard_backend:
+    build: 
+      context: ./dashboard/backend
+      dockerfile: Dockerfile
+    container_name: banking_dashboard_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVER=banking_kafka:9092
+    depends_on:
+      - kafka
+    networks:
+      - banking_network
+
+  dashboard_frontend:
+    build:
+      context: ./dashboard/frontend
+      dockerfile: Dockerfile
+    container_name: banking_dashboard_frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - dashboard_backend
+    networks:
+      - banking_network
+
 volumes:
   postgres_data:
   minio_data:
+  clickhouse_data:
+  neo4j_data:
 
 networks:
   banking_network:

@@ -13,3 +13,11 @@ scrape_configs:
   - job_name: 'postgres'
     static_configs:
       - targets: ['banking_postgres:5432']
+
+  - job_name: 'spark'
+    static_configs:
+      - targets: ['banking_spark_master:8080']
+
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['banking_clickhouse:9363']
