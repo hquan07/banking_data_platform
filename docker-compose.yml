@@ -186,6 +186,32 @@ services:
     networks:
       - banking_network
 
+  dashboard_backend:
+    build: 
+      context: ./dashboard/backend
+      dockerfile: Dockerfile
+    container_name: banking_dashboard_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVER=banking_kafka:9092
+    depends_on:
+      - kafka
+    networks:
+      - banking_network
+
+  dashboard_frontend:
+    build:
+      context: ./dashboard/frontend
+      dockerfile: Dockerfile
+    container_name: banking_dashboard_frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - dashboard_backend
+    networks:
+      - banking_network
+
 volumes:
   postgres_data:
   minio_data:
