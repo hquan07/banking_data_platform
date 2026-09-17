@@ -58,8 +58,42 @@ services:
     networks:
       - banking_network
 
+  minio:
+    image: minio/minio:latest
+    container_name: banking_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - banking_network
+
+  airflow:
+    image: apache/airflow:2.7.0
+    container_name: banking_airflow
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - _AIRFLOW_DB_UPGRADE=True
+      - _AIRFLOW_WWW_USER_CREATE=True
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin
+    ports:
+      - "8081:8080"
+    command: standalone
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./batch:/opt/airflow/batch
+    networks:
+      - banking_network
+
 volumes:
   postgres_data:
+  minio_data:
 
 networks:
   banking_network:
