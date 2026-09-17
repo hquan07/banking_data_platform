@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: banking_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-banking_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-banking_password}
+      POSTGRES_DB: ${POSTGRES_DB:-banking_data_platform}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Mount thư mục DDL để tự động chạy các script SQL khởi tạo khi container khởi động lần đầu
+      - ./warehouse/ddl:/docker-entrypoint-initdb.d
+    networks:
+      - banking_network
+
+volumes:
+  postgres_data:
+
+networks:
+  banking_network:
+    driver: bridge
