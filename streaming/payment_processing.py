@@ -22,6 +22,7 @@ payment_schema = StructType([
 def create_spark_session():
     return SparkSession.builder \
         .appName("PaymentStreamingProcessor") \
+        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0") \
         .getOrCreate()
 
 def process_stream(spark):
