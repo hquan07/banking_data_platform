@@ -8,3 +8,4 @@ s3fs==2024.2.0
 pytest==8.0.0
 clickhouse-driver==0.2.6
 clickhouse-connect==0.7.0
+requests==2.31.0

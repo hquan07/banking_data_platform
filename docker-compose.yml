@@ -14,6 +14,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       # Mount thư mục DDL để tự động chạy các script SQL khởi tạo khi container khởi động lần đầu
       - ./warehouse/ddl:/docker-entrypoint-initdb.d
+    command: postgres -c wal_level=logical -c max_replication_slots=4 -c max_wal_senders=4
     networks:
       - banking_network
 
@@ -33,6 +34,24 @@ services:
       - KAFKA_KRAFT_CLUSTER_ID=banking_kafka_cluster_id
       - KAFKA_CFG_NODE_ID=1
       - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+    networks:
+      - banking_network
+
+  debezium:
+    image: quay.io/debezium/connect:2.4
+    container_name: banking_debezium
+    ports:
+      - "8083:8083"
+    environment:
+      - BOOTSTRAP_SERVERS=banking_kafka:9092
+      - GROUP_ID=1
+      - CONFIG_STORAGE_TOPIC=debezium_configs
+      - OFFSET_STORAGE_TOPIC=debezium_offsets
+      - STATUS_STORAGE_TOPIC=debezium_statuses
+    depends_on:
+      - kafka
+      - postgres
     networks:
       - banking_network
 
