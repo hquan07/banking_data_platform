@@ -154,10 +154,24 @@ services:
     networks:
       - banking_network
 
+  neo4j:
+    image: neo4j:5.11
+    container_name: banking_neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/banking_password
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - banking_network
+
 volumes:
   postgres_data:
   minio_data:
   clickhouse_data:
+  neo4j_data:
 
 networks:
   banking_network:

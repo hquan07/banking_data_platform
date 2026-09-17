@@ -10,3 +10,4 @@ clickhouse-driver==0.2.6
 clickhouse-connect==0.7.0
 requests==2.31.0
 redis==5.0.1
+neo4j==5.14.1
