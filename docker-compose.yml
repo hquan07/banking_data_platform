@@ -91,6 +91,26 @@ services:
     networks:
       - banking_network
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: banking_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+    networks:
+      - banking_network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: banking_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - banking_network
+
 volumes:
   postgres_data:
   minio_data:
