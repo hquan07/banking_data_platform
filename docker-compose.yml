@@ -167,6 +167,25 @@ services:
     networks:
       - banking_network
 
+  superset:
+    image: apache/superset:latest
+    container_name: banking_superset
+    ports:
+      - "8088:8088"
+    environment:
+      - SUPERSET_SECRET_KEY=banking_secret_key_12345678901234567890
+    user: "root"
+    command: >
+      /bin/sh -c "
+      pip install clickhouse-sqlalchemy psycopg2-binary &&
+      superset db upgrade &&
+      superset fab create-admin --username admin --firstname Admin --lastname User --email admin@superset.com --password admin &&
+      superset init &&
+      /usr/bin/run-server.sh
+      "
+    networks:
+      - banking_network
+
 volumes:
   postgres_data:
   minio_data:
