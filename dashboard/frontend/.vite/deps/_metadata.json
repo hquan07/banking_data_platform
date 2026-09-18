@@ -1,0 +1,61 @@
+{
+  "hash": "f7db7b2c",
+  "configHash": "67e7d724",
+  "lockfileHash": "42bb449c",
+  "browserHash": "e165bedf",
+  "optimized": {
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "38238b28",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "efa8f65a",
+      "needsInterop": true
+    },
+    "lucide-react": {
+      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
+      "file": "lucide-react.js",
+      "fileHash": "51155f53",
+      "needsInterop": false
+    },
+    "recharts": {
+      "src": "../../node_modules/recharts/es6/index.js",
+      "file": "recharts.js",
+      "fileHash": "721ae080",
+      "needsInterop": false
+    },
+    "react-simple-maps": {
+      "src": "../../node_modules/react-simple-maps/dist/index.es.js",
+      "file": "react-simple-maps.js",
+      "fileHash": "3d0b0398",
+      "needsInterop": false
+    },
+    "react-force-graph-2d": {
+      "src": "../../node_modules/react-force-graph-2d/dist/react-force-graph-2d.mjs",
+      "file": "react-force-graph-2d.js",
+      "fileHash": "9d3209ae",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-YBFRUR3B": {
+      "file": "chunk-YBFRUR3B.js"
+    },
+    "chunk-IMCNSRWN": {
+      "file": "chunk-IMCNSRWN.js"
+    },
+    "chunk-VYPTL5KB": {
+      "file": "chunk-VYPTL5KB.js"
+    },
+    "chunk-V5QLQQ7E": {
+      "file": "chunk-V5QLQQ7E.js"
+    },
+    "chunk-JRE55LYH": {
+      "file": "chunk-JRE55LYH.js"
+    }
+  }
+}

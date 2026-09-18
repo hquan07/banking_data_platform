@@ -19,7 +19,7 @@ services:
       - banking_network
 
   kafka:
-    image: bitnami/kafka:latest
+    image: bitnamilegacy/kafka:latest
     container_name: banking_kafka
     ports:
       - "9092:9092"
@@ -56,7 +56,7 @@ services:
       - banking_network
 
   spark-master:
-    image: bitnami/spark:3.5
+    image: bitnamilegacy/spark:3.5
     container_name: banking_spark_master
     environment:
       - SPARK_MODE=master
@@ -67,7 +67,7 @@ services:
       - banking_network
 
   spark-worker:
-    image: bitnami/spark:3.5
+    image: bitnamilegacy/spark:3.5
     container_name: banking_spark_worker
     environment:
       - SPARK_MODE=worker
@@ -78,7 +78,7 @@ services:
       - banking_network
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: banking_minio
     ports:
       - "9000:9000"

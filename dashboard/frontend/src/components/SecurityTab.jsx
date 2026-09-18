@@ -16,7 +16,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
             <div className="text-secondary" style={{textAlign: 'center', marginTop: '2rem'}}>No alerts detected.</div>
           ) : (
             alerts.map((alert, i) => (
-              <div key={i} className="alert-card slide-in">
+              <div key={i} className="alert-item">
                 <div style={{display: 'flex', justifyContent: 'space-between'}}>
                   <span style={{color: '#f59e0b', fontWeight: '600', fontSize: '12px'}}>{alert.rule}</span>
                   <span style={{color: 'var(--text-secondary)', fontSize: '12px'}}>Just now</span>
