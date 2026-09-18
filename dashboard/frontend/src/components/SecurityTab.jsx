@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import ForceGraph2D from 'react-force-graph-2d';
 import { ShieldAlert } from 'lucide-react';
@@ -6,35 +6,96 @@ import { ShieldAlert } from 'lucide-react';
 const COLORS = ['#ef4444', '#f59e0b', '#3b82f6'];
 
 export default function SecurityTab({ alerts, graphData, scatterData, riskyAccountsData, donutData }) {
+  const [pgAlerts, setPgAlerts] = useState([]);
+
+  useEffect(() => {
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchAlerts = () => {
+    fetch('http://localhost:8000/api/alerts')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setPgAlerts(data);
+      })
+      .catch(console.error);
+  };
+
+  const handleUpdateStatus = (id, status) => {
+    fetch(`http://localhost:8000/api/alerts/${id}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    }).then(() => fetchAlerts()).catch(console.error);
+  };
+
   return (
     <div className="grid">
-      {/* Alert Feed */}
-      <div className="panel col-span-4">
-        <h2 className="panel-title">Security Alerts</h2>
-        <div className="alert-feed">
-          {alerts.length === 0 ? (
-            <div className="text-secondary" style={{textAlign: 'center', marginTop: '2rem'}}>No alerts detected.</div>
-          ) : (
-            alerts.map((alert, i) => (
-              <div key={i} className="alert-item">
-                <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                  <span style={{color: '#f59e0b', fontWeight: '600', fontSize: '12px'}}>{alert.rule}</span>
-                  <span style={{color: 'var(--text-secondary)', fontSize: '12px'}}>Just now</span>
-                </div>
-                <div style={{marginTop: '4px', fontSize: '14px'}}>
-                  Account: <strong>{alert.account_id}</strong>
-                </div>
-                <div style={{marginTop: '2px', fontSize: '14px'}}>
-                  Amount: ${alert.amount} | Risk: {alert.risk_score}
-                </div>
-              </div>
-            ))
-          )}
+      {/* Alert Feed (Case Management) */}
+      <div className="panel col-span-12">
+        <h2 className="panel-title">Case Management (Postgres)</h2>
+        <div style={{overflowX: 'auto'}}>
+          <table style={{width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginTop: '1rem'}}>
+            <thead>
+              <tr style={{borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8'}}>
+                <th style={{padding: '8px'}}>ID</th>
+                <th style={{padding: '8px'}}>Time</th>
+                <th style={{padding: '8px'}}>Account</th>
+                <th style={{padding: '8px'}}>Rule</th>
+                <th style={{padding: '8px'}}>Risk</th>
+                <th style={{padding: '8px'}}>Status</th>
+                <th style={{padding: '8px'}}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pgAlerts.map(alert => (
+                <tr key={alert.alert_id} style={{borderBottom: '1px solid rgba(255,255,255,0.05)'}}>
+                  <td style={{padding: '12px 8px'}}>#{alert.alert_id}</td>
+                  <td style={{padding: '12px 8px'}}>{new Date(alert.created_at).toLocaleTimeString()}</td>
+                  <td style={{padding: '12px 8px', fontWeight: 'bold'}}>{alert.account_id}</td>
+                  <td style={{padding: '12px 8px', color: '#f59e0b'}}>{alert.rule_name}</td>
+                  <td style={{padding: '12px 8px'}}>
+                    <span style={{padding: '2px 8px', borderRadius: '12px', background: alert.risk_score > 90 ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)', color: alert.risk_score > 90 ? '#ef4444' : '#f59e0b'}}>
+                      {alert.risk_score}
+                    </span>
+                  </td>
+                  <td style={{padding: '12px 8px'}}>
+                    <span style={{color: alert.status === 'RESOLVED' ? '#10b981' : alert.status === 'IGNORED' ? '#94a3b8' : '#3b82f6'}}>
+                      {alert.status}
+                    </span>
+                  </td>
+                  <td style={{padding: '12px 8px'}}>
+                    {alert.status === 'PENDING' && (
+                      <div style={{display: 'flex', gap: '8px'}}>
+                        <button 
+                          onClick={() => handleUpdateStatus(alert.alert_id, 'RESOLVED')}
+                          style={{background: '#10b981', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px'}}
+                        >
+                          Resolve
+                        </button>
+                        <button 
+                          onClick={() => handleUpdateStatus(alert.alert_id, 'IGNORED')}
+                          style={{background: '#64748b', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px'}}
+                        >
+                          Ignore
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {pgAlerts.length === 0 && (
+                <tr><td colSpan="7" style={{textAlign: 'center', padding: '20px', color: '#64748b'}}>No alerts in Postgres database</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* Fraud Distribution */}
-      <div className="panel col-span-4">
+      <div className="panel col-span-6">
         <h2 className="panel-title">Fraud Distribution</h2>
         <ResponsiveContainer width="100%" height={250}>
           <PieChart>
@@ -52,7 +113,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
       </div>
 
       {/* Top Risky Accounts */}
-      <div className="panel col-span-4">
+      <div className="panel col-span-6">
         <h2 className="panel-title">Top Risky Accounts</h2>
         <ResponsiveContainer width="100%" height={250}>
           <BarChart data={riskyAccountsData} layout="vertical" margin={{top: 5, right: 30, left: 20, bottom: 5}}>
@@ -69,27 +130,8 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
         </ResponsiveContainer>
       </div>
 
-      {/* AML Graph */}
-      <div className="panel col-span-6" style={{height: '350px'}}>
-        <h2 className="panel-title">AML Network Graph (Neo4j)</h2>
-        <div style={{height: '100%', borderRadius: '8px', overflow: 'hidden'}}>
-          <ForceGraph2D
-            graphData={graphData}
-            width={600}
-            height={300}
-            nodeAutoColorBy="group"
-            nodeLabel="id"
-            backgroundColor="rgba(20, 26, 40, 0)"
-            linkColor={() => 'rgba(255,255,255,0.2)'}
-            linkDirectionalArrowLength={3.5}
-            linkDirectionalArrowRelPos={1}
-            nodeRelSize={6}
-          />
-        </div>
-      </div>
-
       {/* Anomaly Scatter Plot */}
-      <div className="panel col-span-6" style={{height: '350px'}}>
+      <div className="panel col-span-12" style={{height: '350px'}}>
         <h2 className="panel-title">Anomaly Detection (Scatter Plot)</h2>
         <ResponsiveContainer width="100%" height={300}>
           <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>

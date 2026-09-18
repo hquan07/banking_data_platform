@@ -3,6 +3,8 @@ import { Activity, ShieldAlert, Zap, Server } from 'lucide-react';
 import OverviewTab from './components/OverviewTab';
 import SecurityTab from './components/SecurityTab';
 import AnalyticsTab from './components/AnalyticsTab';
+import HistoryTab from './components/HistoryTab';
+import './index.css';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -21,13 +23,31 @@ export default function App() {
   });
 
   const [mapData, setMapData] = useState([]);
+  
+  const [sankeyData, setSankeyData] = useState({
+    nodes: [{ name: 'Bank A' }, { name: 'Bank B' }, { name: 'Crypto Ex' }, { name: 'Offshore' }],
+    links: [
+      { source: 0, target: 1, value: 50000 },
+      { source: 1, target: 2, value: 35000 },
+      { source: 1, target: 3, value: 15000 },
+      { source: 2, target: 3, value: 20000 }
+    ]
+  });
+
+  const [funnelData, setFunnelData] = useState([
+    { name: 'Total TX', value: 10000, fill: '#3b82f6' },
+    { name: 'DQ Passed', value: 9800, fill: '#10b981' },
+    { name: 'Fraud Checked', value: 9500, fill: '#f59e0b' },
+    { name: 'Cleared', value: 9400, fill: '#ef4444' }
+  ]);
 
   useEffect(() => {
+    let isMounted = true;
     const ws = new WebSocket("ws://localhost:8000/ws/stream");
 
     ws.onopen = () => {
       console.log("Connected to WebSocket");
-      setIsConnected(true);
+      if (isMounted) setIsConnected(true);
     };
 
     ws.onmessage = (event) => {
@@ -53,6 +73,27 @@ export default function App() {
             return newMap;
           });
         }
+        
+        // Update Funnel
+        setFunnelData(prev => {
+          const newData = [...prev];
+          newData[0].value += 1;
+          if (Math.random() > 0.02) newData[1].value += 1;
+          if (Math.random() > 0.05) newData[2].value += 1;
+          if (Math.random() > 0.08) newData[3].value += 1;
+          return newData;
+        });
+
+        // Update Sankey
+        setSankeyData(prev => {
+          const newLinks = [...prev.links];
+          const randomLinkIdx = Math.floor(Math.random() * newLinks.length);
+          newLinks[randomLinkIdx] = {
+            ...newLinks[randomLinkIdx],
+            value: newLinks[randomLinkIdx].value + message.data.amount
+          };
+          return { ...prev, links: newLinks };
+        });
 
       } else if (message.topic === "fraud-events" || message.topic === "aml-events") {
         setAlerts(prev => {
@@ -63,7 +104,9 @@ export default function App() {
       }
     };
 
-    ws.onclose = () => setIsConnected(false);
+    ws.onclose = () => {
+      if (isMounted) setIsConnected(false);
+    };
 
     // Reset TPS counter every second
     const interval = setInterval(() => {
@@ -71,6 +114,7 @@ export default function App() {
     }, 1000);
 
     return () => {
+      isMounted = false;
       ws.close();
       clearInterval(interval);
     };
@@ -114,24 +158,6 @@ export default function App() {
     { name: 'ACC_05', score: 81 },
     { name: 'ACC_73', score: 76 }
   ];
-
-  const sankeyData = {
-    nodes: [{ name: 'Bank A' }, { name: 'Bank B' }, { name: 'Crypto Ex' }, { name: 'Offshore' }],
-    links: [
-      { source: 0, target: 1, value: 50000 },
-      { source: 1, target: 2, value: 35000 },
-      { source: 1, target: 3, value: 15000 },
-      { source: 2, target: 3, value: 20000 }
-    ]
-  };
-
-  const funnelData = [
-    { name: 'Total TX', value: 10000, fill: '#3b82f6' },
-    { name: 'DQ Passed', value: 9800, fill: '#10b981' },
-    { name: 'Fraud Checked', value: 9500, fill: '#f59e0b' },
-    { name: 'Cleared', value: 9400, fill: '#ef4444' }
-  ];
-
   return (
     <div className="dashboard-container">
       <header className="header">
@@ -180,6 +206,9 @@ export default function App() {
         <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
           📈 Analytics & Governance
         </button>
+        <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+          📊 History (ClickHouse)
+        </button>
       </div>
 
       <main>
@@ -212,6 +241,7 @@ export default function App() {
         {activeTab === 'overview' && <OverviewTab data={chartData} mapData={mapData} />}
         {activeTab === 'security' && <SecurityTab alerts={alerts} graphData={graphData} scatterData={scatterData} riskyAccountsData={riskyAccountsData} donutData={donutData} />}
         {activeTab === 'analytics' && <AnalyticsTab sankeyData={sankeyData} funnelData={funnelData} />}
+        {activeTab === 'history' && <HistoryTab />}
       </main>
     </div>
   );
