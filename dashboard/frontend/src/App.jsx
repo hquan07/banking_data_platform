@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, ShieldAlert, Zap, Server } from 'lucide-react';
+import { Activity, ShieldAlert, Zap, Server, LayoutDashboard, BarChart3, History } from 'lucide-react';
 import OverviewTab from './components/OverviewTab';
 import SecurityTab from './components/SecurityTab';
 import AnalyticsTab from './components/AnalyticsTab';
 import HistoryTab from './components/HistoryTab';
+import Login from './components/Login';
+import { AuthProvider, AuthContext } from './components/AuthContext';
 import './index.css';
 
-export default function App() {
+function MainApp() {
   const [activeTab, setActiveTab] = useState('overview');
   const [alerts, setAlerts] = useState([]);
   const [tps, setTps] = useState(0);
   const [targetTps, setTargetTps] = useState(2);
   const [totalValue, setTotalValue] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
+  const { token, user, logout } = React.useContext(AuthContext);
   
   // Real-time chart data
   const [chartData, setChartData] = useState(() => {
@@ -144,10 +147,13 @@ export default function App() {
 
   const scatterData = Array.from({length: 40}, (_, i) => {
     const isAnomaly = Math.random() > 0.9;
+    const amount = isAnomaly ? Math.random() * 8000 + 5000 : Math.random() * 1000 + 50;
     return {
       x: Date.now() - (40 - i) * 60000,
-      y: isAnomaly ? Math.random() * 8000 + 5000 : Math.random() * 1000,
-      isAnomaly
+      y: amount,
+      z: isAnomaly ? 400 : 50,
+      isAnomaly,
+      reason: isAnomaly ? (amount > 10000 ? 'Struct/Smurf' : 'Large Transfer') : 'Normal'
     }
   });
 
@@ -158,15 +164,62 @@ export default function App() {
     { name: 'ACC_05', score: 81 },
     { name: 'ACC_73', score: 76 }
   ];
+
+  if (!token) {
+    return <Login />;
+  }
+
   return (
-    <div className="dashboard-container">
-      <header className="header">
-        <div style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
-          <Activity className="icon pulse" size={28} />
-          <h1>Unified Command Center</h1>
+    <div className="app-container">
+      {/* Sidebar Navigation */}
+      <nav className="sidebar">
+        <div className="sidebar-logo">
+          <ShieldAlert size={28} color="#3b82f6" />
+          <h1>Command Center</h1>
         </div>
-        
-        <div style={{display: 'flex', alignItems: 'center', gap: '2rem'}}>
+        <div className="nav-menu">
+          <button className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
+            <LayoutDashboard size={20} />
+            Overview
+          </button>
+          <button className={`nav-item ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>
+            <ShieldAlert size={20} />
+            Security 
+            {alerts.length > 0 && <span className="badge">{alerts.length}</span>}
+          </button>
+          <button className={`nav-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
+            <BarChart3 size={20} />
+            Analytics
+          </button>
+          <button className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+            <History size={20} />
+            History
+          </button>
+        </div>
+      </nav>
+
+      {/* Main Content Area */}
+      <div className="main-content">
+        {/* Header */}
+        <header className="header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+          <div className="status-indicators">
+            <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`}></span>
+            <span className="status-text">{isConnected ? 'System Online (WebSocket Connected)' : 'System Offline (Connecting...)'}</span>
+            <span style={{marginLeft: '20px', color: '#94a3b8'}}>Streaming TPS: <strong style={{color: '#fff'}}>{tps}</strong></span>
+          </div>
+          <div className="user-profile" style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+            <div style={{textAlign: 'right'}}>
+              <div style={{fontWeight: 'bold', fontSize: '14px', color: '#fff'}}>{user?.username}</div>
+              <div style={{fontSize: '12px', color: '#94a3b8'}}>{user?.role}</div>
+            </div>
+            <button onClick={logout} style={{background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'}}>
+              Logout
+            </button>
+          </div>
+        </header>
+
+        {/* Dynamic Tab Content */}
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '2rem', padding: '10px 20px'}}>
           {/* TPS Control Slider */}
           <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '0.5rem 1rem', borderRadius: '8px'}}>
             <span style={{fontSize: '0.875rem', color: 'var(--text-secondary)'}}>Mock TPS ({targetTps}):</span>
@@ -193,27 +246,9 @@ export default function App() {
             {isConnected ? 'LIVE (Kafka Connected)' : 'DISCONNECTED'}
           </div>
         </div>
-      </header>
-
-      {/* Tabs Navigation */}
-      <div className="tabs">
-        <button className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
-          🌐 Overview & Real-time
-        </button>
-        <button className={`tab-btn ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>
-          🛡️ Security & AML
-        </button>
-        <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
-          📈 Analytics & Governance
-        </button>
-        <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
-          📊 History (ClickHouse)
-        </button>
-      </div>
-
-      <main>
-        {/* Metric Cards (Always visible) */}
-        <div className="grid" style={{marginBottom: '1.5rem'}}>
+        <main className="dashboard-container">
+          {/* Metric Cards (Always visible) */}
+          <div className="grid" style={{marginBottom: '1.5rem'}}>
           <div className="metric-card col-span-4">
             <div className="metric-header">
               <Activity className="icon" size={20} />
@@ -242,7 +277,16 @@ export default function App() {
         {activeTab === 'security' && <SecurityTab alerts={alerts} graphData={graphData} scatterData={scatterData} riskyAccountsData={riskyAccountsData} donutData={donutData} />}
         {activeTab === 'analytics' && <AnalyticsTab sankeyData={sankeyData} funnelData={funnelData} />}
         {activeTab === 'history' && <HistoryTab />}
-      </main>
+        </main>
+      </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }

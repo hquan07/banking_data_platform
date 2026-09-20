@@ -5,7 +5,13 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from aiokafka import AIOKafkaConsumer
 from pydantic import BaseModel
-
+from auth import verify_password, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES, get_password_hash
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import Depends, HTTPException, status
+from datetime import timedelta
+import csv
+import io
+from fastapi.responses import StreamingResponse
 class TPSConfig(BaseModel):
     tps: int
 
@@ -135,6 +141,21 @@ async def simulate_events():
 
 @app.on_event("startup")
 async def startup_event():
+    # Initialize default users if not present
+    if pg_conn:
+        try:
+            with pg_conn.cursor() as cur:
+                cur.execute("SELECT count(*) FROM users")
+                if cur.fetchone()[0] == 0:
+                    admin_hash = get_password_hash("admin")
+                    analyst_hash = get_password_hash("analyst")
+                    cur.execute("INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)", ('admin', admin_hash, 'ADMIN'))
+                    cur.execute("INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)", ('analyst_1', analyst_hash, 'ANALYST'))
+                    # Assign existing alerts to analyst_1 to prevent them from being hidden
+                    cur.execute("UPDATE alerts SET assignee_id = (SELECT id FROM users WHERE username = 'analyst_1')")
+        except Exception as e:
+            print("Init users error:", e)
+
     # Thử kết nối Kafka, nếu lỗi thì bật Mock
     asyncio.create_task(consume_kafka())
     # Bật mock mode luôn để có dữ liệu demo đẹp mắt
@@ -290,12 +311,36 @@ except Exception as e:
     print(f"Postgres connection error: {e}")
     pg_conn = None
 
+@app.post("/api/auth/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    if not pg_conn:
+        raise HTTPException(status_code=500, detail="Database not connected")
+    with pg_conn.cursor() as cur:
+        cur.execute("SELECT id, username, password_hash, role FROM users WHERE username = %s", (form_data.username,))
+        user = cur.fetchone()
+        
+    if not user or not verify_password(form_data.password, user[2]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user[1], "role": user[3], "id": user[0]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer", "role": user[3], "username": user[1]}
+
 @app.get("/api/alerts")
-def get_alerts():
+def get_alerts(current_user: dict = Depends(get_current_user)):
     if pg_conn:
         try:
             with pg_conn.cursor() as cur:
-                cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at FROM alerts ORDER BY created_at DESC LIMIT 50")
+                if current_user["role"] == "ADMIN":
+                    cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at FROM alerts ORDER BY created_at DESC LIMIT 1000")
+                else:
+                    cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at FROM alerts WHERE assignee_id = %s ORDER BY created_at DESC LIMIT 1000", (current_user["id"],))
+                
                 rows = cur.fetchall()
                 data = []
                 for row in rows:
@@ -322,7 +367,7 @@ class AlertStatusUpdate(BaseModel):
     status: str
 
 @app.post("/api/alerts/{alert_id}/status")
-def update_alert_status(alert_id: int, update: AlertStatusUpdate):
+def update_alert_status(alert_id: int, update: AlertStatusUpdate, current_user: dict = Depends(get_current_user)):
     if pg_conn:
         try:
             with pg_conn.cursor() as cur:
@@ -332,3 +377,27 @@ def update_alert_status(alert_id: int, update: AlertStatusUpdate):
             print(f"Postgres update error: {e}")
             return {"error": str(e)}
     return {"message": "Mock updated"}
+
+@app.get("/api/alerts/export")
+def export_alerts(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "ADMIN":
+        raise HTTPException(status_code=403, detail="Only ADMIN can export reports")
+        
+    if not pg_conn:
+        raise HTTPException(status_code=500, detail="Database not connected")
+        
+    try:
+        with pg_conn.cursor() as cur:
+            cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at FROM alerts ORDER BY created_at DESC")
+            rows = cur.fetchall()
+            
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["Alert ID", "Account ID", "Rule Name", "Amount", "Risk Score", "Status", "Created At"])
+            for row in rows:
+                writer.writerow(row)
+                
+            output.seek(0)
+            return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=alerts_export.csv"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

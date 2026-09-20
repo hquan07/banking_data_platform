@@ -31,7 +31,7 @@ export default function AnalyticsTab({ sankeyData, funnelData }) {
         <h2 className="panel-title">Money Flow Analysis (Sankey Diagram)</h2>
         <ResponsiveContainer width="100%" height={350}>
           <Sankey
-            data={sankeyData}
+            data={JSON.parse(JSON.stringify(sankeyData))}
             nodePadding={50}
             margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
             link={{ stroke: '#77c878', strokeWidth: '10' }}
