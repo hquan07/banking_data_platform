@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, ShieldAlert, Zap, Server, LayoutDashboard, BarChart3, History } from 'lucide-react';
+import { Activity, ShieldAlert, Zap, Server, LayoutDashboard, BarChart3, History, Settings } from 'lucide-react';
 import OverviewTab from './components/OverviewTab';
 import SecurityTab from './components/SecurityTab';
 import AnalyticsTab from './components/AnalyticsTab';
 import HistoryTab from './components/HistoryTab';
+import RulesManagementTab from './components/RulesManagementTab';
 import Login from './components/Login';
 import { AuthProvider, AuthContext } from './components/AuthContext';
 import './index.css';
@@ -195,6 +196,12 @@ function MainApp() {
             <History size={20} />
             History
           </button>
+          {user?.role === 'ADMIN' && (
+            <button className={`nav-item ${activeTab === 'rules' ? 'active' : ''}`} onClick={() => setActiveTab('rules')}>
+              <Settings size={20} />
+              Rules
+            </button>
+          )}
         </div>
       </nav>
 
@@ -277,6 +284,7 @@ function MainApp() {
         {activeTab === 'security' && <SecurityTab alerts={alerts} graphData={graphData} scatterData={scatterData} riskyAccountsData={riskyAccountsData} donutData={donutData} />}
         {activeTab === 'analytics' && <AnalyticsTab sankeyData={sankeyData} funnelData={funnelData} />}
         {activeTab === 'history' && <HistoryTab />}
+        {activeTab === 'rules' && <RulesManagementTab />}
         </main>
       </div>
     </div>

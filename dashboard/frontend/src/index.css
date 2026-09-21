@@ -325,3 +325,40 @@ body {
   color: #3b82f6;
   border-right: 3px solid #3b82f6;
 }
+
+/* XAI Tooltip */
+.risk-badge-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.xai-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a2236;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 10px;
+  padding: 12px 14px;
+  min-width: 300px;
+  max-width: 380px;
+  z-index: 100;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  pointer-events: none;
+}
+
+.xai-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(245, 158, 11, 0.3);
+}
+
+.risk-badge-wrapper:hover .xai-tooltip {
+  display: block;
+}
