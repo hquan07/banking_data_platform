@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, ShieldAlert, Zap, Server, LayoutDashboard, BarChart3, History, Settings, Users } from 'lucide-react';
+import { Activity, ShieldAlert, Zap, Server, LayoutDashboard, BarChart3, History, Settings, Users, Network } from 'lucide-react';
 import OverviewTab from './components/OverviewTab';
 import SecurityTab from './components/SecurityTab';
 import AnalyticsTab from './components/AnalyticsTab';
 import HistoryTab from './components/HistoryTab';
 import RulesManagementTab from './components/RulesManagementTab';
 import UserManagementTab from './components/UserManagementTab';
+import ArchitectureTab from './components/ArchitectureTab';
 import Login from './components/Login';
 import { AuthProvider, AuthContext } from './components/AuthContext';
 import './index.css';
@@ -207,6 +208,10 @@ function MainApp() {
                 <Settings size={20} />
                 Rules
               </button>
+              <button className={`nav-item ${activeTab === 'architecture' ? 'active' : ''}`} onClick={() => setActiveTab('architecture')}>
+                <Network size={20} />
+                Architecture Map
+              </button>
             </>
           )}
         </div>
@@ -293,6 +298,7 @@ function MainApp() {
         {activeTab === 'history' && <HistoryTab />}
         {activeTab === 'users' && <UserManagementTab />}
         {activeTab === 'rules' && <RulesManagementTab />}
+        {activeTab === 'architecture' && <ArchitectureTab />}
         </main>
       </div>
     </div>

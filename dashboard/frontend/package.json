@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@xyflow/react": "^12.11.6",
     "d3-force": "^3.0.0",
     "d3-scale": "^4.0.2",
     "lucide-react": "^0.344.0",
