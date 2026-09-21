@@ -83,13 +83,8 @@ Once all containers transition to the *Running* state, you can access the follow
 
 * **Dashboard Web UI**: [http://localhost:5173](http://localhost:5173)
 * **Backend API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-* **MinIO Console**: [http://localhost:9001](http://localhost:9001) (User/Pass: `minioadmin` / `minioadmin`)
+* **MinIO Console**: [http://localhost:9001](http://localhost:9001)
 * **Neo4j Browser**: [http://localhost:7474](http://localhost:7474)
-
-### 4. Dashboard Login
-Use the default accounts to explore the system:
-* **Admin**: `admin` / `admin123` (Has access to Rules Management)
-* **Investigator**: `investigator1` / `pass123`
 
 ## 📁 Directory Structure
 
