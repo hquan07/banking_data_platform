@@ -41,6 +41,13 @@ graph TD
     Backend -->|Generates Presigned URLs| MinIO[("MinIO (S3 Storage)")]
     Frontend["React Frontend (Dashboard)"] <-->|REST API / WebSockets| Backend
     Frontend -->|Direct Upload| MinIO
+    
+    %% Monitoring
+    Prometheus[("Prometheus")] -->|Scrapes Metrics| Kafka
+    Prometheus -->|Scrapes Metrics| Spark
+    Prometheus -->|Scrapes Metrics| Postgres
+    Prometheus -->|Scrapes Metrics| ClickHouse
+    Grafana["Grafana Dashboard"] -->|Visualizes Data| Prometheus
 ```
 
 ## 💻 Tech Stack
@@ -56,6 +63,9 @@ The system utilizes a modern technology stack fully containerized with Docker.
   * **Neo4j**: Graph Database specialized in querying network relationships (for AML).
   * **Redis**: Caching and Pub/Sub Message Broker for the Rule Engine.
   * **MinIO**: S3-compatible Object Storage for saving evidence files (PDFs/Images).
+* **Monitoring & Observability**:
+  * **Prometheus**: Time-series database for scraping system metrics (Kafka, Spark, DBs).
+  * **Grafana**: Visualization dashboard for infrastructure and application health.
 
 ## 🚀 Setup & Installation
 
@@ -85,6 +95,8 @@ Once all containers transition to the *Running* state, you can access the follow
 * **Backend API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 * **MinIO Console**: [http://localhost:9001](http://localhost:9001)
 * **Neo4j Browser**: [http://localhost:7474](http://localhost:7474)
+* **Grafana**: [http://localhost:3000](http://localhost:3000)
+* **Prometheus**: [http://localhost:9090](http://localhost:9090)
 
 ## 📁 Directory Structure
 

@@ -8,7 +8,11 @@ scrape_configs:
 
   - job_name: 'kafka'
     static_configs:
-      - targets: ['banking_kafka:9092']
+      - targets: ['banking_kafka_exporter:9308']
+
+  - job_name: 'fastapi_backend'
+    static_configs:
+      - targets: ['banking_dashboard_backend:8000']
 
   - job_name: 'postgres'
     static_configs:

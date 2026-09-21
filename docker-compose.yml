@@ -136,6 +136,20 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - banking_network
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: banking_kafka_exporter
+    command: ["--kafka.server=banking_kafka:9092"]
+    ports:
+      - "9308:9308"
+    depends_on:
+      - kafka
     networks:
       - banking_network
 
