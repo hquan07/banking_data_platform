@@ -92,12 +92,7 @@ export default function Login() {
                     >
                         Sign In
                     </button>
-                    
-                    <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '13px', color: '#64748b' }}>
-                        Default accounts:<br/>
-                        admin / admin (ADMIN)<br/>
-                        analyst_1 / analyst (ANALYST)
-                    </div>
+
                 </form>
             </div>
         </div>
