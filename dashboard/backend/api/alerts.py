@@ -1,0 +1,134 @@
+"""
+Alerts CRUD, export, and evidence upload router.
+"""
+import csv
+import io
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from core.db import pg_conn, get_s3_client, EVIDENCE_BUCKET
+from core.deps import get_current_user
+
+router = APIRouter(prefix="/api", tags=["Alerts"])
+
+
+class AlertStatusUpdate(BaseModel):
+    status: str
+    notes: Optional[str] = None
+    assignee_id: Optional[int] = None
+
+
+@router.get("/alerts")
+def get_alerts(current_user: dict = Depends(get_current_user)):
+    if pg_conn:
+        try:
+            with pg_conn.cursor() as cur:
+                if current_user["role"] == "ADMIN":
+                    cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at, xai_explanation, notes, evidence_file_url, assignee_id FROM alerts ORDER BY created_at DESC LIMIT 1000")
+                else:
+                    cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at, xai_explanation, notes, evidence_file_url, assignee_id FROM alerts WHERE assignee_id = %s ORDER BY created_at DESC LIMIT 1000", (current_user["id"],))
+
+                rows = cur.fetchall()
+                data = []
+                for row in rows:
+                    data.append({
+                        "alert_id": row[0],
+                        "account_id": row[1],
+                        "rule_name": row[2],
+                        "amount": row[3],
+                        "risk_score": row[4],
+                        "status": row[5],
+                        "created_at": str(row[6]),
+                        "xai_explanation": row[7],
+                        "notes": row[8],
+                        "evidence_file_url": row[9],
+                        "assignee_id": row[10],
+                    })
+                return data
+        except Exception as e:
+            print(f"Postgres query error: {e}")
+
+    # Mock fallback
+    return [
+        {"alert_id": 1, "account_id": "ACC_44", "rule_name": "CIRCULAR_TRANSFER", "amount": 12000.0, "risk_score": 98, "status": "PENDING", "created_at": "2023-10-27 10:00:00", "xai_explanation": None, "notes": None, "evidence_file_url": None, "assignee_id": None},
+        {"alert_id": 2, "account_id": "ACC_11", "rule_name": "HIGH_VELOCITY", "amount": 4500.0, "risk_score": 85, "status": "PENDING", "created_at": "2023-10-27 10:05:00", "xai_explanation": None, "notes": None, "evidence_file_url": None, "assignee_id": None},
+    ]
+
+
+@router.post("/alerts/{alert_id}/status")
+def update_alert_status(alert_id: int, update: AlertStatusUpdate, current_user: dict = Depends(get_current_user)):
+    if pg_conn:
+        try:
+            with pg_conn.cursor() as cur:
+                set_parts = ["status = %s"]
+                params = [update.status]
+
+                if update.notes is not None:
+                    set_parts.append("notes = %s")
+                    params.append(update.notes)
+
+                if update.assignee_id is not None:
+                    set_parts.append("assignee_id = %s")
+                    params.append(update.assignee_id)
+
+                params.append(alert_id)
+                query = f"UPDATE alerts SET {', '.join(set_parts)} WHERE alert_id = %s"
+                cur.execute(query, tuple(params))
+            return {"message": "Success"}
+        except Exception as e:
+            print(f"Postgres update error: {e}")
+            return {"error": str(e)}
+    return {"message": "Mock updated"}
+
+
+@router.get("/alerts/export")
+def export_alerts(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "ADMIN":
+        raise HTTPException(status_code=403, detail="Only ADMIN can export reports")
+
+    if not pg_conn:
+        raise HTTPException(status_code=500, detail="Database not connected")
+
+    try:
+        with pg_conn.cursor() as cur:
+            cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at FROM alerts ORDER BY created_at DESC")
+            rows = cur.fetchall()
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["Alert ID", "Account ID", "Rule Name", "Amount", "Risk Score", "Status", "Created At"])
+            for row in rows:
+                writer.writerow(row)
+
+            output.seek(0)
+            return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=alerts_export.csv"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/evidence/presigned-url")
+def get_presigned_url(filename: str, alert_id: int, current_user: dict = Depends(get_current_user)):
+    client = get_s3_client()
+    if not client:
+        raise HTTPException(status_code=500, detail="MinIO is not connected")
+
+    object_key = f"alerts/{alert_id}/{filename}"
+    try:
+        url = client.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": EVIDENCE_BUCKET, "Key": object_key, "ContentType": "application/octet-stream"},
+            ExpiresIn=600,
+        )
+
+        download_url = f"http://localhost:9001/{EVIDENCE_BUCKET}/{object_key}"
+        if pg_conn:
+            try:
+                with pg_conn.cursor() as cur:
+                    cur.execute("UPDATE alerts SET evidence_file_url = %s WHERE alert_id = %s", (download_url, alert_id))
+            except Exception as e:
+                print(f"Error saving evidence URL: {e}")
+
+        return {"upload_url": url, "download_url": download_url, "object_key": object_key}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
