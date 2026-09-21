@@ -12,6 +12,6 @@ def get_connection():
         host=os.getenv("POSTGRES_HOST", "localhost"),
         port=os.getenv("POSTGRES_PORT", "5432"),
         dbname=os.getenv("POSTGRES_DB", "banking_data_platform"),
-        user=os.getenv("POSTGRES_USER", "banking_user"),
-        password=os.getenv("POSTGRES_PASSWORD", "banking_password")
+        user=os.getenv("POSTGRES_USER", ""),
+        password=os.getenv("POSTGRES_PASSWORD", "")
     )

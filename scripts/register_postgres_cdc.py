@@ -1,4 +1,5 @@
 import requests
+import os
 import json
 import time
 
@@ -11,9 +12,9 @@ CONNECTOR_CONFIG = {
         "tasks.max": "1",
         "database.hostname": "banking_postgres",
         "database.port": "5432",
-        "database.user": "banking_user",
-        "database.password": "banking_password",
-        "database.dbname": "banking_data_platform",
+        "database.user": os.environ.get("POSTGRES_USER", ""),
+        "database.password": os.environ.get("POSTGRES_PASSWORD", ""),
+        "database.dbname": os.environ.get("POSTGRES_DB", ""),
         "database.server.name": "banking_cdc",
         "plugin.name": "pgoutput",
         "schema.include.list": "core_banking",

@@ -51,8 +51,8 @@ def process_stream(spark):
     # Note: Requires postgresql jdbc driver when submitting
     db_url = "jdbc:postgresql://localhost:5433/banking_data_platform"
     db_properties = {
-        "user": "banking_user",
-        "password": "banking_password",
+        "user": os.environ.get("POSTGRES_USER", ""),
+        "password": os.environ.get("POSTGRES_PASSWORD", ""),
         "driver": "org.postgresql.Driver"
     }
     

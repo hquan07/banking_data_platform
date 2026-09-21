@@ -1,14 +1,16 @@
 import os
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, current_timestamp
+from pyspark.sql.functions import col, current_timestamp, regexp_replace, concat, substring, lit
 
 def create_spark_session():
     return SparkSession.builder \
         .appName("CustomerBatchPipeline") \
         .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.postgresql:postgresql:42.6.0") \
         .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000") \
-        .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
-        .config("spark.hadoop.fs.s3a.secret.key", "minioadmin") \
+        .config("spark.hadoop.fs.s3a.access.key", os.environ.get("MINIO_ROOT_USER", "")) \
+        .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("MINIO_ROOT_PASSWORD", "")) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .getOrCreate()
@@ -16,10 +18,13 @@ def create_spark_session():
 def run_pipeline(spark):
     print("Starting Customer Batch Pipeline...")
     
-    db_url = "jdbc:postgresql://localhost:5433/banking_data_platform"
+    host = os.environ.get("POSTGRES_HOST", "localhost")
+    port = os.environ.get("POSTGRES_PORT", "5433")
+    db = os.environ.get("POSTGRES_DB", "banking_data_platform")
+    db_url = f"jdbc:postgresql://{host}:{port}/{db}"
     db_properties = {
-        "user": "banking_user",
-        "password": "banking_password",
+        "user": os.environ.get("POSTGRES_USER", ""),
+        "password": os.environ.get("POSTGRES_PASSWORD", ""),
         "driver": "org.postgresql.Driver"
     }
     
@@ -33,12 +38,12 @@ def run_pipeline(spark):
     silver_df = customer_df.join(account_df, "customer_id", "left") \
         .select(
             customer_df["customer_id"],
-            customer_df["first_name"],
-            customer_df["last_name"],
-            customer_df["email"],
-            customer_df["phone"],
+            concat(substring(customer_df["first_name"], 1, 1), lit("***")).alias("first_name"),
+            concat(substring(customer_df["last_name"], 1, 1), lit("***")).alias("last_name"),
+            regexp_replace(customer_df["email"], "^(.*)@(.*)$", "***@$2").alias("email"),
+            concat(lit("*******"), substring(customer_df["phone"], -4, 4)).alias("phone"),
             customer_df["address"],
-            customer_df["city"],
+            customer_df["country"],
             account_df["account_id"],
             account_df["account_type"],
             account_df["balance"],
@@ -64,12 +69,11 @@ def run_pipeline(spark):
     print("Loading data into Data Warehouse (Gold Layer / Star Schema)...")
     dim_customer_df = customer_df.select(
         col("customer_id"),
-        col("first_name"),
-        col("last_name"),
-        col("email"),
-        col("phone"),
+        concat(substring(col("first_name"), 1, 1), lit("***")).alias("first_name"),
+        concat(substring(col("last_name"), 1, 1), lit("***")).alias("last_name"),
+        regexp_replace(col("email"), "^(.*)@(.*)$", "***@$2").alias("email"),
+        concat(lit("*******"), substring(col("phone"), -4, 4)).alias("phone"),
         col("address"),
-        col("city"),
         col("country")
     )
     dim_customer_df.write.jdbc(url=db_url, table="data_warehouse.dim_customer", mode="append", properties=db_properties)

@@ -49,8 +49,8 @@ async def lifespan(app: FastAPI):
             with pg_conn.cursor() as cur:
                 cur.execute("SELECT count(*) FROM users")
                 if cur.fetchone()[0] == 0:
-                    admin_hash = get_password_hash("admin")
-                    analyst_hash = get_password_hash("analyst")
+                    admin_hash = get_password_hash(os.environ.get("DASHBOARD_ADMIN_PASSWORD", ""))
+                    analyst_hash = get_password_hash(os.environ.get("DASHBOARD_ANALYST_PASSWORD", ""))
                     cur.execute("INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)", ('admin', admin_hash, 'ADMIN'))
                     cur.execute("INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)", ('analyst_1', analyst_hash, 'ANALYST'))
                     cur.execute("UPDATE alerts SET assignee_id = (SELECT id FROM users WHERE username = 'analyst_1')")

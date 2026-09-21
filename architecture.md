@@ -24,7 +24,7 @@ subgraph group_detection_aml["Detection & AML"]
   node_graph_pipeline["AML Graph Pipeline<br/>[neo4j_pipeline.py]"]
 end
 
-subgraph group_data_platform["Data Platform"]
+subgraph group_data_platform["Data Platform (RBAC Enabled)"]
   node_postgres[("PostgreSQL")]
   node_clickhouse[("ClickHouse")]
   node_neo4j[("Neo4j")]
@@ -44,7 +44,7 @@ subgraph group_dashboard_ops["Dashboard & Operations"]
 end
 
 subgraph group_batch_data["Batch Data"]
-  node_customer_batch["Customer Batch"]
+  node_customer_batch["Customer Batch<br/>(w/ PII Masking)"]
   node_warehouse_batch["Warehouse Batch"]
   node_airflow["Airflow Pipeline"]
 end
@@ -141,3 +141,15 @@ class node_customer_batch,node_warehouse_batch,node_airflow,node_investigator to
 | 🟢 Mint | Databases & Storage |
 | 🔴 Rose | Dashboard & API |
 | 🟣 Indigo | Batch Processing & Actors |
+
+## Security & Network Architecture
+
+To ensure enterprise-grade security, the system employs **Network Segmentation** with three isolated Docker networks:
+
+1. **`frontend_network`**: Exposes the React Dashboard and Grafana to users. It can only communicate with the Backend API, blocking direct database access.
+2. **`backend_network`**: Houses the FastAPI Backend, Airflow, and Spark processing engines. It acts as the bridge, communicating with both the frontend and the data layers.
+3. **`data_network`**: A highly restricted network containing PostgreSQL, ClickHouse, MinIO, Neo4j, and Kafka. Only accessible by backend services and processing engines.
+
+Additionally:
+- **Data Masking**: `Customer Batch` pipeline masks Personally Identifiable Information (PII) like emails and phone numbers before writing to the Data Lake / Data Warehouse.
+- **RBAC**: PostgreSQL and ClickHouse utilize Role-Based Access Control, granting `etl_user` full read/write privileges and restricting `dashboard_user` to read-only access.

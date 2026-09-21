@@ -1,3 +1,4 @@
+import os
 from neo4j import GraphDatabase
 
 class BankingGraph:
@@ -58,7 +59,11 @@ class BankingGraph:
 if __name__ == "__main__":
     print("Khởi tạo kết nối tới Neo4j Graph DB...")
     # Khởi tạo graph instance
-    graph = BankingGraph("neo4j://localhost:7687", "neo4j", "banking_password")
+    graph = BankingGraph(
+        os.environ.get("NEO4J_URI", "neo4j://localhost:7687"),
+        os.environ.get("NEO4J_USER", ""),
+        os.environ.get("NEO4J_PASSWORD", "")
+    )
     
     # ----------------------------------------------------
     # DEMO: Trong thực tế, Spark Structured Streaming 

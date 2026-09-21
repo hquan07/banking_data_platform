@@ -12,10 +12,11 @@ This project is built on a **Big Data / Event-Driven** architecture, utilizing r
 4. **🌐 KYC 360° View**: A comprehensive customer profile. Integrates Neo4j to visualize the transaction network graph, helping investigators identify complex money laundering rings.
 5. **🕵️ Case Investigation**: A Case Management system that allows security investigators to assign tasks, leave investigation notes, and securely upload evidence files via MinIO (S3-compatible).
 6. **📊 Analytics & Insights**: Advanced charts including Sankey diagrams (money flow), Scatter Plots (anomaly detection), and transaction conversion funnels.
+7. **🔒 Enterprise Security**: Implements Network Segmentation (3 isolated tiers), Data Masking for PII (Silver/Gold layers), and Database RBAC.
 
 ## 🏗 System Architecture
 
-The platform follows a robust event-driven microservices architecture:
+The platform follows a robust event-driven microservices architecture, secured by **Network Segmentation** (Frontend, Backend, and Data networks):
 
 ```mermaid
 graph TD
@@ -66,6 +67,7 @@ The system utilizes a modern technology stack fully containerized with Docker.
 * **Monitoring & Observability**:
   * **Prometheus**: Time-series database for scraping system metrics (Kafka, Spark, DBs).
   * **Grafana**: Visualization dashboard for infrastructure and application health.
+* **Security**: Centralized `.env` secrets management, RBAC for Postgres/ClickHouse, and PySpark-based Data Masking.
 
 ## 🚀 Setup & Installation
 
@@ -86,6 +88,8 @@ The initial startup may take a few minutes to pull images and initialize databas
 - `banking_postgres`, `banking_clickhouse`, `banking_neo4j`, `banking_redis`, `banking_minio`
 - `banking_spark_master`, `banking_spark_worker`
 - `banking_dashboard_backend`, `banking_dashboard_frontend`
+
+*Note: The containers are deployed across 3 isolated Docker networks (`frontend_network`, `backend_network`, `data_network`) for enhanced security.*
 
 ### 3. Accessing Services
 

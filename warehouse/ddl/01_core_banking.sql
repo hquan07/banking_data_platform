@@ -88,3 +88,33 @@ CREATE TABLE IF NOT EXISTS core_banking.payment_event (
     timestamp TIMESTAMP,
     status VARCHAR(20)
 );
+
+-- ==========================================
+-- RBAC (Role-Based Access Control)
+-- ==========================================
+
+-- Create users (passwords should be changed in production or via env if possible, but DDL scripts run at init)
+DO
+$do$
+BEGIN
+   IF NOT EXISTS (
+      SELECT FROM pg_catalog.pg_roles
+      WHERE  rolname = 'etl_user') THEN
+      CREATE ROLE etl_user LOGIN PASSWORD 'etl_password_placeholder';
+   END IF;
+   IF NOT EXISTS (
+      SELECT FROM pg_catalog.pg_roles
+      WHERE  rolname = 'dashboard_user') THEN
+      CREATE ROLE dashboard_user LOGIN PASSWORD 'dashboard_password_placeholder';
+   END IF;
+END
+$do$;
+
+-- Grant privileges for core_banking
+GRANT USAGE ON SCHEMA core_banking TO etl_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA core_banking TO etl_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA core_banking GRANT ALL ON TABLES TO etl_user;
+
+GRANT USAGE ON SCHEMA core_banking TO dashboard_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA core_banking TO dashboard_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA core_banking GRANT SELECT ON TABLES TO dashboard_user;

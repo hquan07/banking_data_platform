@@ -120,3 +120,16 @@ CREATE TABLE IF NOT EXISTS data_warehouse.fact_fraud_alert (
     decision VARCHAR(50), -- APPROVE, MONITOR, REVIEW, BLOCK
     timestamp TIMESTAMP
 );
+
+-- ==========================================
+-- RBAC (Role-Based Access Control)
+-- ==========================================
+
+-- Grant privileges for data_warehouse
+GRANT USAGE ON SCHEMA data_warehouse TO etl_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA data_warehouse TO etl_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA data_warehouse GRANT ALL ON TABLES TO etl_user;
+
+GRANT USAGE ON SCHEMA data_warehouse TO dashboard_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA data_warehouse TO dashboard_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA data_warehouse GRANT SELECT ON TABLES TO dashboard_user;

@@ -15,8 +15,8 @@ try:
         host=os.environ.get("POSTGRES_HOST", "banking_postgres"),
         port=int(os.environ.get("POSTGRES_PORT", 5432)),
         dbname=os.environ.get("POSTGRES_DB", "banking_data_platform"),
-        user=os.environ.get("POSTGRES_USER", "banking_user"),
-        password=os.environ.get("POSTGRES_PASSWORD", "banking_password"),
+        user=os.environ.get("POSTGRES_USER", ""),
+        password=os.environ.get("POSTGRES_PASSWORD", ""),
     )
     pg_conn.autocommit = True
 except Exception as e:
@@ -29,8 +29,8 @@ graph_driver = None
 try:
     from neo4j import GraphDatabase
     NEO4J_URI = os.environ.get("NEO4J_URI", "neo4j://banking_neo4j:7687")
-    NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
-    NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "banking_password")
+    NEO4J_USER = os.environ.get("NEO4J_USER", "")
+    NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "")
     graph_driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 except ImportError:
     print("neo4j module not installed")
@@ -46,8 +46,8 @@ try:
     ch_client = Client(
         host=os.environ.get("CLICKHOUSE_HOST", "banking_clickhouse"),
         port=int(os.environ.get("CLICKHOUSE_PORT", 9000)),
-        user=os.environ.get("CLICKHOUSE_USER", "banking_user"),
-        password=os.environ.get("CLICKHOUSE_PASSWORD", "banking_password"),
+        user=os.environ.get("CLICKHOUSE_USER", ""),
+        password=os.environ.get("CLICKHOUSE_PASSWORD", ""),
         database=os.environ.get("CLICKHOUSE_DB", "banking_warehouse"),
     )
 except Exception as e:
@@ -89,8 +89,8 @@ def get_s3_client():
         _s3_client = boto3.client(
             "s3",
             endpoint_url=os.environ.get("MINIO_ENDPOINT", "http://banking_minio:9000"),
-            aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
-            aws_secret_access_key=os.environ.get("MINIO_SECRET_KEY", "minioadmin"),
+            aws_access_key_id=os.environ.get("MINIO_ROOT_USER", ""),
+            aws_secret_access_key=os.environ.get("MINIO_ROOT_PASSWORD", ""),
             config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
             region_name="us-east-1",
         )
