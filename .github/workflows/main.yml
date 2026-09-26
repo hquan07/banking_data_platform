@@ -1,0 +1,59 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "feature/*" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8
+        if [ -f dashboard/backend/requirements.txt ]; then pip install -r dashboard/backend/requirements.txt; fi
+
+    - name: Lint Python code
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Install Node dependencies
+      run: |
+        cd dashboard/frontend
+        npm install
+
+    - name: Lint Frontend code
+      run: |
+        cd dashboard/frontend
+        # Run ESLint (assuming it is configured in package.json)
+        npm run lint --if-present
+
+    - name: Security Scan (Trivy)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'table'
+        exit-code: '0'
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: 'CRITICAL,HIGH'
