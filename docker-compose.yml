@@ -40,6 +40,7 @@ services:
       - KAFKA_CFG_NODE_ID=1
       - ALLOW_PLAINTEXT_LISTENER=yes
       - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CFG_NUM_PARTITIONS=3
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
       interval: 10s
@@ -233,6 +234,7 @@ services:
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+      - ./docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
       interval: 10s
@@ -244,6 +246,9 @@ services:
   redis:
     image: redis:latest
     container_name: banking_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
     ports:
       - "6379:6379"
     healthcheck:
@@ -350,7 +355,8 @@ services:
     build:
       context: .
       dockerfile: docker/spark/Dockerfile
-    container_name: banking_payment_processor
+    deploy:
+      replicas: 2
     command:
       - /opt/bitnami/spark/bin/spark-submit
       - --master
@@ -453,6 +459,7 @@ volumes:
   minio_data:
   clickhouse_data:
   neo4j_data:
+  redis_data:
 
 networks:
   frontend_network:
