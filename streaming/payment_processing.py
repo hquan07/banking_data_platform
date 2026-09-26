@@ -6,6 +6,7 @@ from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 # Define the schema of the JSON payload from Kafka
 payment_schema = StructType([
     StructField("payment_id", StringType(), True),
+    StructField("trace_id", StringType(), True),
     StructField("customer_id", StringType(), True),
     StructField("account_id", StringType(), True),
     StructField("merchant_id", StringType(), True),

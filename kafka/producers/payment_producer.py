@@ -23,6 +23,7 @@ def simulate_payments():
     try:
         while True:
             tx = {
+                "trace_id": str(uuid.uuid4()),
                 "event_id": uuid.uuid4().hex,
                 "payment_id": f"PAY_{uuid.uuid4().hex[:12].upper()}",
                 "transaction_id": f"TX_{random.randint(10000, 99999)}",

@@ -22,6 +22,18 @@ from api.analytics import router as analytics_router
 from api.users import router as users_router
 from api.config import router as config_router
 
+import logging
+from pythonjsonlogger import jsonlogger
+
+# Configure JSON Logging
+logHandler = logging.StreamHandler()
+formatter = jsonlogger.JsonFormatter(
+    '%(asctime)s %(levelname)s %(name)s %(message)s'
+)
+logHandler.setFormatter(formatter)
+logging.basicConfig(level=logging.INFO, handlers=[logHandler])
+logger = logging.getLogger(__name__)
+
 
 # =============================================
 # Lifespan (replaces deprecated on_event)

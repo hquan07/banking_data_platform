@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS core_banking.transaction (
 -- 6. Raw Payments Table (for initial batch load / simulation target)
 CREATE TABLE IF NOT EXISTS core_banking.payment_event (
     payment_id VARCHAR(50) PRIMARY KEY,
+    trace_id VARCHAR(50),
     customer_id VARCHAR(50),
     account_id VARCHAR(50),
     merchant_id VARCHAR(50),
