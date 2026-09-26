@@ -44,10 +44,13 @@ def run_dq_checks(data_path):
     # 1. Kiểm tra không được NULL
     validator.expect_column_values_to_not_be_null(column="customer_id")
     
-    # 2. Kiểm tra số dư không được âm
+    # 2. Kiểm tra Unique Key
+    validator.expect_column_values_to_be_unique(column="customer_id")
+    
+    # 3. Kiểm tra số dư (amount/balance) không được âm
     validator.expect_column_values_to_be_between(column="balance", min_value=0)
     
-    # 3. Kiểm tra trạng thái tài khoản hợp lệ
+    # 4. Kiểm tra trạng thái tài khoản hợp lệ
     validator.expect_column_values_to_be_in_set(
         column="account_status", 
         value_set=["ACTIVE", "CLOSED", "SUSPENDED"]
@@ -70,6 +73,22 @@ def run_dq_checks(data_path):
     
     if not results["success"]:
         print("[LỖI NGHIÊM TRỌNG] Data Quality Check THẤT BẠI!")
+        
+        # Đẩy vào Quarantine Path
+        import uuid
+        quarantine_path = f"s3a://banking-lake/quarantine/customers_failed_{uuid.uuid4()}.parquet"
+        print(f"Đẩy toàn bộ bản ghi lỗi vào Quarantine: {quarantine_path}")
+        df.to_parquet(
+            quarantine_path,
+            storage_options={
+                "key": os.environ.get("MINIO_ROOT_USER"),
+                "secret": os.environ.get("MINIO_ROOT_PASSWORD"),
+                "client_kwargs": {
+                    "endpoint_url": os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
+                },
+            }
+        )
+        
         print("Pipeline sẽ bị chặn, không nạp dữ liệu rác vào ClickHouse DWH.")
         # Bắn lỗi để Airflow đánh dấu Task là FAILED
         raise ValueError("Data Quality checks failed.")
