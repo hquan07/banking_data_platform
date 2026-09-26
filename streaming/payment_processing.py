@@ -22,7 +22,12 @@ payment_schema = StructType([
 def create_spark_session():
     return SparkSession.builder \
         .appName("PaymentStreamingProcessor") \
-        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0") \
+        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262") \
+        .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")) \
+        .config("spark.hadoop.fs.s3a.access.key", os.environ.get("MINIO_ROOT_USER", "minioadmin")) \
+        .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("MINIO_ROOT_PASSWORD", "minioadmin")) \
+        .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .getOrCreate()
 
 def process_stream(spark):
@@ -35,13 +40,28 @@ def process_stream(spark):
         .option("startingOffsets", "latest") \
         .load()
     
-    # Parse JSON
-    parsed_df = df.selectExpr("CAST(value AS STRING)") \
-        .select(from_json(col("value"), payment_schema).alias("data")) \
-        .select("data.*")
+    # Parse JSON and separate valid/invalid for DLQ
+    parsed_df = df.selectExpr("CAST(value AS STRING) as raw_value") \
+        .withColumn("data", from_json(col("raw_value"), payment_schema))
     
+    valid_df = parsed_df.filter(col("data").isNotNull()).select("data.*")
+    dlq_df = parsed_df.filter(col("data").isNull()).select(col("raw_value").alias("value"))
+    
+    # Write malformed events to DLQ topic
+    dlq_query = dlq_df \
+        .writeStream \
+        .outputMode("append") \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
+        .option("topic", "payment-events-dlq") \
+        .option(
+            "checkpointLocation",
+            os.environ.get("SPARK_CHECKPOINT_DIR", "s3a://checkpoints") + "/payment_processor_dlq",
+        ) \
+        .start()
+        
     # Write to console (for debugging)
-    console_query = parsed_df \
+    console_query = valid_df \
         .writeStream \
         .outputMode("append") \
         .format("console") \
@@ -69,12 +89,12 @@ def process_stream(spark):
         casted_df.write \
             .jdbc(url=db_url, table="core_banking.payment_event", mode="append", properties=db_properties)
             
-    db_query = parsed_df \
+    db_query = valid_df \
         .writeStream \
         .foreachBatch(write_to_postgres) \
         .option(
             "checkpointLocation",
-            os.environ.get("SPARK_CHECKPOINT_DIR", "/tmp/checkpoints/payment_processor"),
+            os.environ.get("SPARK_CHECKPOINT_DIR", "s3a://checkpoints") + "/payment_processor",
         ) \
         .start()
         

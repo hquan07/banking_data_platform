@@ -25,16 +25,21 @@ def process_velocity_with_redis(df, epoch_id):
             # Redis key for account velocity
             key = f"velocity:{account_id}"
             
-            # Increment transaction count and amount
-            r.hincrby(key, "count", 1)
-            r.hincrbyfloat(key, "total_amount", amount)
+            # Sử dụng Redis pipeline để đảm bảo tính atomic và giảm network RTT
+            pipe = r.pipeline()
+            pipe.hincrby(key, "count", 1)
+            pipe.hincrbyfloat(key, "total_amount", amount)
+            pipe.ttl(key)
+            results = pipe.execute()
             
-            # Đặt TTL là 5 phút (300 giây) để tự động reset cửa sổ thời gian
-            if r.ttl(key) == -1:
+            current_count = results[0]
+            ttl = results[2]
+            
+            # Đặt TTL là 5 phút (300 giây) nếu chưa có
+            if ttl == -1:
                 r.expire(key, 300)
                 
             # Kiểm tra luật
-            current_count = int(r.hget(key, "count"))
             if current_count > 5:
                 # Trigger alert
                 alert = {

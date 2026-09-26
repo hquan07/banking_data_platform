@@ -63,7 +63,12 @@ payment_schema = StructType([
 def create_spark_session():
     return SparkSession.builder \
         .appName("FraudDetectionEngine") \
-        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0") \
+        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262") \
+        .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")) \
+        .config("spark.hadoop.fs.s3a.access.key", os.environ.get("MINIO_ROOT_USER", "minioadmin")) \
+        .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("MINIO_ROOT_PASSWORD", "minioadmin")) \
+        .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .getOrCreate()
 
 def start_fraud_engine(spark):
@@ -114,7 +119,7 @@ def start_fraud_engine(spark):
         .format("kafka") \
         .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
         .option("topic", "fraud-events") \
-        .option("checkpointLocation", os.environ.get("SPARK_CHECKPOINT_DIR", "/tmp/checkpoints/ml_fraud")) \
+        .option("checkpointLocation", os.environ.get("SPARK_CHECKPOINT_DIR", "s3a://checkpoints") + "/ml_fraud") \
         .start()
 
     # ==========================================
@@ -128,10 +133,7 @@ def start_fraud_engine(spark):
         .format("kafka") \
         .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
         .option("topic", "fraud-events") \
-        .option("checkpointLocation", os.path.join(
-            os.environ.get("SPARK_CHECKPOINT_DIR", "/tmp/checkpoints"),
-            "large_amount"
-        )) \
+        .option("checkpointLocation", os.environ.get("SPARK_CHECKPOINT_DIR", "s3a://checkpoints") + "/large_amount") \
         .start()
 
     # ==========================================
@@ -147,10 +149,7 @@ def start_fraud_engine(spark):
         .format("kafka") \
         .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
         .option("topic", "fraud-events") \
-        .option("checkpointLocation", os.path.join(
-            os.environ.get("SPARK_CHECKPOINT_DIR", "/tmp/checkpoints"),
-            "velocity"
-        )) \
+        .option("checkpointLocation", os.environ.get("SPARK_CHECKPOINT_DIR", "s3a://checkpoints") + "/velocity") \
         .start()
 
     # ==========================================
@@ -166,10 +165,7 @@ def start_fraud_engine(spark):
         .format("kafka") \
         .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
         .option("topic", "aml-events") \
-        .option("checkpointLocation", os.path.join(
-            os.environ.get("SPARK_CHECKPOINT_DIR", "/tmp/checkpoints"),
-            "structuring"
-        )) \
+        .option("checkpointLocation", os.environ.get("SPARK_CHECKPOINT_DIR", "s3a://checkpoints") + "/structuring") \
         .start()
 
     # ==========================================
