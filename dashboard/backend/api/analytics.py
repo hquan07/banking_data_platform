@@ -122,15 +122,51 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
             "links": [{"source": account_id, "target": p, "value": random.randint(500, 8000)} for p in mock_peers],
         }
 
-    # 3. Mock recent transactions and devices
-    profile["recent_transactions"] = [
-        {"time": str(datetime.datetime.now() - datetime.timedelta(minutes=i * 5)), "amount": round(random.uniform(50, 5000), 2), "type": random.choice(["TRANSFER", "PAYMENT", "DEPOSIT"])}
-        for i in range(10)
-    ]
-    profile["devices"] = [
-        {"name": "iPhone 15 Pro", "last_seen": "2 giờ trước", "ip": f"103.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}"},
-        {"name": "Chrome - Windows 11", "last_seen": "5 giờ trước", "ip": f"14.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}"},
-    ]
+    # 3. Real recent transactions and devices from ClickHouse
+    if ch_client:
+        try:
+            # Query recent transactions
+            tx_query = """
+                SELECT event_time, amount, payment_method
+                FROM fct_transactions
+                WHERE account_id = %(account_id)s
+                ORDER BY event_time DESC
+                LIMIT 10
+            """
+            tx_result = ch_client.execute(tx_query, {"account_id": account_id})
+            if tx_result:
+                profile["recent_transactions"] = [
+                    {"time": str(row[0]), "amount": float(row[1]), "type": row[2]}
+                    for row in tx_result
+                ]
+
+            # Query devices
+            device_query = """
+                SELECT device_id, max(event_time)
+                FROM fct_transactions
+                WHERE account_id = %(account_id)s AND device_id != ''
+                GROUP BY device_id
+                LIMIT 5
+            """
+            device_result = ch_client.execute(device_query, {"account_id": account_id})
+            if device_result:
+                profile["devices"] = [
+                    {"name": row[0], "last_seen": str(row[1]), "ip": "Unknown"}
+                    for row in device_result
+                ]
+        except Exception as e:
+            print(f"KYC ClickHouse error: {e}")
+
+    # Fallback if no data found
+    if not profile["recent_transactions"]:
+        profile["recent_transactions"] = [
+            {"time": str(datetime.datetime.now() - datetime.timedelta(minutes=i * 5)), "amount": round(random.uniform(50, 5000), 2), "type": random.choice(["TRANSFER", "PAYMENT", "DEPOSIT"])}
+            for i in range(3)
+        ]
+    if not profile["devices"]:
+        profile["devices"] = [
+            {"name": "Unknown Device", "last_seen": "N/A", "ip": "N/A"}
+        ]
 
     if profile["trust_score"] is None:
         profile["trust_score"] = 75

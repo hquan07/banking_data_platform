@@ -8,6 +8,8 @@ import random
 import time
 
 from fastapi import WebSocket
+from prometheus_client import Histogram
+from datetime import datetime
 from core.db import pg_conn, redis_client
 
 
@@ -40,6 +42,12 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP_SERVER", "localhost:9092")
+
+# Metrics
+DATA_FRESHNESS = Histogram(
+    "data_freshness_seconds", 
+    "Time from event generation to backend consumption"
+)
 
 # =============================================
 # XAI Helper: Generate mock explanation
@@ -138,6 +146,17 @@ async def consume_kafka():
         try:
             async for msg in consumer:
                 data = json.loads(msg.value.decode('utf-8'))
+                
+                # Observe Data Freshness
+                if "timestamp" in data:
+                    try:
+                        event_time = datetime.strptime(data["timestamp"], "%Y-%m-%dT%H:%M:%SZ")
+                        latency = (datetime.utcnow() - event_time).total_seconds()
+                        if latency > 0:
+                            DATA_FRESHNESS.observe(latency)
+                    except Exception:
+                        pass
+                        
                 payload = {"topic": msg.topic, "data": data}
                 await manager.broadcast(payload)
 

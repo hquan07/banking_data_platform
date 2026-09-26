@@ -18,6 +18,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
   const [uploading, setUploading] = useState(false);
   const [kycAccountId, setKycAccountId] = useState(null);
   const [totalAlerts, setTotalAlerts] = useState(0);
+  const [selectedAlerts, setSelectedAlerts] = useState([]);
   const itemsPerPage = 7;
 
   useEffect(() => {
@@ -74,6 +75,27 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
       setExpandedAlert(null);
       setNoteText('');
       setSelectedAssignee('');
+    }).catch(console.error);
+  };
+
+  const handleBulkResolve = () => {
+    if (selectedAlerts.length === 0) return;
+    if (!window.confirm(`Xác nhận RESOLVED ${selectedAlerts.length} cảnh báo?`)) return;
+    
+    Promise.all(
+      selectedAlerts.map(id => 
+        fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts/${id}/status`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ status: 'RESOLVED' })
+        })
+      )
+    ).then(() => {
+      fetchAlerts();
+      setSelectedAlerts([]);
     }).catch(console.error);
   };
 
@@ -157,10 +179,33 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
             Export CSV
           </button>
         </div>
+        
+        {selectedAlerts.length > 0 && (
+          <div style={{marginTop: '12px', padding: '12px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+            <span style={{color: '#10b981', fontWeight: 'bold'}}>{selectedAlerts.length} alerts selected</span>
+            <button onClick={handleBulkResolve} style={{background: '#10b981', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
+              Resolve Selected
+            </button>
+          </div>
+        )}
+
         <div style={{overflowX: 'visible'}}>
           <table style={{width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginTop: '1rem'}}>
             <thead>
               <tr style={{borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8'}}>
+                <th style={{padding: '8px', width: '40px'}}>
+                  <input 
+                    type="checkbox" 
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedAlerts(currentAlerts.filter(a => a.status === 'PENDING').map(a => a.alert_id));
+                      } else {
+                        setSelectedAlerts([]);
+                      }
+                    }}
+                    checked={currentAlerts.filter(a => a.status === 'PENDING').length > 0 && selectedAlerts.length === currentAlerts.filter(a => a.status === 'PENDING').length}
+                  />
+                </th>
                 <th style={{padding: '8px'}}>ID</th>
                 <th style={{padding: '8px'}}>Time</th>
                 <th style={{padding: '8px'}}>Account</th>
@@ -174,6 +219,18 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
               {currentAlerts.map(alert => (
                 <React.Fragment key={alert.alert_id}>
                   <tr style={{borderBottom: '1px solid rgba(255,255,255,0.05)'}}>
+                    <td style={{padding: '12px 8px'}}>
+                      {alert.status === 'PENDING' && (
+                        <input 
+                          type="checkbox" 
+                          checked={selectedAlerts.includes(alert.alert_id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedAlerts(prev => [...prev, alert.alert_id]);
+                            else setSelectedAlerts(prev => prev.filter(id => id !== alert.alert_id));
+                          }}
+                        />
+                      )}
+                    </td>
                     <td style={{padding: '12px 8px'}}>#{alert.alert_id}</td>
                     <td style={{padding: '12px 8px'}}>{new Date(alert.created_at).toLocaleTimeString()}</td>
                     <td style={{padding: '12px 8px'}}>
@@ -326,7 +383,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
                 </React.Fragment>
               ))}
               {pgAlerts.length === 0 && (
-                <tr><td colSpan="7" style={{textAlign: 'center', padding: '20px', color: '#64748b'}}>No alerts in Postgres database</td></tr>
+                <tr><td colSpan="8" style={{textAlign: 'center', padding: '20px', color: '#64748b'}}>No alerts in Postgres database</td></tr>
               )}
             </tbody>
           </table>
