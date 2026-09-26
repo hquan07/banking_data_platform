@@ -17,23 +17,47 @@ import {
   Database,
   Activity,
   Zap,
-  Globe
+  Globe,
+  Shield,
+  Folder,
+  FileText,
+  Share2,
+  Bell,
+  Lock,
+  Archive,
+  Image,
+  Search,
+  User
 } from 'lucide-react';
 
 // --- Metrics Data Mock ---
 const getMetricsForNode = (nodeId) => {
   const metricsMap = {
-    client: { desc: 'React Dashboard', stat: 'Active Sessions: 42' },
-    gateway: { desc: 'API Gateway / Nginx', stat: 'Requests: 1,204/s' },
-    java: { desc: 'Spring Boot Core', stat: 'CPU: 18% | RAM: 1.2GB' },
-    python: { desc: 'FastAPI AI Engine', stat: 'Latency: 15ms' },
-    kafka: { desc: 'Apache Kafka', stat: 'Throughput: 12,450 Msg/s' },
-    spark: { desc: 'Spark/Flink Streaming', stat: 'Batch Time: 5s' },
-    pg: { desc: 'PostgreSQL OLTP', stat: 'Connections: 34/100' },
-    ch: { desc: 'ClickHouse OLAP', stat: 'Rows Scanned: 450M' },
-    neo: { desc: 'Neo4j Graph', stat: 'Traversal Time: 22ms' },
+    user: { desc: 'Platform Users', stat: 'Online: 1,204' },
+    web: { desc: 'Next.js App', stat: 'Active Sessions: 1,150' },
+    file_preview: { desc: 'Preview Component', stat: 'Renders/s: 24' },
+    share_ui: { desc: 'Share Component', stat: 'Interactions/m: 45' },
+    auth_context: { desc: 'React Context', stat: 'State Updates: 12/s' },
+    notifications: { desc: 'WS Connection', stat: 'Latency: 12ms' },
+    api_client: { desc: 'API Gateway/Client', stat: 'Requests: 350/s' },
+    
+    auth: { desc: 'FastAPI Auth', stat: 'Tokens/s: 45' },
+    files: { desc: 'FastAPI Files', stat: 'Uploads: 150MB/s' },
+    metadata: { desc: 'FastAPI Metadata', stat: 'Queries: 210/s' },
+    
+    kafka: { desc: 'Apache Kafka', stat: 'Msgs/s: 5,420' },
+    redis: { desc: 'Redis Cache/PubSub', stat: 'Hit Rate: 99.1%' },
+    
+    audit_worker: { desc: 'Audit Logger', stat: 'Processed: 120/s' },
+    zip_worker: { desc: 'ZIP Extractor', stat: 'Active Jobs: 14' },
+    thumbnail_worker: { desc: 'Thumbnail Worker', stat: 'Queue Size: 2' },
+    search_worker: { desc: 'Search Indexer', stat: 'Docs/s: 45' },
+    
+    mysql: { desc: 'MySQL DB', stat: 'QPS: 1,450' },
+    minio: { desc: 'MinIO Storage', stat: 'Used: 4.2TB' },
+    elasticsearch: { desc: 'Elasticsearch', stat: 'Index Size: 120GB' },
   };
-  return metricsMap[nodeId] || { desc: 'Unknown', stat: 'N/A' };
+  return metricsMap[nodeId] || { desc: 'System Component', stat: 'Healthy' };
 };
 
 // --- Custom Node Component ---
@@ -50,7 +74,18 @@ const CustomNode = ({ id, data }) => {
     database: Database,
     activity: Activity,
     zap: Zap,
+    shield: Shield,
+    folder: Folder,
+    filetext: FileText,
+    share: Share2,
+    bell: Bell,
+    lock: Lock,
+    archive: Archive,
+    image: Image,
+    search: Search,
+    user: User
   };
+  
   const Icon = IconMap[data.icon] || Server;
 
   const handleDoubleClick = () => setIsHealthy(!isHealthy);
@@ -97,7 +132,7 @@ const CustomNode = ({ id, data }) => {
         animation: isHealthy ? 'none' : 'pulse 1s infinite'
       }} />
 
-      {/* Metrics Tooltip (Absolute positioned) */}
+      {/* Metrics Tooltip */}
       {showMetrics && (
         <div style={{
           position: 'absolute', top: '105%', left: 0, width: '100%',
@@ -119,22 +154,42 @@ const nodeTypes = {
   custom: CustomNode,
 };
 
-// --- Initial Data ---
+// --- Initial Nodes Data ---
 const initialNodes = [
-  // Layer 1: Client
-  { id: 'client', type: 'custom', position: { x: 350, y: 50 }, data: { label: 'React Dashboard', sublabel: 'Client Browser', icon: 'monitor', color: '#3b82f6' } },
-  // Layer 2: Gateway
-  { id: 'gateway', type: 'custom', position: { x: 350, y: 180 }, data: { label: 'API Gateway', sublabel: 'Nginx / Routing', icon: 'globe', color: '#f59e0b' } },
-  // Layer 3: Backend
-  { id: 'java', type: 'custom', position: { x: 200, y: 320 }, data: { label: 'Java Spring Boot', sublabel: 'Core API & Auth', icon: 'server', color: '#10b981' } },
-  { id: 'python', type: 'custom', position: { x: 500, y: 320 }, data: { label: 'Python FastAPI', sublabel: 'AI & MLOps', icon: 'terminal', color: '#8b5cf6' } },
-  // Layer 3: Streaming (Side)
-  { id: 'kafka', type: 'custom', position: { x: 800, y: 180 }, data: { label: 'Apache Kafka', sublabel: 'Message Broker', icon: 'activity', color: '#ef4444' } },
-  { id: 'spark', type: 'custom', position: { x: 800, y: 320 }, data: { label: 'Spark Streaming', sublabel: 'Stream Processor', icon: 'zap', color: '#ef4444' } },
-  // Layer 4: Databases
-  { id: 'pg', type: 'custom', position: { x: 200, y: 500 }, data: { label: 'PostgreSQL', sublabel: 'Core OLTP Data', icon: 'database', color: '#334155' } },
-  { id: 'neo', type: 'custom', position: { x: 500, y: 500 }, data: { label: 'Neo4j', sublabel: 'Graph & AML', icon: 'database', color: '#334155' } },
-  { id: 'ch', type: 'custom', position: { x: 800, y: 500 }, data: { label: 'ClickHouse', sublabel: 'Analytics OLAP', icon: 'database', color: '#334155' } },
+  // Layer 1
+  { id: 'user', type: 'custom', position: { x: 600, y: 0 }, data: { label: 'End User', sublabel: 'Client', icon: 'user', color: '#3b82f6' } },
+  
+  // Layer 2
+  { id: 'web', type: 'custom', position: { x: 600, y: 120 }, data: { label: 'Next.js App', sublabel: 'Web Application', icon: 'monitor', color: '#3b82f6' } },
+  
+  // Layer 3
+  { id: 'file_preview', type: 'custom', position: { x: 100, y: 240 }, data: { label: 'File Preview', sublabel: 'UI Component', icon: 'filetext', color: '#3b82f6' } },
+  { id: 'share_ui', type: 'custom', position: { x: 350, y: 240 }, data: { label: 'Share UI', sublabel: 'UI Component', icon: 'share', color: '#3b82f6' } },
+  { id: 'auth_context', type: 'custom', position: { x: 850, y: 240 }, data: { label: 'Auth State', sublabel: 'React Context', icon: 'lock', color: '#3b82f6' } },
+  { id: 'notifications', type: 'custom', position: { x: 1100, y: 240 }, data: { label: 'Notifications', sublabel: 'UI Component', icon: 'bell', color: '#3b82f6' } },
+  
+  // Layer 4
+  { id: 'api_client', type: 'custom', position: { x: 600, y: 360 }, data: { label: 'API Client', sublabel: 'Axios/Fetch', icon: 'activity', color: '#3b82f6' } },
+  
+  // Layer 5 Services
+  { id: 'auth', type: 'custom', position: { x: 350, y: 520 }, data: { label: 'Auth Service', sublabel: 'FastAPI', icon: 'shield', color: '#f59e0b' } },
+  { id: 'files', type: 'custom', position: { x: 600, y: 520 }, data: { label: 'File Service', sublabel: 'FastAPI', icon: 'folder', color: '#f59e0b' } },
+  { id: 'metadata', type: 'custom', position: { x: 850, y: 520 }, data: { label: 'Metadata Service', sublabel: 'FastAPI', icon: 'server', color: '#f59e0b' } },
+  
+  // Layer 6 Event Bus & Cache
+  { id: 'kafka', type: 'custom', position: { x: 725, y: 680 }, data: { label: 'Kafka', sublabel: 'Message Broker', icon: 'zap', color: '#ef4444' } },
+  { id: 'redis', type: 'custom', position: { x: 1100, y: 680 }, data: { label: 'Redis', sublabel: 'Cache & Pub/Sub', icon: 'database', color: '#ef4444' } },
+  
+  // Layer 7 Workers
+  { id: 'audit_worker', type: 'custom', position: { x: 100, y: 840 }, data: { label: 'Audit Logger', sublabel: 'Python Worker', icon: 'terminal', color: '#10b981' } },
+  { id: 'zip_worker', type: 'custom', position: { x: 350, y: 840 }, data: { label: 'ZIP Extractor', sublabel: 'Python Worker', icon: 'archive', color: '#10b981' } },
+  { id: 'thumbnail_worker', type: 'custom', position: { x: 725, y: 840 }, data: { label: 'Thumbnail Gen', sublabel: 'Python Worker', icon: 'image', color: '#10b981' } },
+  { id: 'search_worker', type: 'custom', position: { x: 975, y: 840 }, data: { label: 'Search Indexer', sublabel: 'Python Worker', icon: 'search', color: '#10b981' } },
+  
+  // Layer 8 Databases
+  { id: 'mysql', type: 'custom', position: { x: 225, y: 1000 }, data: { label: 'MySQL', sublabel: 'Relational DB', icon: 'database', color: '#ef4444' } },
+  { id: 'minio', type: 'custom', position: { x: 500, y: 1000 }, data: { label: 'MinIO', sublabel: 'Object Storage', icon: 'database', color: '#ef4444' } },
+  { id: 'elasticsearch', type: 'custom', position: { x: 975, y: 1000 }, data: { label: 'Elasticsearch', sublabel: 'Search Engine', icon: 'database', color: '#ef4444' } },
 ];
 
 const defaultEdgeOptions = {
@@ -145,24 +200,62 @@ const defaultEdgeOptions = {
   labelBgStyle: { fill: '#1e293b', fillOpacity: 0.8 },
 };
 
+const blueLine = { strokeWidth: 2, stroke: '#3b82f6' };
+const amberLine = { strokeWidth: 2, stroke: '#f59e0b' };
+const greenLine = { strokeWidth: 2, stroke: '#10b981' };
+const redLine = { strokeWidth: 2, stroke: '#ef4444' };
+const dashedLine = { strokeDasharray: '5,5' };
+
 const initialEdges = [
-  // HTTP
-  { id: 'e-client-gw', source: 'client', target: 'gateway', label: 'HTTP/REST', ...defaultEdgeOptions, style: { strokeWidth: 2, stroke: '#3b82f6' } },
-  { id: 'e-gw-java', source: 'gateway', target: 'java', label: 'HTTP', ...defaultEdgeOptions, style: { strokeWidth: 2, stroke: '#10b981' } },
-  { id: 'e-gw-python', source: 'gateway', target: 'python', label: 'HTTP', ...defaultEdgeOptions, style: { strokeWidth: 2, stroke: '#8b5cf6' } },
+  // User -> Web
+  { id: 'e-user-web', source: 'user', target: 'web', label: 'uses', ...defaultEdgeOptions, style: blueLine },
   
-  // Internal
-  { id: 'e-java-python', source: 'java', target: 'python', label: 'gRPC', ...defaultEdgeOptions, type: 'step', style: { strokeWidth: 2, stroke: '#8b5cf6', strokeDasharray: '5,5' } },
+  // Web Layer
+  { id: 'e-web-authctx', source: 'web', target: 'auth_context', label: '', ...defaultEdgeOptions, style: blueLine, type: 'smoothstep' },
+  { id: 'e-web-api', source: 'web', target: 'api_client', label: 'requests', ...defaultEdgeOptions, style: blueLine, type: 'smoothstep' },
   
-  // Streaming
-  { id: 'e-kafka-spark', source: 'kafka', target: 'spark', label: 'Consume', ...defaultEdgeOptions, style: { strokeWidth: 3, stroke: '#ef4444' } },
-  { id: 'e-spark-pg', source: 'spark', target: 'pg', label: 'Save', ...defaultEdgeOptions, style: { strokeWidth: 2, stroke: '#ef4444' } },
-  { id: 'e-spark-ch', source: 'spark', target: 'ch', label: 'Log', ...defaultEdgeOptions, style: { strokeWidth: 2, stroke: '#ef4444' } },
+  { id: 'e-authctx-api', source: 'auth_context', target: 'api_client', label: 'auth state', ...defaultEdgeOptions, style: blueLine, type: 'smoothstep' },
+  { id: 'e-preview-api', source: 'file_preview', target: 'api_client', label: 'download', ...defaultEdgeOptions, style: blueLine, type: 'smoothstep' },
+  { id: 'e-share-api', source: 'share_ui', target: 'api_client', label: 'sharing', ...defaultEdgeOptions, style: blueLine, type: 'smoothstep' },
   
-  // DB connections
-  { id: 'e-java-pg', source: 'java', target: 'pg', label: 'TCP/SQL', ...defaultEdgeOptions },
-  { id: 'e-java-neo', source: 'java', target: 'neo', label: 'Bolt', ...defaultEdgeOptions },
-  { id: 'e-java-ch', source: 'java', target: 'ch', label: 'HTTP/JDBC', ...defaultEdgeOptions, type: 'step' },
+  { id: 'e-notif-redis', source: 'notifications', target: 'redis', label: 'receives updates', ...defaultEdgeOptions, style: { ...blueLine, ...dashedLine }, type: 'smoothstep' },
+  
+  // API -> Services
+  { id: 'e-api-auth', source: 'api_client', target: 'auth', label: 'REST', ...defaultEdgeOptions, style: amberLine, type: 'smoothstep' },
+  { id: 'e-api-files', source: 'api_client', target: 'files', label: 'REST', ...defaultEdgeOptions, style: amberLine, type: 'smoothstep' },
+  { id: 'e-api-meta', source: 'api_client', target: 'metadata', label: 'REST', ...defaultEdgeOptions, style: amberLine, type: 'smoothstep' },
+  
+  // Services
+  { id: 'e-auth-mysql', source: 'auth', target: 'mysql', label: 'R/W', ...defaultEdgeOptions, type: 'smoothstep', style: amberLine },
+  { id: 'e-auth-redis', source: 'auth', target: 'redis', label: 'blacklist', ...defaultEdgeOptions, style: { ...amberLine, ...dashedLine }, type: 'smoothstep' },
+  
+  { id: 'e-files-mysql', source: 'files', target: 'mysql', label: 'R/W', ...defaultEdgeOptions, type: 'smoothstep', style: amberLine },
+  { id: 'e-files-minio', source: 'files', target: 'minio', label: 'store objects', ...defaultEdgeOptions, type: 'smoothstep', style: amberLine },
+  { id: 'e-files-kafka', source: 'files', target: 'kafka', label: 'publish events', ...defaultEdgeOptions, type: 'smoothstep', style: { strokeWidth: 3, stroke: '#f59e0b' } },
+  
+  { id: 'e-meta-mysql', source: 'metadata', target: 'mysql', label: 'R/W', ...defaultEdgeOptions, type: 'smoothstep', style: amberLine },
+  { id: 'e-meta-es', source: 'metadata', target: 'elasticsearch', label: 'query', ...defaultEdgeOptions, type: 'smoothstep', style: amberLine },
+  { id: 'e-meta-redis', source: 'metadata', target: 'redis', label: 'cache', ...defaultEdgeOptions, style: { ...amberLine, ...dashedLine }, type: 'smoothstep' },
+  
+  // Kafka -> Workers
+  { id: 'e-kafka-audit', source: 'kafka', target: 'audit_worker', label: 'consume', ...defaultEdgeOptions, style: redLine, type: 'smoothstep' },
+  { id: 'e-kafka-zip', source: 'kafka', target: 'zip_worker', label: 'consume', ...defaultEdgeOptions, style: redLine, type: 'smoothstep' },
+  { id: 'e-kafka-thumb', source: 'kafka', target: 'thumbnail_worker', label: 'consume', ...defaultEdgeOptions, style: redLine },
+  { id: 'e-kafka-search', source: 'kafka', target: 'search_worker', label: 'consume', ...defaultEdgeOptions, style: redLine, type: 'smoothstep' },
+  
+  // Workers -> DBs
+  { id: 'e-audit-mysql', source: 'audit_worker', target: 'mysql', label: 'write audit', ...defaultEdgeOptions, style: greenLine, type: 'smoothstep' },
+  
+  { id: 'e-zip-minio', source: 'zip_worker', target: 'minio', label: 'read/store', ...defaultEdgeOptions, style: greenLine, type: 'smoothstep' },
+  { id: 'e-zip-mysql', source: 'zip_worker', target: 'mysql', label: 'write records', ...defaultEdgeOptions, style: greenLine, type: 'smoothstep' },
+  
+  { id: 'e-thumb-minio', source: 'thumbnail_worker', target: 'minio', label: 'read/store', ...defaultEdgeOptions, style: greenLine, type: 'smoothstep' },
+  { id: 'e-thumb-mysql', source: 'thumbnail_worker', target: 'mysql', label: 'update', ...defaultEdgeOptions, style: greenLine, type: 'smoothstep' },
+  { id: 'e-thumb-redis', source: 'thumbnail_worker', target: 'redis', label: 'notify', ...defaultEdgeOptions, style: { ...greenLine, ...dashedLine }, type: 'smoothstep' },
+  
+  { id: 'e-search-minio', source: 'search_worker', target: 'minio', label: 'read content', ...defaultEdgeOptions, style: greenLine, type: 'smoothstep' },
+  { id: 'e-search-es', source: 'search_worker', target: 'elasticsearch', label: 'index', ...defaultEdgeOptions, style: greenLine, type: 'smoothstep' },
+  { id: 'e-search-redis', source: 'search_worker', target: 'redis', label: 'notify', ...defaultEdgeOptions, style: { ...greenLine, ...dashedLine }, type: 'smoothstep' },
 ];
 
 export default function ArchitectureTab() {
@@ -182,7 +275,7 @@ export default function ArchitectureTab() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h2 style={{ fontSize: '24px', margin: '0 0 8px 0', fontWeight: 'bold' }}>Architecture Map</h2>
+          <h2 style={{ fontSize: '24px', margin: '0 0 8px 0', fontWeight: 'bold' }}>CloudVault Architecture</h2>
           <p style={{ color: '#94a3b8', margin: 0 }}>
             Interactive System Topology. <span style={{ color: '#38bdf8' }}>Single-click</span> node to view real-time metrics. <span style={{ color: '#ef4444' }}>Double-click</span> to toggle health status.
           </p>
