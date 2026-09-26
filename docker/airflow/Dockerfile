@@ -1,6 +1,6 @@
-FROM apache/airflow:2.7.0
+FROM apache/airflow:2.7.0-python3.11
 
-USER root
+USER airflow
 RUN pip install --no-cache-dir \
     pyspark==3.5.0 \
     pandas==2.2.0 \

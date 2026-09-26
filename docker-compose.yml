@@ -120,7 +120,7 @@ services:
       - backend_network
 
   minio_init:
-    image: minio/mc:RELEASE.2024-01-16T16-06-00Z
+    image: quay.io/minio/mc:latest
     container_name: banking_minio_init
     entrypoint: /bin/sh
     command:
