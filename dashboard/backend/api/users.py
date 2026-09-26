@@ -10,6 +10,8 @@ router = APIRouter(prefix="/api", tags=["Users"])
 
 @router.get("/users")
 def get_users(current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Not authorized")
     if pg_conn:
         try:
             with pg_conn.cursor() as cur:
