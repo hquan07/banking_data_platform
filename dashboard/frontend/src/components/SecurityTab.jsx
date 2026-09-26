@@ -17,6 +17,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
   const [users, setUsers] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [kycAccountId, setKycAccountId] = useState(null);
+  const [totalAlerts, setTotalAlerts] = useState(0);
   const itemsPerPage = 7;
 
   useEffect(() => {
@@ -24,16 +25,22 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
     fetchUsers();
     const interval = setInterval(fetchAlerts, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentPage]);
 
   const fetchAlerts = () => {
     if (!token) return;
-    fetch('http://localhost:8000/api/alerts', {
+    fetch(`http://localhost:8000/api/alerts?page=${currentPage}&limit=${itemsPerPage}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
       .then(data => {
-        if (Array.isArray(data)) setPgAlerts(data);
+        if (data.data) {
+          setPgAlerts(data.data);
+          setTotalAlerts(data.total);
+        } else if (Array.isArray(data)) {
+          setPgAlerts(data);
+          setTotalAlerts(data.length);
+        }
       })
       .catch(console.error);
   };
@@ -132,8 +139,8 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(pgAlerts.length / itemsPerPage));
-  const currentAlerts = pgAlerts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(totalAlerts / itemsPerPage));
+  const currentAlerts = pgAlerts;
 
   return (
     <div className="grid">
@@ -325,10 +332,10 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
           </table>
         </div>
         {/* Pagination Controls */}
-        {pgAlerts.length > 0 && (
+        {totalAlerts > 0 && (
           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)'}}>
             <span style={{color: '#94a3b8', fontSize: '0.875rem'}}>
-              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, pgAlerts.length)} of {pgAlerts.length} entries
+              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalAlerts)} of {totalAlerts} entries
             </span>
             <div style={{display: 'flex', gap: '0.5rem'}}>
               <button 

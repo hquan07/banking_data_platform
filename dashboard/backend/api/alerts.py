@@ -22,14 +22,19 @@ class AlertStatusUpdate(BaseModel):
 
 
 @router.get("/alerts")
-def get_alerts(current_user: dict = Depends(get_current_user)):
+def get_alerts(page: int = 1, limit: int = 50, current_user: dict = Depends(get_current_user)):
+    offset = (page - 1) * limit
     if pg_conn:
         try:
             with pg_conn.cursor() as cur:
                 if current_user["role"] == "ADMIN":
-                    cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at, xai_explanation, notes, evidence_file_url, assignee_id FROM alerts ORDER BY created_at DESC LIMIT 1000")
+                    cur.execute("SELECT COUNT(*) FROM alerts")
+                    total = cur.fetchone()[0]
+                    cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at, xai_explanation, notes, evidence_file_url, assignee_id FROM alerts ORDER BY created_at DESC LIMIT %s OFFSET %s", (limit, offset))
                 else:
-                    cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at, xai_explanation, notes, evidence_file_url, assignee_id FROM alerts WHERE assignee_id = %s ORDER BY created_at DESC LIMIT 1000", (current_user["id"],))
+                    cur.execute("SELECT COUNT(*) FROM alerts WHERE assignee_id = %s", (current_user["id"],))
+                    total = cur.fetchone()[0]
+                    cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at, xai_explanation, notes, evidence_file_url, assignee_id FROM alerts WHERE assignee_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s", (current_user["id"], limit, offset))
 
                 rows = cur.fetchall()
                 data = []
@@ -47,7 +52,7 @@ def get_alerts(current_user: dict = Depends(get_current_user)):
                         "evidence_file_url": row[9],
                         "assignee_id": row[10],
                     })
-                return data
+                return {"total": total, "page": page, "limit": limit, "data": data}
         except Exception as e:
             print(f"Postgres query error: {e}")
 
@@ -73,7 +78,21 @@ def update_alert_status(alert_id: int, update: AlertStatusUpdate, current_user: 
                 existing = cur.fetchone()
                 if not existing:
                     raise HTTPException(status_code=404, detail="Alert not found")
-                if current_user["role"] != "ADMIN" and existing[1] != current_user["id"]:
+                # Strict Workflow State Machine
+                old_status = existing[0]
+                existing_assignee = existing[1]
+                
+                valid_transitions = {
+                    "PENDING": {"INVESTIGATING", "IGNORED"},
+                    "INVESTIGATING": {"RESOLVED", "IGNORED"},
+                    "RESOLVED": set(),
+                    "IGNORED": set()
+                }
+                
+                if update.status != old_status and update.status not in valid_transitions.get(old_status, set()):
+                    raise HTTPException(status_code=422, detail=f"Strict Workflow: Cannot transition from {old_status} to {update.status}")
+                
+                if current_user["role"] != "ADMIN" and existing_assignee != current_user["id"]:
                     raise HTTPException(status_code=403, detail="Alert is outside your scope")
                 if update.assignee_id is not None and current_user["role"] != "ADMIN":
                     raise HTTPException(status_code=403, detail="Only ADMIN can assign alerts")
@@ -95,18 +114,31 @@ def update_alert_status(alert_id: int, update: AlertStatusUpdate, current_user: 
                 params.append(alert_id)
                 query = f"UPDATE alerts SET {', '.join(set_parts)} WHERE alert_id = %s"
                 cur.execute(query, tuple(params))
+                
+                # Determine audit action
+                import json
+                audit_action = "STATUS_UPDATE"
+                if update.assignee_id is not None and update.assignee_id != existing_assignee:
+                    audit_action = "ASSIGNMENT_UPDATE"
+                if update.status != old_status and update.assignee_id is not None and update.assignee_id != existing_assignee:
+                    audit_action = "STATUS_AND_ASSIGNMENT_UPDATE"
+                    
                 cur.execute(
                     """
                     INSERT INTO alert_audit_log
                         (alert_id, actor_user_id, action, old_status, new_status, details)
-                    VALUES (%s, %s, 'STATUS_UPDATE', %s, %s, %s::jsonb)
+                    VALUES (%s, %s, %s, %s, %s, %s::jsonb)
                     """,
                     (
                         alert_id,
                         current_user["id"],
-                        existing[0],
+                        audit_action,
+                        old_status,
                         update.status,
-                        "{}",
+                        json.dumps({
+                            "notes": update.notes,
+                            "assignee_id": update.assignee_id
+                        }),
                     ),
                 )
             return {"message": "Success"}
