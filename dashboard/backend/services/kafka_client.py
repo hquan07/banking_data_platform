@@ -67,24 +67,29 @@ XAI_REASONS = {
 
 
 def generate_xai_explanation(rule_name: str, risk_score: int, amount: float) -> str:
-    """Sinh ra lời giải thích dạng text cho một cảnh báo, giả lập SHAP values."""
-    templates = XAI_REASONS.get(rule_name, XAI_REASONS["HIGH_VELOCITY"])
-    num_reasons = 2 if risk_score < 85 else 3
-    selected = random.sample(templates, min(num_reasons, len(templates)))
-
-    reasons = []
-    for tmpl in selected:
-        reason = tmpl.format(
-            pct=random.randint(150, 500),
-            time=f"{random.randint(0,5)}:{random.randint(10,59)} AM",
-            count=random.randint(3, 8),
-            total=f"{amount * random.uniform(2, 5):.0f}",
-            hours=random.randint(1, 12),
-            conf=random.randint(75, 98),
-            mins=random.randint(2, 30),
-        )
-        reasons.append(reason)
-    return json.dumps(reasons, ensure_ascii=False)
+    """Sinh ra lời giải thích dạng text cho một cảnh báo dựa trên ngưỡng thực tế."""
+    try:
+        from core.db import pg_conn
+        if pg_conn:
+            with pg_conn.cursor() as cur:
+                cur.execute("SELECT threshold, window_seconds, max_count FROM rules WHERE name = %s", (rule_name,))
+                rule_config = cur.fetchone()
+                
+            if rule_config:
+                threshold, window_seconds, max_count = rule_config
+                if rule_name == "HIGH_VELOCITY" and max_count:
+                    reasons = [f"Giao dịch vi phạm giới hạn tần suất: vượt quá {max_count} giao dịch trong {window_seconds} giây."]
+                elif rule_name == "LARGE_AMOUNT" and threshold:
+                    reasons = [f"Giao dịch có số tiền ({amount}) vượt quá ngưỡng cho phép ({threshold})."]
+                elif rule_name == "STRUCTURING_SUSPICION" and threshold:
+                    reasons = [f"Phát hiện dấu hiệu chia nhỏ giao dịch với số tiền {amount} liên quan đến hạn mức {threshold}."]
+                else:
+                    reasons = [f"Vi phạm luật {rule_name}. Điểm rủi ro: {risk_score}."]
+                return json.dumps(reasons, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error fetching rule for XAI: {e}")
+        
+    return json.dumps([f"Vi phạm quy tắc {rule_name} do hệ thống AI phát hiện với điểm rủi ro {risk_score}."], ensure_ascii=False)
 
 
 # =============================================

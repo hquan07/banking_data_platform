@@ -11,6 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fraud.rules.large_amount import apply_large_amount_rule
 from fraud.rules.velocity import apply_velocity_rule
 from fraud.rules.velocity_redis import process_velocity_with_redis
+from fraud.rules.shared_device import apply_shared_device_rule
 from aml.rules.structuring import apply_structuring_rule
 
 import pandas as pd
@@ -175,6 +176,21 @@ def start_fraud_engine(spark):
         .writeStream \
         .outputMode("update") \
         .foreachBatch(process_velocity_with_redis) \
+        .start()
+
+    # ==========================================
+    # RULE 5: SHARED DEVICE (Entity Resolution)
+    # ==========================================
+    shared_device_df = apply_shared_device_rule(watermarked_df)
+
+    query_shared_device = shared_device_df \
+        .selectExpr("CAST(account_id AS STRING) AS key", "to_json(struct(*)) AS value") \
+        .writeStream \
+        .outputMode("append") \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
+        .option("topic", "fraud-events") \
+        .option("checkpointLocation", os.environ.get("SPARK_CHECKPOINT_DIR", "s3a://checkpoints") + "/shared_device") \
         .start()
 
     spark.streams.awaitAnyTermination()
