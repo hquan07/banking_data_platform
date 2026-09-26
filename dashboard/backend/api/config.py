@@ -18,11 +18,11 @@ class TPSConfig(BaseModel):
 
 
 class RuleUpdate(BaseModel):
-    threshold: Optional[float] = None
-    window_seconds: Optional[int] = None
-    max_count: Optional[int] = None
+    threshold: Optional[float] = Field(None, ge=0)
+    window_seconds: Optional[int] = Field(None, gt=0)
+    max_count: Optional[int] = Field(None, gt=0)
     is_active: Optional[bool] = None
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=500)
 
 
 @router.post("/config/tps")

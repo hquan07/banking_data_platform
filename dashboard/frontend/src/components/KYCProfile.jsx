@@ -12,7 +12,7 @@ export default function KYCProfile({ accountId, onClose }) {
   useEffect(() => {
     if (!accountId || !token) return;
     setLoading(true);
-    fetch(`http://localhost:8000/api/accounts/${accountId}/kyc`, {
+    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/accounts/${accountId}/kyc`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())

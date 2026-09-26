@@ -49,7 +49,7 @@ function MainApp() {
 
   useEffect(() => {
     let isMounted = true;
-    const ws = new WebSocket("ws://localhost:8000/ws/stream");
+    const ws = new WebSocket((window._env_?.WS_URL || "ws://localhost:8000") + "/ws/stream");
 
     ws.onopen = () => {
       console.log("Connected to WebSocket");
@@ -250,7 +250,7 @@ function MainApp() {
               onChange={(e) => {
                 const val = parseInt(e.target.value, 10);
                 setTargetTps(val);
-                fetch('http://localhost:8000/api/config/tps', {
+                fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/config/tps', {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',

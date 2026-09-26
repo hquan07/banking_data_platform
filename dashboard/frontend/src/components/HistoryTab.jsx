@@ -6,7 +6,7 @@ export default function HistoryTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/analytics/history')
+    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/analytics/history')
       .then(res => res.json())
       .then(data => {
         // Map date to string if needed, format the data

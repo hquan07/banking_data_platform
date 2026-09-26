@@ -16,7 +16,7 @@ export default function RulesManagementTab() {
 
   const fetchRules = () => {
     if (!token) return;
-    fetch('http://localhost:8000/api/rules', {
+    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/rules', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -40,7 +40,7 @@ export default function RulesManagementTab() {
   const handleSave = (ruleId) => {
     setSaving(true);
     setMessage('');
-    fetch(`http://localhost:8000/api/rules/${ruleId}`, {
+    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/rules/${ruleId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -59,7 +59,7 @@ export default function RulesManagementTab() {
   };
 
   const handleToggle = (rule) => {
-    fetch(`http://localhost:8000/api/rules/${rule.rule_id}`, {
+    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/rules/${rule.rule_id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',

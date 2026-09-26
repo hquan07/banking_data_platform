@@ -29,7 +29,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
 
   const fetchAlerts = () => {
     if (!token) return;
-    fetch(`http://localhost:8000/api/alerts?page=${currentPage}&limit=${itemsPerPage}`, {
+    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts?page=${currentPage}&limit=${itemsPerPage}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -47,7 +47,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
 
   const fetchUsers = () => {
     if (!token) return;
-    fetch('http://localhost:8000/api/users', {
+    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/users', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -62,7 +62,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
     if (notes) body.notes = notes;
     if (assigneeId) body.assignee_id = parseInt(assigneeId);
 
-    fetch(`http://localhost:8000/api/alerts/${id}/status`, {
+    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts/${id}/status`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -87,7 +87,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
       setUploading(true);
       try {
         // Step 1: Get presigned URL from backend
-        const res = await fetch(`http://localhost:8000/api/evidence/presigned-url?filename=${encodeURIComponent(file.name)}&alert_id=${alertId}`, {
+        const res = await fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/evidence/presigned-url?filename=${encodeURIComponent(file.name)}&alert_id=${alertId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const { upload_url } = await res.json();
@@ -111,7 +111,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
   };
 
   const handleExportCSV = () => {
-    fetch('http://localhost:8000/api/alerts/export', {
+    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/alerts/export', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(res => {

@@ -17,7 +17,7 @@ export default function UserManagementTab() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/admin/users-stats', {
+        const res = await fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/admin/users-stats', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }

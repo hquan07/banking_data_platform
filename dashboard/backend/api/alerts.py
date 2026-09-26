@@ -15,10 +15,11 @@ from core.deps import get_current_user
 router = APIRouter(prefix="/api", tags=["Alerts"])
 
 
+from pydantic import BaseModel, Field
 class AlertStatusUpdate(BaseModel):
-    status: str
-    notes: Optional[str] = None
-    assignee_id: Optional[int] = None
+    status: str = Field(..., pattern="^(PENDING|INVESTIGATING|RESOLVED|IGNORED)$")
+    notes: Optional[str] = Field(None, max_length=1000)
+    assignee_id: Optional[int] = Field(None, gt=0)
 
 
 @router.get("/alerts")

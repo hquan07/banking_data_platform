@@ -8,7 +8,7 @@ export default function AnalyticsTab({ sankeyData, funnelData }) {
   const [graphWidth, setGraphWidth] = useState(800);
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/graph/circular')
+    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/graph/circular')
       .then(res => res.json())
       .then(data => {
         if (data && data.nodes) setGraphData(data);
