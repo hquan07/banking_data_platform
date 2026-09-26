@@ -124,11 +124,14 @@ services:
   minio_init:
     image: quay.io/minio/mc:latest
     container_name: banking_minio_init
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     entrypoint: /bin/sh
     command:
       - -c
       - >-
-        until mc alias set local http://banking_minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 2; done;
+        until mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 2; done;
         mc mb --ignore-existing local/banking-lake;
         mc mb --ignore-existing local/evidence;
         mc mb --ignore-existing local/checkpoints;
@@ -156,7 +159,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - MINIO_ENDPOINT=http://banking_minio:9000
+      - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
       - CLICKHOUSE_HOST=banking_clickhouse
@@ -331,7 +334,7 @@ services:
       - CLICKHOUSE_DB=${CLICKHOUSE_DB}
       - CLICKHOUSE_USER=${CLICKHOUSE_USER}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
-      - MINIO_ENDPOINT=http://banking_minio:9000
+      - MINIO_ENDPOINT=http://minio:9000
       - MINIO_PUBLIC_ENDPOINT=http://localhost:9000
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
@@ -415,6 +418,7 @@ services:
         condition: service_healthy
     networks:
       - backend_network
+      - data_network
 
   fraud_engine:
     build:

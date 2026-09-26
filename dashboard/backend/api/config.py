@@ -30,6 +30,8 @@ async def update_tps(config: TPSConfig, current_user: dict = Depends(get_current
     if current_user["role"] not in {"ADMIN", "OPERATOR"}:
         raise HTTPException(status_code=403, detail="Only operators can change TPS")
     kafka_svc.current_tps = config.tps
+    if redis_client:
+        redis_client.set("mock_tps", config.tps)
     return {"message": f"TPS updated to {config.tps}"}
 
 
