@@ -30,7 +30,7 @@ def process_stream(spark):
     df = spark \
         .readStream \
         .format("kafka") \
-        .option("kafka.bootstrap.servers", "localhost:9092") \
+        .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
         .option("subscribe", "payment-events") \
         .option("startingOffsets", "latest") \
         .load()
@@ -49,7 +49,11 @@ def process_stream(spark):
         
     # Write to PostgreSQL
     # Note: Requires postgresql jdbc driver when submitting
-    db_url = "jdbc:postgresql://localhost:5433/banking_data_platform"
+    db_url = (
+        f"jdbc:postgresql://{os.environ.get('POSTGRES_HOST', 'localhost')}:"
+        f"{os.environ.get('POSTGRES_PORT', '5433')}/"
+        f"{os.environ.get('POSTGRES_DB', 'banking_data_platform')}"
+    )
     db_properties = {
         "user": os.environ.get("POSTGRES_USER", ""),
         "password": os.environ.get("POSTGRES_PASSWORD", ""),
@@ -68,6 +72,10 @@ def process_stream(spark):
     db_query = parsed_df \
         .writeStream \
         .foreachBatch(write_to_postgres) \
+        .option(
+            "checkpointLocation",
+            os.environ.get("SPARK_CHECKPOINT_DIR", "/tmp/checkpoints/payment_processor"),
+        ) \
         .start()
         
     spark.streams.awaitAnyTermination()

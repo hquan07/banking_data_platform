@@ -8,7 +8,7 @@ def create_spark_session():
     return SparkSession.builder \
         .appName("CustomerBatchPipeline") \
         .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.postgresql:postgresql:42.6.0") \
-        .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000") \
+        .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")) \
         .config("spark.hadoop.fs.s3a.access.key", os.environ.get("MINIO_ROOT_USER", "")) \
         .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("MINIO_ROOT_PASSWORD", "")) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
@@ -47,7 +47,8 @@ def run_pipeline(spark):
             account_df["account_id"],
             account_df["account_type"],
             account_df["balance"],
-            account_df["status"].alias("account_status")
+            account_df["status"].alias("account_status"),
+            lit(None).cast("string").alias("city")
         ) \
         .withColumn("processed_at", current_timestamp())
     
@@ -71,10 +72,15 @@ def run_pipeline(spark):
         col("customer_id"),
         concat(substring(col("first_name"), 1, 1), lit("***")).alias("first_name"),
         concat(substring(col("last_name"), 1, 1), lit("***")).alias("last_name"),
+        col("gender"),
+        col("country"),
+        lit(None).cast("string").alias("customer_type"),
         regexp_replace(col("email"), "^(.*)@(.*)$", "***@$2").alias("email"),
         concat(lit("*******"), substring(col("phone"), -4, 4)).alias("phone"),
         col("address"),
-        col("country")
+        lit(None).cast("timestamp").alias("effective_start_date"),
+        lit(None).cast("timestamp").alias("effective_end_date"),
+        lit(True).alias("is_current")
     )
     dim_customer_df.write.jdbc(url=db_url, table="data_warehouse.dim_customer", mode="append", properties=db_properties)
     print("Successfully loaded into DWH!")

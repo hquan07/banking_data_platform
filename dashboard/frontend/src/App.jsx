@@ -252,7 +252,10 @@ function MainApp() {
                 setTargetTps(val);
                 fetch('http://localhost:8000/api/config/tps', {
                   method: 'POST',
-                  headers: {'Content-Type': 'application/json'},
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token,
+                  },
                   body: JSON.stringify({tps: val})
                 }).catch(err => console.error("Error setting TPS:", err));
               }}

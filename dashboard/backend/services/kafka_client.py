@@ -143,10 +143,23 @@ async def consume_kafka():
                         amount = data.get("amount", 0)
                         risk_score = data.get("risk_score", 90)
                         xai = generate_xai_explanation(rule, risk_score, amount)
+                        event_id = data.get("event_id") or data.get("payment_id")
                         with pg_conn.cursor() as cur:
                             cur.execute(
-                                "INSERT INTO alerts (account_id, rule_name, amount, risk_score, xai_explanation) VALUES (%s, %s, %s, %s, %s)",
-                                (data.get("account_id"), rule, amount, risk_score, xai)
+                                """
+                                INSERT INTO alerts
+                                    (event_id, payment_id, account_id, rule_name, amount,
+                                     risk_score, risk_level, decision, xai_explanation)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT (event_id, rule_name) WHERE event_id IS NOT NULL
+                                DO UPDATE SET updated_at = NOW()
+                                """,
+                                (
+                                    event_id, data.get("payment_id"), data.get("account_id"),
+                                    rule, amount, risk_score,
+                                    data.get("risk_level", "HIGH" if risk_score >= 85 else "MEDIUM"),
+                                    data.get("decision", "REVIEW"), xai,
+                                ),
                             )
                     except Exception as e:
                         print(f"Lỗi lưu Postgres: {e}")
@@ -201,6 +214,7 @@ async def simulate_events():
                 rule_name = random.choice(active_rule_names)
 
                 alert = {
+                    "event_id": tx["transaction_id"],
                     "account_id": tx["account_id"],
                     "rule": rule_name,
                     "amount": tx["amount"],
@@ -214,8 +228,20 @@ async def simulate_events():
                         xai = generate_xai_explanation(rule_name, alert["risk_score"], alert["amount"])
                         with pg_conn.cursor() as cur:
                             cur.execute(
-                                "INSERT INTO alerts (account_id, rule_name, amount, risk_score, xai_explanation) VALUES (%s, %s, %s, %s, %s)",
-                                (alert["account_id"], alert["rule"], alert["amount"], alert["risk_score"], xai)
+                                """
+                                INSERT INTO alerts
+                                    (event_id, account_id, rule_name, amount,
+                                     risk_score, risk_level, decision, xai_explanation)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT (event_id, rule_name) WHERE event_id IS NOT NULL
+                                DO UPDATE SET updated_at = NOW()
+                                """,
+                                (
+                                    alert.get("event_id"), alert["account_id"], alert["rule"],
+                                    alert["amount"], alert["risk_score"],
+                                    "HIGH" if alert["risk_score"] >= 85 else "MEDIUM",
+                                    "REVIEW", xai,
+                                ),
                             )
                     except Exception:
                         pass

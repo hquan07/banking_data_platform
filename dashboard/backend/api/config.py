@@ -4,7 +4,7 @@ Configuration router: Rules CRUD and TPS control.
 import json
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from core.db import pg_conn, redis_client
 from core.deps import get_current_user
 from services.kafka_client import current_tps
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api", tags=["Config"])
 
 
 class TPSConfig(BaseModel):
-    tps: int
+    tps: int = Field(ge=0, le=1000)
 
 
 class RuleUpdate(BaseModel):
@@ -26,7 +26,9 @@ class RuleUpdate(BaseModel):
 
 
 @router.post("/config/tps")
-async def update_tps(config: TPSConfig):
+async def update_tps(config: TPSConfig, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in {"ADMIN", "OPERATOR"}:
+        raise HTTPException(status_code=403, detail="Only operators can change TPS")
     kafka_svc.current_tps = config.tps
     return {"message": f"TPS updated to {config.tps}"}
 

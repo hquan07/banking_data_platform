@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15
@@ -14,7 +12,13 @@ services:
       - postgres_data:/var/lib/postgresql/data
       # Mount thư mục DDL để tự động chạy các script SQL khởi tạo khi container khởi động lần đầu
       - ./warehouse/ddl:/docker-entrypoint-initdb.d
+      - ./dashboard/backend/sql/app_schema.sql:/docker-entrypoint-initdb.d/03_app_schema.sql:ro
     command: postgres -c wal_level=logical -c max_replication_slots=4 -c max_wal_senders=4
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     networks:
       - data_network
 
@@ -36,6 +40,11 @@ services:
       - KAFKA_CFG_NODE_ID=1
       - ALLOW_PLAINTEXT_LISTENER=yes
       - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
     networks:
       - data_network
       - backend_network
@@ -99,14 +108,39 @@ services:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
     volumes:
       - minio_data:/data
     networks:
       - data_network
       - backend_network
 
+  minio_init:
+    image: minio/mc:RELEASE.2024-01-16T16-06-00Z
+    container_name: banking_minio_init
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - >-
+        until mc alias set local http://banking_minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 2; done;
+        mc mb --ignore-existing local/banking-lake;
+        mc mb --ignore-existing local/evidence;
+        echo "MinIO buckets are ready."
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - backend_network
+      - data_network
+
   airflow:
-    image: apache/airflow:2.7.0
+    build:
+      context: .
+      dockerfile: docker/airflow/Dockerfile
     container_name: banking_airflow
     environment:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
@@ -114,12 +148,36 @@ services:
       - _AIRFLOW_WWW_USER_CREATE=True
       - _AIRFLOW_WWW_USER_USERNAME=${AIRFLOW_ADMIN_USER}
       - _AIRFLOW_WWW_USER_PASSWORD=${AIRFLOW_ADMIN_PASSWORD}
+      - POSTGRES_HOST=banking_postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - MINIO_ENDPOINT=http://banking_minio:9000
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - CLICKHOUSE_HOST=banking_clickhouse
+      - CLICKHOUSE_HTTP_PORT=8123
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - ENABLE_MOCK_DATA=false
+      - DQ_DATA_PATH=s3://banking-lake/silver/customers/
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+      - AWS_REGION=us-east-1
     ports:
       - "8081:8080"
     command: standalone
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio_init:
+        condition: service_completed_successfully
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./batch:/opt/airflow/batch
+      - ./data_quality:/opt/airflow/data_quality
     networks:
       - backend_network
       - data_network
@@ -174,6 +232,11 @@ services:
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
     networks:
       - data_network
 
@@ -182,6 +245,11 @@ services:
     container_name: banking_redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     networks:
       - data_network
 
@@ -195,6 +263,11 @@ services:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
     volumes:
       - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
     networks:
       - data_network
 
@@ -229,9 +302,81 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - APP_MODE=${APP_MODE:-integration}
+      - ENABLE_MOCK_DATA=${ENABLE_MOCK_DATA:-false}
+      - POSTGRES_HOST=banking_postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DASHBOARD_ADMIN_PASSWORD=${DASHBOARD_ADMIN_PASSWORD}
+      - DASHBOARD_ANALYST_PASSWORD=${DASHBOARD_ANALYST_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVER=banking_kafka:9092
+      - REDIS_HOST=banking_redis
+      - REDIS_PORT=6379
+      - SPARK_CHECKPOINT_DIR=/workspace/.runtime/checkpoints/fraud_engine
+      - NEO4J_URI=neo4j://banking_neo4j:7687
+      - NEO4J_USER=${NEO4J_USER}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - CLICKHOUSE_HOST=banking_clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - MINIO_ENDPOINT=http://banking_minio:9000
+      - MINIO_PUBLIC_ENDPOINT=http://localhost:9000
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     depends_on:
-      - kafka
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - backend_network
+      - data_network
+
+  payment_processor:
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    container_name: banking_payment_processor
+    command:
+      - /opt/bitnami/spark/bin/spark-submit
+      - --master
+      - spark://spark-master:7077
+      - --packages
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.postgresql:postgresql:42.7.3
+      - /workspace/streaming/payment_processing.py
+    environment:
+      - SPARK_MODE=client
+      - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
+      - POSTGRES_HOST=banking_postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - SPARK_CHECKPOINT_DIR=/workspace/.runtime/checkpoints/payment_processor
+    volumes:
+      - .:/workspace
+    depends_on:
+      spark-master:
+        condition: service_started
+      spark-worker:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - backend_network
       - data_network
@@ -248,6 +393,59 @@ services:
     networks:
       - frontend_network
       - backend_network
+
+  payment_producer:
+    build:
+      context: .
+      dockerfile: docker/ingestion/Dockerfile
+    container_name: banking_payment_producer
+    command: ["python", "kafka/producers/payment_producer.py"]
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - backend_network
+
+  fraud_engine:
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    container_name: banking_fraud_engine
+    command:
+      - /opt/bitnami/spark/bin/spark-submit
+      - --master
+      - spark://spark-master:7077
+      - --packages
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.postgresql:postgresql:42.7.3
+      - /workspace/streaming/fraud_detection.py
+    environment:
+      - SPARK_MODE=client
+      - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
+      - POSTGRES_HOST=banking_postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_HOST=banking_redis
+      - REDIS_PORT=6379
+    volumes:
+      - .:/workspace:ro
+    depends_on:
+      spark-master:
+        condition: service_started
+      spark-worker:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend_network
+      - data_network
 
 volumes:
   postgres_data:

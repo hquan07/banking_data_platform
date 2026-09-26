@@ -7,7 +7,7 @@ def create_spark_session():
     return SparkSession.builder \
         .appName("ClickHouseWarehousePipeline") \
         .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.postgresql:postgresql:42.6.0,com.clickhouse:clickhouse-jdbc:0.4.6") \
-        .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000") \
+        .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")) \
         .config("spark.hadoop.fs.s3a.access.key", os.environ.get("MINIO_ROOT_USER", "")) \
         .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("MINIO_ROOT_PASSWORD", "")) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
@@ -43,7 +43,11 @@ def run_pipeline(spark):
     
     # 3. LOAD (Write to ClickHouse)
     print("Loading data into ClickHouse DWH (Gold Layer)...")
-    clickhouse_url = "jdbc:clickhouse://localhost:8123/banking_warehouse"
+    clickhouse_url = (
+        f"jdbc:clickhouse://{os.environ.get('CLICKHOUSE_HOST', 'localhost')}:"
+        f"{os.environ.get('CLICKHOUSE_HTTP_PORT', '8123')}/"
+        f"{os.environ.get('CLICKHOUSE_DB', 'banking_warehouse')}"
+    )
     clickhouse_properties = {
         "user": os.environ.get("CLICKHOUSE_USER", ""),
         "password": os.environ.get("CLICKHOUSE_PASSWORD", ""),

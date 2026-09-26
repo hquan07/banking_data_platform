@@ -12,6 +12,9 @@ SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 
+if not SECRET_KEY or len(SECRET_KEY) < 32:
+    raise RuntimeError("JWT_SECRET_KEY must be set and contain at least 32 characters")
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 

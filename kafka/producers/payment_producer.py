@@ -1,12 +1,18 @@
 import json
+import os
 import time
 import random
+import uuid
+from datetime import datetime, timezone
 from kafka import KafkaProducer
 
 def get_producer():
     return KafkaProducer(
-        bootstrap_servers=['localhost:9094'],
-        value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        bootstrap_servers=[os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9094")],
+        acks="all",
+        retries=10,
+        enable_idempotence=True,
+        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
     )
 
 def simulate_payments():
@@ -17,10 +23,18 @@ def simulate_payments():
     try:
         while True:
             tx = {
+                "event_id": uuid.uuid4().hex,
+                "payment_id": f"PAY_{uuid.uuid4().hex[:12].upper()}",
                 "transaction_id": f"TX_{random.randint(10000, 99999)}",
+                "customer_id": f"CUS_{random.randint(1, 100)}",
                 "account_id": f"ACC_{random.randint(1, 100)}",
+                "merchant_id": f"MER_{random.randint(1, 500)}",
                 "amount": round(random.uniform(10.0, 50000.0), 2),
-                "timestamp": time.time(),
+                "currency": "USD",
+                "payment_method": random.choice(["CARD", "BANK_TRANSFER", "QR"]),
+                "channel": random.choice(["POS", "ONLINE", "ATM"]),
+                "device_id": f"DEV_{random.randint(1, 100)}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "location": "VN"
             }
             producer.send(topic, tx)

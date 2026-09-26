@@ -1,5 +1,6 @@
 import redis
 import json
+import os
 
 def process_velocity_with_redis(df, epoch_id):
     """
@@ -9,7 +10,12 @@ def process_velocity_with_redis(df, epoch_id):
     try:
         # Trong môi trường phân tán, nên khởi tạo Redis Connection Pool ở mức Partition (mapPartitions)
         # Tuy nhiên cho MVP, ta kết nối trực tiếp.
-        r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+        r = redis.Redis(
+            host=os.environ.get("REDIS_HOST", "localhost"),
+            port=int(os.environ.get("REDIS_PORT", "6379")),
+            db=0,
+            decode_responses=True,
+        )
         
         records = df.collect()
         for row in records:

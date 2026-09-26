@@ -93,19 +93,20 @@ CREATE TABLE IF NOT EXISTS core_banking.payment_event (
 -- RBAC (Role-Based Access Control)
 -- ==========================================
 
--- Create users (passwords should be changed in production or via env if possible, but DDL scripts run at init)
+-- Create privilege groups without credentials. Runtime login roles are
+-- provisioned outside schema DDL by the deployment environment.
 DO
 $do$
 BEGIN
    IF NOT EXISTS (
       SELECT FROM pg_catalog.pg_roles
       WHERE  rolname = 'etl_user') THEN
-      CREATE ROLE etl_user LOGIN PASSWORD 'etl_password_placeholder';
+      CREATE ROLE etl_user NOLOGIN;
    END IF;
    IF NOT EXISTS (
       SELECT FROM pg_catalog.pg_roles
       WHERE  rolname = 'dashboard_user') THEN
-      CREATE ROLE dashboard_user LOGIN PASSWORD 'dashboard_password_placeholder';
+      CREATE ROLE dashboard_user NOLOGIN;
    END IF;
 END
 $do$;

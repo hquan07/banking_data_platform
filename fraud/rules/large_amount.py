@@ -9,6 +9,9 @@ def apply_large_amount_rule(parsed_df, threshold=10000.0):
         .withColumn("alert_time", col("event_time")) \
         .select(
             col("payment_id"),
+            col("account_id"),
+            col("amount"),
+            lit("LARGE_TRANSACTION").alias("rule"),
             col("fraud_score"),
             col("risk_level"),
             col("triggered_rules"),

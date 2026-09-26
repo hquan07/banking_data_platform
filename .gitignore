@@ -7,6 +7,15 @@ venv/
 env/
 .env
 
+# Frontend generated files
+dashboard/frontend/node_modules/
+dashboard/frontend/.vite/
+dashboard/frontend/dist/
+
+# Runtime/checkpoint artifacts
+.runtime/
+.spark-checkpoints/
+
 # MacOS
 .DS_Store
 

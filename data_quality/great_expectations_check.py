@@ -1,5 +1,6 @@
 import great_expectations as gx
 import pandas as pd
+import os
 
 def run_dq_checks(data_path):
     print(f"Bắt đầu chạy Data Quality Checks cho dữ liệu tại {data_path}...")
@@ -7,13 +8,23 @@ def run_dq_checks(data_path):
     # Khởi tạo GX Context (trong production sẽ cấu hình kết nối tới S3/MinIO)
     context = gx.get_context(mode="ephemeral")
     
-    # Mock dữ liệu để demo kiểm tra (trong thực tế sẽ đọc từ MinIO: pd.read_parquet(data_path))
-    data = {
-        "customer_id": ["CUS_1", "CUS_2", "CUS_3", None], # Có 1 lỗi Null
-        "balance": [100.5, 5000.0, -50.0, 200.0],         # Có 1 lỗi số âm
-        "account_status": ["ACTIVE", "ACTIVE", "CLOSED", "ACTIVE"]
-    }
-    df = pd.DataFrame(data)
+    if os.environ.get("ENABLE_MOCK_DATA", "false").lower() == "true":
+        df = pd.DataFrame({
+            "customer_id": ["CUS_1", "CUS_2"],
+            "balance": [100.5, 5000.0],
+            "account_status": ["ACTIVE", "CLOSED"],
+        })
+    else:
+        df = pd.read_parquet(
+            data_path,
+            storage_options={
+                "key": os.environ.get("MINIO_ROOT_USER"),
+                "secret": os.environ.get("MINIO_ROOT_PASSWORD"),
+                "client_kwargs": {
+                    "endpoint_url": os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
+                },
+            },
+        )
     
     # Đăng ký Data Source
     datasource = context.sources.add_pandas(name="banking_pandas_datasource")
@@ -66,7 +77,4 @@ def run_dq_checks(data_path):
         print("[THÀNH CÔNG] Dữ liệu sạch, sẵn sàng nạp vào Data Warehouse.")
 
 if __name__ == "__main__":
-    try:
-        run_dq_checks("s3a://banking-lake/silver/customers/")
-    except Exception as e:
-        print(e)
+    run_dq_checks(os.environ.get("DQ_DATA_PATH", "s3a://banking-lake/silver/customers/"))

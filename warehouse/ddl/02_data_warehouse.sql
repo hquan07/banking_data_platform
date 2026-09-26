@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS data_warehouse.dim_customer (
     gender VARCHAR(20),
     country VARCHAR(100),
     customer_type VARCHAR(50),
+    email VARCHAR(100),
+    phone VARCHAR(50),
+    address TEXT,
+    city VARCHAR(100),
     effective_start_date TIMESTAMP,
     effective_end_date TIMESTAMP,
     is_current BOOLEAN

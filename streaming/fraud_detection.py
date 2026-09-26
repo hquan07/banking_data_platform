@@ -2,7 +2,7 @@ import os
 import sys
 import uuid
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col, to_timestamp
+from pyspark.sql.functions import from_json, col, to_timestamp, to_json, struct
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 
 # Ensure modules in other folders can be imported
@@ -70,7 +70,7 @@ def start_fraud_engine(spark):
     df = spark \
         .readStream \
         .format("kafka") \
-        .option("kafka.bootstrap.servers", "localhost:9092") \
+        .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
         .option("subscribe", "payment-events") \
         .option("startingOffsets", "latest") \
         .load()
@@ -103,40 +103,73 @@ def start_fraud_engine(spark):
     )
     
     # Lọc ra các giao dịch có xác suất gian lận > 70%
-    high_risk_df = ml_scored_df.filter(col("ml_risk_score") > 0.70)
+    high_risk_df = ml_scored_df.filter(col("ml_risk_score") > 0.70).withColumn(
+        "rule", lit("ML_MODEL_FRAUD")
+    )
     
     query_ml_txn = high_risk_df \
         .selectExpr("CAST(payment_id AS STRING) AS key", "to_json(struct(*)) AS value") \
         .writeStream \
         .outputMode("append") \
         .format("kafka") \
-        .option("kafka.bootstrap.servers", "localhost:9092") \
+        .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
         .option("topic", "fraud-events") \
-        .option("checkpointLocation", "/tmp/checkpoints/ml_fraud") \
+        .option("checkpointLocation", os.environ.get("SPARK_CHECKPOINT_DIR", "/tmp/checkpoints/ml_fraud")) \
         .start()
 
     # ==========================================
-    # RULE 2: HIGH VELOCITY (Stateful)
+    # RULE 2: LARGE AMOUNT
+    # ==========================================
+    large_amount_df = apply_large_amount_rule(watermarked_df)
+    query_large_amount = large_amount_df \
+        .selectExpr("CAST(payment_id AS STRING) AS key", "to_json(struct(*)) AS value") \
+        .writeStream \
+        .outputMode("append") \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
+        .option("topic", "fraud-events") \
+        .option("checkpointLocation", os.path.join(
+            os.environ.get("SPARK_CHECKPOINT_DIR", "/tmp/checkpoints"),
+            "large_amount"
+        )) \
+        .start()
+
+    # ==========================================
+    # RULE 3: HIGH VELOCITY (Stateful)
     # ==========================================
     velocity_df = apply_velocity_rule(watermarked_df)
 
     query_velocity = velocity_df \
+        .withColumn("rule", lit("HIGH_VELOCITY")) \
+        .selectExpr("CAST(account_id AS STRING) AS key", "to_json(struct(*)) AS value") \
         .writeStream \
-        .outputMode("update") \
-        .format("console") \
-        .option("truncate", False) \
+        .outputMode("append") \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
+        .option("topic", "fraud-events") \
+        .option("checkpointLocation", os.path.join(
+            os.environ.get("SPARK_CHECKPOINT_DIR", "/tmp/checkpoints"),
+            "velocity"
+        )) \
         .start()
 
     # ==========================================
-    # RULE 3: AML STRUCTURING (Stateful)
+    # RULE 4: AML STRUCTURING (Stateful)
     # ==========================================
     structuring_df = apply_structuring_rule(watermarked_df)
 
     query_structuring = structuring_df \
+        .withColumn("rule", lit("STRUCTURING_SUSPICION")) \
+        .selectExpr("CAST(account_id AS STRING) AS key", "to_json(struct(*)) AS value") \
         .writeStream \
-        .outputMode("update") \
-        .format("console") \
-        .option("truncate", False) \
+        .outputMode("append") \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
+        .option("topic", "aml-events") \
+        .option("checkpointLocation", os.path.join(
+            os.environ.get("SPARK_CHECKPOINT_DIR", "/tmp/checkpoints"),
+            "structuring"
+        )) \
         .start()
 
     # ==========================================

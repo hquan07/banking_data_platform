@@ -10,7 +10,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from core.db import pg_conn
+from core.db import pg_conn, graph_driver, ch_client, redis_client, get_s3_client
 from core.security import get_password_hash
 from services.kafka_client import manager, consume_kafka, simulate_events
 
@@ -29,19 +29,27 @@ from api.config import router as config_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Run startup tasks, yield, then cleanup."""
+    background_tasks = []
+
     # --- Startup ---
-    # Run Phase 6 migrations
+    # Run idempotent application migrations. This also repairs databases
+    # created before the dashboard schema was mounted by Compose.
     if pg_conn:
         try:
-            migration_path = os.path.join(os.path.dirname(__file__), "sql", "phase6_migration.sql")
-            if os.path.exists(migration_path):
-                with open(migration_path, "r") as f:
+            sql_dir = os.path.join(os.path.dirname(__file__), "sql")
+            for migration_name in ("app_schema.sql", "phase6_migration.sql"):
+                migration_path = os.path.join(sql_dir, migration_name)
+                if not os.path.exists(migration_path):
+                    continue
+                with open(migration_path, "r", encoding="utf-8") as f:
                     sql = f.read()
                 with pg_conn.cursor() as cur:
                     cur.execute(sql)
-                print("Phase 6 migration completed successfully.")
+                print(f"Migration {migration_name} completed successfully.")
         except Exception as e:
-            print(f"Phase 6 migration error: {e}")
+            raise RuntimeError(f"Database migration failed: {e}") from e
+    elif os.environ.get("APP_MODE", "integration") != "demo":
+        raise RuntimeError("PostgreSQL is required outside demo mode")
 
     # Initialize default users if not present
     if pg_conn:
@@ -49,21 +57,30 @@ async def lifespan(app: FastAPI):
             with pg_conn.cursor() as cur:
                 cur.execute("SELECT count(*) FROM users")
                 if cur.fetchone()[0] == 0:
-                    admin_hash = get_password_hash(os.environ.get("DASHBOARD_ADMIN_PASSWORD", ""))
-                    analyst_hash = get_password_hash(os.environ.get("DASHBOARD_ANALYST_PASSWORD", ""))
+                    admin_password = os.environ.get("DASHBOARD_ADMIN_PASSWORD")
+                    analyst_password = os.environ.get("DASHBOARD_ANALYST_PASSWORD")
+                    if not admin_password or not analyst_password:
+                        raise RuntimeError("Dashboard passwords must be configured")
+                    admin_hash = get_password_hash(admin_password)
+                    analyst_hash = get_password_hash(analyst_password)
                     cur.execute("INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)", ('admin', admin_hash, 'ADMIN'))
                     cur.execute("INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)", ('analyst_1', analyst_hash, 'ANALYST'))
                     cur.execute("UPDATE alerts SET assignee_id = (SELECT id FROM users WHERE username = 'analyst_1')")
         except Exception as e:
-            print("Init users error:", e)
+            raise RuntimeError(f"Default user initialization failed: {e}") from e
 
-    # Start background tasks
-    asyncio.create_task(consume_kafka())
-    asyncio.create_task(simulate_events())
+    # Start the real consumer in every mode. The simulator is opt-in.
+    background_tasks.append(asyncio.create_task(consume_kafka()))
+    if os.environ.get("ENABLE_MOCK_DATA", "false").lower() == "true":
+        background_tasks.append(asyncio.create_task(simulate_events()))
 
-    yield  # App is running
+    yield
 
     # --- Shutdown (cleanup if needed) ---
+    for task in background_tasks:
+        task.cancel()
+    if background_tasks:
+        await asyncio.gather(*background_tasks, return_exceptions=True)
 
 
 # =============================================
@@ -73,7 +90,13 @@ app = FastAPI(title="Banking Command Center API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        origin.strip()
+        for origin in os.environ.get(
+            "CORS_ALLOWED_ORIGINS", "http://localhost:5173"
+        ).split(",")
+        if origin.strip()
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -108,3 +131,22 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/api/health")
 def health_check():
     return {"status": "healthy", "clients_connected": len(manager.active_connections)}
+
+
+@app.get("/api/health/live")
+def liveness_check():
+    return {"status": "alive"}
+
+
+@app.get("/api/health/ready")
+def readiness_check():
+    dependencies = {
+        "postgres": pg_conn is not None,
+        "neo4j": graph_driver is not None,
+        "clickhouse": ch_client is not None,
+        "redis": redis_client is not None,
+    }
+    if not all(dependencies.values()):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail={"status": "not_ready", **dependencies})
+    return {"status": "ready", **dependencies}
