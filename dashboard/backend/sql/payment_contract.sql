@@ -14,5 +14,8 @@ BEGIN
             ALTER COLUMN timestamp TYPE TIMESTAMPTZ USING timestamp AT TIME ZONE 'UTC';
     END IF;
 END $$;
+UPDATE core_banking.payment_event
+SET event_id = 'legacy:' || payment_id
+WHERE event_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_payment_event_event_id
     ON core_banking.payment_event (event_id) WHERE event_id IS NOT NULL;

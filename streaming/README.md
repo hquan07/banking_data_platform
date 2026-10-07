@@ -16,3 +16,12 @@ fix it to match `shared/payment_contract.md`, and retain its original IDs.
 Run `python3 -m scripts.replay_payment_events corrected.jsonl` to validate,
 then add `--publish` to send. Check the payment row and alert in the dashboard.
 The replay command is safe to repeat after idempotent persistence is enabled.
+
+The processor writes payment rows to PostgreSQL and to ClickHouse
+`payment_events`. ClickHouse uses `ReplacingMergeTree`; queries that need a
+deduplicated view use `FINAL`. After the stream catches up, run
+`python3 -m scripts.reconcile_payment_events` from the host with `.env` filled
+in to compare the latest 1,000 events per Kafka partition against both stores.
+The command is read-only and exits nonzero when sampled payment IDs are
+missing or have different event IDs. Allow for ingestion lag before treating a
+newly published payment as a discrepancy.

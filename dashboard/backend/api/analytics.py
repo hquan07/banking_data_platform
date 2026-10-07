@@ -20,20 +20,25 @@ def get_history_analytics():
                     toDate(event_time) AS date,
                     count() AS total_tx,
                     sum(amount) AS total_amount,
-                    sum(if(status='FRAUD', 1, 0)) AS total_fraud
-                FROM fct_transactions
+                    0 AS total_fraud
+                FROM payment_events FINAL
                 GROUP BY date
                 ORDER BY date DESC
                 LIMIT 30
             """
             result = ch_client.execute(query)
+            alert_counts = {}
+            if pg_conn:
+                with pg_conn.cursor() as cur:
+                    cur.execute("SELECT created_at::date, count(*) FROM alerts GROUP BY created_at::date")
+                    alert_counts = {str(day): count for day, count in cur.fetchall()}
             data = []
             for row in reversed(result):
                 data.append({
                     "date": str(row[0]),
                     "total_tx": row[1],
                     "total_amount": row[2],
-                    "total_fraud": row[3],
+                    "total_fraud": alert_counts.get(str(row[0]), 0),
                 })
             return data
         except Exception as e:
@@ -138,7 +143,7 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
             # Query recent transactions
             tx_query = """
                 SELECT event_time, amount, payment_method
-                FROM fct_transactions
+                FROM payment_events FINAL
                 WHERE account_id = %(account_id)s
                 ORDER BY event_time DESC
                 LIMIT 10
@@ -153,7 +158,7 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
             # Query devices
             device_query = """
                 SELECT device_id, max(event_time)
-                FROM fct_transactions
+                FROM payment_events FINAL
                 WHERE account_id = %(account_id)s AND device_id != ''
                 GROUP BY device_id
                 LIMIT 5

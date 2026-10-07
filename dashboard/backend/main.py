@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
         if graph_driver is None:
             raise RuntimeError("Neo4j is required outside demo mode")
         graph_driver.verify_connectivity()
-        if ch_client is None or ch_client.execute("SELECT 1") != [(1,)]:
+        if ch_client is None or ch_client.execute("EXISTS TABLE payment_events") != [(1,)]:
             raise RuntimeError("ClickHouse is required outside demo mode")
         if get_s3_client() is None:
             raise RuntimeError("MinIO is required outside demo mode")
@@ -198,7 +198,7 @@ def readiness_check():
             "kafka": kafka_ready.is_set(),
             "redis": check(redis_client, redis_client.ping if redis_client else None),
             "neo4j": check(graph_driver, graph_driver.verify_connectivity if graph_driver else None),
-            "clickhouse": check(ch_client, lambda: ch_client.execute("SELECT 1")),
+            "clickhouse": check(ch_client, lambda: ch_client.execute("EXISTS TABLE payment_events") == [(1,)]),
             "minio": check(s3_client, lambda: s3_client.head_bucket(Bucket="evidence")),
         })
     if not all(dependencies.values()):

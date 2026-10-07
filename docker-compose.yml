@@ -367,7 +367,7 @@ services:
       - --master
       - spark://spark-master:7077
       - --packages
-      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.postgresql:postgresql:42.7.3
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
       - /workspace/streaming/payment_processing.py
     environment:
       - SPARK_MODE=client
@@ -378,6 +378,11 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - SPARK_CHECKPOINT_DIR=/checkpoints/payment-processor
+      - CLICKHOUSE_HOST=banking_clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
     volumes:
       - .:/workspace:ro
       - spark_checkpoints:/checkpoints
@@ -391,6 +396,8 @@ services:
       kafka:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
     networks:
       - backend_network
@@ -436,7 +443,7 @@ services:
       - --master
       - spark://spark-master:7077
       - --packages
-      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.postgresql:postgresql:42.7.3
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
       - /workspace/streaming/fraud_detection.py
     environment:
       - SPARK_MODE=client
