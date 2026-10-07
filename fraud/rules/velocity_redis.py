@@ -1,54 +1,39 @@
-import redis
-import json
 import os
 
+VELOCITY_SCRIPT = """
+if redis.call('SET', KEYS[1], '1', 'NX', 'EX', 604800) then
+    local count = redis.call('HINCRBY', KEYS[2], 'count', 1)
+    redis.call('HINCRBYFLOAT', KEYS[2], 'total_amount', ARGV[1])
+    if redis.call('TTL', KEYS[2]) < 0 then
+        redis.call('EXPIRE', KEYS[2], 300)
+    end
+    return count
+end
+return -1
+"""
+
+
 def process_velocity_with_redis(df, epoch_id):
-    """
-    Sử dụng Redis để đếm số lượng giao dịch và tổng tiền trong 5 phút.
-    Hàm này được gọi bởi foreachBatch trong Spark Streaming.
-    """
-    try:
-        # Trong môi trường phân tán, nên khởi tạo Redis Connection Pool ở mức Partition (mapPartitions)
-        # Tuy nhiên cho MVP, ta kết nối trực tiếp.
-        r = redis.Redis(
-            host=os.environ.get("REDIS_HOST", "localhost"),
+    """Each event increments its account once, even if Spark retries a batch."""
+
+    def process_partition(rows):
+        import redis
+
+        client = redis.Redis(
+            host=os.environ.get("REDIS_HOST", "banking_redis"),
             port=int(os.environ.get("REDIS_PORT", "6379")),
-            db=0,
             decode_responses=True,
+            socket_timeout=5,
         )
-        
-        records = df.collect()
-        for row in records:
-            account_id = row['account_id']
-            amount = row['amount']
-            
-            # Redis key for account velocity
-            key = f"velocity:{account_id}"
-            
-            # Sử dụng Redis pipeline để đảm bảo tính atomic và giảm network RTT
-            pipe = r.pipeline()
-            pipe.hincrby(key, "count", 1)
-            pipe.hincrbyfloat(key, "total_amount", amount)
-            pipe.ttl(key)
-            results = pipe.execute()
-            
-            current_count = results[0]
-            ttl = results[2]
-            
-            # Đặt TTL là 5 phút (300 giây) nếu chưa có
-            if ttl == -1:
-                r.expire(key, 300)
-                
-            # Kiểm tra luật
-            if current_count > 5:
-                # Trigger alert
-                alert = {
-                    "account_id": account_id,
-                    "rule": "HIGH_VELOCITY_REDIS",
-                    "count": current_count,
-                    "action": "MONITOR"
-                }
-                print(f"[REDIS ALERT] Tần suất cao: {json.dumps(alert)}")
-                # Hệ thống thực tế sẽ pub(lish) alert này vào Kafka topic 'alert-events'
-    except Exception as e:
-        print(f"Lỗi khi xử lý Redis: {e}")
+        for row in rows:
+            count = client.eval(
+                VELOCITY_SCRIPT,
+                2,
+                f"velocity:seen:{row.event_id}",
+                f"velocity:{row.account_id}",
+                str(row.amount),
+            )
+            if count > 5:
+                print(f"Redis velocity threshold exceeded for {row.account_id}: {count}")
+
+    df.select("event_id", "account_id", "amount").foreachPartition(process_partition)

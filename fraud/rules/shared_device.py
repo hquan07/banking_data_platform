@@ -17,7 +17,7 @@ def apply_shared_device_rule(df):
             F.col("device_id")
         ) \
         .agg(
-            F.countDistinct("account_id").alias("unique_accounts"),
+            F.size(F.collect_set("account_id")).alias("unique_accounts"),
             F.first("payment_id").alias("payment_id"),
             F.first("account_id").alias("account_id"),
             F.first("amount").alias("amount"),
@@ -29,6 +29,7 @@ def apply_shared_device_rule(df):
     
     # Format to match the alert schema
     result_df = flagged_df.select(
+        F.sha2(F.concat_ws(":", F.lit("SHARED_DEVICE"), F.col("device_id"), F.col("window.start").cast("string")), 256).alias("event_id"),
         F.col("payment_id"),
         F.col("account_id"),
         F.col("amount"),

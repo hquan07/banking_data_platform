@@ -8,11 +8,14 @@ def apply_large_amount_rule(parsed_df, threshold=10000.0):
         .withColumn("decision", lit("REVIEW")) \
         .withColumn("alert_time", col("event_time")) \
         .select(
+            col("event_id"),
+            col("trace_id"),
             col("payment_id"),
             col("account_id"),
             col("amount"),
             lit("LARGE_TRANSACTION").alias("rule"),
             col("fraud_score"),
+            col("fraud_score").alias("risk_score"),
             col("risk_level"),
             col("triggered_rules"),
             col("decision"),

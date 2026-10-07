@@ -93,9 +93,11 @@ def start_fraud_engine(spark):
     )
     
     # Lọc ra các giao dịch có xác suất gian lận > 70%
-    high_risk_df = ml_scored_df.filter(col("ml_risk_score") > 0.70).withColumn(
-        "rule", lit("ML_MODEL_FRAUD")
-    )
+    high_risk_df = ml_scored_df.filter(col("ml_risk_score") > 0.70) \
+        .withColumn("rule", lit("ML_MODEL_FRAUD")) \
+        .withColumn("risk_score", col("ml_risk_score") * 100) \
+        .withColumn("risk_level", lit("HIGH")) \
+        .withColumn("decision", lit("REVIEW"))
     
     query_ml_txn = high_risk_df \
         .selectExpr("CAST(payment_id AS STRING) AS key", "to_json(struct(*)) AS value") \

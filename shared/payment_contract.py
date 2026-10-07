@@ -13,20 +13,25 @@ PAYMENT_TOPIC = "payment-events"
 PAYMENT_STATUSES = frozenset({"CREATED", "PENDING", "SUCCESS", "FAILED"})
 PAYMENT_METHODS = frozenset({"CARD", "BANK_TRANSFER", "QR"})
 CHANNELS = frozenset({"POS", "ONLINE", "ATM"})
-MAX_AMOUNT = Decimal("9999999999999999.99")
+MAX_AMOUNT = Decimal("99999999999.99")
 
 
 def normalize_payment_event(event: dict) -> dict:
     """Validate and normalize a v1 payment event; reject unsupported versions."""
-    if not isinstance(event, dict) or event.get("schema_version") != SCHEMA_VERSION:
+    if not isinstance(event, dict) or type(event.get("schema_version")) is not int or event["schema_version"] != SCHEMA_VERSION:
         raise ValueError("Unsupported payment schema_version")
 
     result = event.copy()
-    for field in ("event_id", "trace_id", "payment_id", "customer_id", "account_id"):
+    for field, maximum in (("event_id", 120), ("trace_id", 50), ("payment_id", 50), ("customer_id", 50), ("account_id", 50)):
         value = result.get(field)
-        if not isinstance(value, str) or not value.strip() or len(value) > 120:
+        if not isinstance(value, str) or not value.strip() or len(value) > maximum:
             raise ValueError(f"Invalid {field}")
         result[field] = value.strip()
+
+    for field, maximum in (("merchant_id", 50), ("device_id", 50), ("location", 100)):
+        value = result.get(field)
+        if value is not None and (not isinstance(value, str) or len(value) > maximum):
+            raise ValueError(f"Invalid {field}")
 
     try:
         amount = Decimal(str(result.get("amount")))

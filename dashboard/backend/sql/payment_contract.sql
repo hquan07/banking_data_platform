@@ -14,3 +14,5 @@ BEGIN
             ALTER COLUMN timestamp TYPE TIMESTAMPTZ USING timestamp AT TIME ZONE 'UTC';
     END IF;
 END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_payment_event_event_id
+    ON core_banking.payment_event (event_id) WHERE event_id IS NOT NULL;

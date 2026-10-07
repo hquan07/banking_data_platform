@@ -9,7 +9,7 @@ import time
 
 from fastapi import WebSocket
 from prometheus_client import Histogram
-from datetime import datetime
+from datetime import datetime, timezone
 from core.db import pg_conn, redis_client
 
 
@@ -130,67 +130,78 @@ def get_active_rules() -> dict:
 # =============================================
 # Kafka Consumer
 # =============================================
-async def consume_kafka():
-    """Connect to Kafka and broadcast events to WebSocket clients."""
-    try:
-        from aiokafka import AIOKafkaConsumer
-
-        print(f"Connecting to Kafka at {KAFKA_BOOTSTRAP}...")
-        consumer = AIOKafkaConsumer(
-            'payment-events', 'fraud-events', 'aml-events',
-            bootstrap_servers=KAFKA_BOOTSTRAP,
-            auto_offset_reset='latest',
+def persist_alert(data: dict) -> bool:
+    """Insert once; duplicate deliveries do not change alert state or audit time."""
+    if pg_conn is None:
+        raise RuntimeError("PostgreSQL is unavailable for alert persistence")
+    event_id = data.get("event_id")
+    account_id = data.get("account_id")
+    rule = data.get("rule")
+    if not event_id or not account_id or not rule:
+        raise ValueError("Alert requires event_id, account_id and rule")
+    amount = data.get("amount") or 0
+    risk_score = data.get("risk_score", data.get("fraud_score", 90))
+    xai = generate_xai_explanation(rule, risk_score, amount)
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO alerts
+                (event_id, payment_id, account_id, rule_name, amount,
+                 risk_score, risk_level, decision, xai_explanation)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (event_id, rule_name) WHERE event_id IS NOT NULL DO NOTHING
+            RETURNING alert_id
+            """,
+            (
+                event_id, data.get("payment_id"), account_id, rule, amount,
+                risk_score, data.get("risk_level", "HIGH" if risk_score >= 85 else "MEDIUM"),
+                data.get("decision", "REVIEW"), xai,
+            ),
         )
-        await consumer.start()
-        print("Kafka Consumer started. Listening for events...")
+        return cur.fetchone() is not None
+
+
+async def consume_kafka():
+    """Commit offsets only after alert persistence, and retry connection failures."""
+    from aiokafka import AIOKafkaConsumer
+
+    while True:
+        consumer = AIOKafkaConsumer(
+            "payment-events", "fraud-events", "aml-events",
+            bootstrap_servers=KAFKA_BOOTSTRAP,
+            group_id="dashboard-stream-v1",
+            enable_auto_commit=False,
+            auto_offset_reset="earliest",
+        )
+        retry = False
         try:
+            await consumer.start()
             async for msg in consumer:
-                data = json.loads(msg.value.decode('utf-8'))
-                
-                # Observe Data Freshness
+                data = json.loads(msg.value.decode("utf-8"))
+                inserted = True
+                if msg.topic in ("fraud-events", "aml-events"):
+                    inserted = persist_alert(data)
+                await consumer.commit()
                 if "timestamp" in data:
                     try:
-                        event_time = datetime.strptime(data["timestamp"], "%Y-%m-%dT%H:%M:%SZ")
-                        latency = (datetime.utcnow() - event_time).total_seconds()
+                        event_time = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
+                        latency = (datetime.now(timezone.utc) - event_time).total_seconds()
                         if latency > 0:
                             DATA_FRESHNESS.observe(latency)
-                    except Exception:
+                    except (ValueError, TypeError):
                         pass
-                        
-                payload = {"topic": msg.topic, "data": data}
-                await manager.broadcast(payload)
-
-                # Lưu vào Postgres nếu là cảnh báo
-                if msg.topic in ['fraud-events', 'aml-events'] and pg_conn:
-                    try:
-                        rule = data.get("rule", "ML_MODEL_FRAUD")
-                        amount = data.get("amount", 0)
-                        risk_score = data.get("risk_score", 90)
-                        xai = generate_xai_explanation(rule, risk_score, amount)
-                        event_id = data.get("event_id") or data.get("payment_id")
-                        with pg_conn.cursor() as cur:
-                            cur.execute(
-                                """
-                                INSERT INTO alerts
-                                    (event_id, payment_id, account_id, rule_name, amount,
-                                     risk_score, risk_level, decision, xai_explanation)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                ON CONFLICT (event_id, rule_name) WHERE event_id IS NOT NULL
-                                DO UPDATE SET updated_at = NOW()
-                                """,
-                                (
-                                    event_id, data.get("payment_id"), data.get("account_id"),
-                                    rule, amount, risk_score,
-                                    data.get("risk_level", "HIGH" if risk_score >= 85 else "MEDIUM"),
-                                    data.get("decision", "REVIEW"), xai,
-                                ),
-                            )
-                    except Exception as e:
-                        print(f"Lỗi lưu Postgres: {e}")
+                if inserted:
+                    await manager.broadcast({"topic": msg.topic, "data": data})
+        except Exception as exc:
+            print(f"Kafka consumer failed; retrying in 5 seconds: {exc}")
+            retry = True
         finally:
-            await consumer.stop()
-    except Exception as e:
-        print(f"Kafka connection failed: {e}. Dashboard will not receive live events.")
+            try:
+                await consumer.stop()
+            except Exception as exc:
+                print(f"Kafka consumer cleanup failed: {exc}")
+        if retry:
+            await asyncio.sleep(5)
 
 
 # =============================================

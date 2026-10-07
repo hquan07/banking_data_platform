@@ -1,4 +1,4 @@
-from pyspark.sql.functions import col, lit, window, count
+from pyspark.sql.functions import col, lit, window, count, sha2, concat_ws
 
 def apply_velocity_rule(watermarked_df, window_duration="5 minutes", count_threshold=5):
     return watermarked_df \
@@ -9,12 +9,14 @@ def apply_velocity_rule(watermarked_df, window_duration="5 minutes", count_thres
         .agg(count("payment_id").alias("txn_count")) \
         .filter(col("txn_count") > count_threshold) \
         .select(
+            sha2(concat_ws(":", lit("HIGH_VELOCITY"), col("account_id"), col("window.start").cast("string")), 256).alias("event_id"),
             col("account_id"),
             col("window.start").alias("window_start"),
             col("window.end").alias("window_end"),
             col("txn_count"),
             lit("HIGH_VELOCITY").alias("triggered_rules"),
             lit(70).alias("fraud_score"),
+            lit(70).alias("risk_score"),
             lit("MEDIUM").alias("risk_level"),
             lit("MONITOR").alias("decision")
         )

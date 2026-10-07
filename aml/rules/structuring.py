@@ -1,4 +1,4 @@
-from pyspark.sql.functions import col, lit, window, count, sum as _sum
+from pyspark.sql.functions import col, lit, window, count, sum as _sum, sha2, concat_ws
 
 def apply_structuring_rule(watermarked_df, threshold_amount=10000.0, sum_threshold=9000.0, count_threshold=3, window_duration="1 hour"):
     return watermarked_df \
@@ -13,6 +13,7 @@ def apply_structuring_rule(watermarked_df, threshold_amount=10000.0, sum_thresho
         ) \
         .filter((col("txn_count") >= count_threshold) & (col("total_amount") > sum_threshold)) \
         .select(
+            sha2(concat_ws(":", lit("STRUCTURING_SUSPICION"), col("account_id"), col("window.start").cast("string")), 256).alias("event_id"),
             col("account_id"),
             col("window.start").alias("window_start"),
             col("window.end").alias("window_end"),
@@ -20,6 +21,7 @@ def apply_structuring_rule(watermarked_df, threshold_amount=10000.0, sum_thresho
             col("total_amount"),
             lit("STRUCTURING_AML_PATTERN").alias("triggered_rules"),
             lit(90).alias("fraud_score"),
+            lit(90).alias("risk_score"),
             lit("CRITICAL").alias("risk_level"),
             lit("REVIEW").alias("decision")
         )

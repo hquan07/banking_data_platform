@@ -47,28 +47,46 @@ def process_stream(spark):
         ) \
         .start()
         
-    # Write to PostgreSQL
-    # Note: Requires postgresql jdbc driver when submitting
-    db_url = (
-        f"jdbc:postgresql://{os.environ.get('POSTGRES_HOST', 'localhost')}:"
-        f"{os.environ.get('POSTGRES_PORT', '5433')}/"
-        f"{os.environ.get('POSTGRES_DB', 'banking_data_platform')}"
-    )
-    db_properties = {
-        "user": os.environ.get("POSTGRES_USER", ""),
-        "password": os.environ.get("POSTGRES_PASSWORD", ""),
-        "driver": "org.postgresql.Driver"
-    }
-    
+    # One transaction per microbatch. A failed batch rolls back; a retried
+    # batch is harmless because payment_id and event_id are unique.
     def write_to_postgres(batch_df, batch_id):
+        import psycopg2
+        from psycopg2.extras import execute_values
+
         columns = [
             "payment_id", "event_id", "schema_version", "trace_id", "customer_id",
             "account_id", "merchant_id", "amount", "currency", "payment_method",
             "channel", "location", "device_id", "status",
         ]
         payment_df = batch_df.select(*columns, col("event_time").alias("timestamp"))
-        payment_df.write \
-            .jdbc(url=db_url, table="core_banking.payment_event", mode="append", properties=db_properties)
+        insert_sql = """
+            INSERT INTO core_banking.payment_event
+                (payment_id, event_id, schema_version, trace_id, customer_id,
+                 account_id, merchant_id, amount, currency, payment_method,
+                 channel, location, device_id, status, timestamp)
+            VALUES %s ON CONFLICT DO NOTHING
+        """
+        conn = psycopg2.connect(
+            host=os.environ["POSTGRES_HOST"],
+            port=int(os.environ.get("POSTGRES_PORT", "5432")),
+            dbname=os.environ["POSTGRES_DB"],
+            user=os.environ["POSTGRES_USER"],
+            password=os.environ["POSTGRES_PASSWORD"],
+            connect_timeout=10,
+        )
+        try:
+            with conn:
+                with conn.cursor() as cursor:
+                    rows = []
+                    for row in payment_df.toLocalIterator():
+                        rows.append(tuple(row))
+                        if len(rows) >= 500:
+                            execute_values(cursor, insert_sql, rows, page_size=500)
+                            rows.clear()
+                    if rows:
+                        execute_values(cursor, insert_sql, rows, page_size=500)
+        finally:
+            conn.close()
             
     db_query = valid_df \
         .writeStream \
