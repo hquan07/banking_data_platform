@@ -16,7 +16,8 @@ from aml.rules.structuring import apply_structuring_rule
 
 import pandas as pd
 import joblib
-from pyspark.sql.functions import pandas_udf, PandasUDFType
+from pyspark.sql.functions import pandas_udf
+from pyspark.sql.types import DoubleType
 
 # Tải model (giả định script chạy trên môi trường có file fraud_model.pkl)
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fraud", "scoring", "fraud_model.pkl")
@@ -28,7 +29,7 @@ except Exception as e:
     rf_model = None
 
 # Định nghĩa Pandas UDF để chạy dự đoán trên Spark Workers
-@pandas_udf("double")
+@pandas_udf(DoubleType())
 def predict_fraud_udf(amount: pd.Series, hour_of_day: pd.Series, velocity_1h: pd.Series, diff_from_avg: pd.Series, is_international: pd.Series) -> pd.Series:
     if rf_model is None:
         return pd.Series([0.0] * len(amount))
@@ -162,7 +163,9 @@ def start_fraud_engine(spark):
     # ==========================================
     # RULE 5: SHARED DEVICE (Entity Resolution)
     # ==========================================
-    shared_device_df = apply_shared_device_rule(watermarked_df)
+    shared_device_df = apply_shared_device_rule(
+        parsed_df.withWatermark("event_time", "1 hours")
+    )
 
     query_shared_device = shared_device_df \
         .selectExpr("CAST(account_id AS STRING) AS key", "to_json(struct(*)) AS value") \

@@ -366,6 +366,8 @@ services:
       - /opt/bitnami/spark/bin/spark-submit
       - --master
       - spark://spark-master:7077
+      - --conf
+      - spark.cores.max=1
       - --packages
       - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
       - /workspace/streaming/payment_processing.py
@@ -442,6 +444,8 @@ services:
       - /opt/bitnami/spark/bin/spark-submit
       - --master
       - spark://spark-master:7077
+      - --conf
+      - spark.cores.max=1
       - --packages
       - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
       - /workspace/streaming/fraud_detection.py

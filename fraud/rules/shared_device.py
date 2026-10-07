@@ -11,7 +11,6 @@ def apply_shared_device_rule(df):
     
     # We count unique account_id per device_id over a sliding window
     window_spec = df \
-        .withWatermark("event_time", "1 hours") \
         .groupBy(
             F.window(F.col("event_time"), "1 hours"),
             F.col("device_id")
