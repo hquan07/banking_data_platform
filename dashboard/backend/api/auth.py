@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 @router.post("/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     if not pg_conn:
-        raise HTTPException(status_code=500, detail="Database not connected")
+        raise HTTPException(status_code=503, detail="Database not connected")
     with pg_conn.cursor() as cur:
         cur.execute("SELECT id, username, password_hash, role FROM users WHERE username = %s", (form_data.username,))
         user = cur.fetchone()

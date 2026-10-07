@@ -12,7 +12,8 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from core.db import pg_conn, graph_driver, ch_client, redis_client, get_s3_client
 from core.security import get_password_hash
-from services.kafka_client import manager, consume_kafka, simulate_events
+from core.runtime import APP_MODE, ENABLE_MOCK_DATA, validate_runtime_config
+from services.kafka_client import manager, consume_kafka, simulate_events, kafka_ready
 
 # API Routers
 from api.auth import router as auth_router
@@ -42,6 +43,22 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Run startup tasks, yield, then cleanup."""
     background_tasks = []
+    validate_runtime_config()
+
+    if pg_conn is None:
+        raise RuntimeError("PostgreSQL is required for authentication and alerts")
+    with pg_conn.cursor() as cur:
+        cur.execute("SELECT 1")
+    if APP_MODE != "demo":
+        if redis_client is None or not redis_client.ping():
+            raise RuntimeError("Redis is required outside demo mode")
+        if graph_driver is None:
+            raise RuntimeError("Neo4j is required outside demo mode")
+        graph_driver.verify_connectivity()
+        if ch_client is None or ch_client.execute("SELECT 1") != [(1,)]:
+            raise RuntimeError("ClickHouse is required outside demo mode")
+        if get_s3_client() is None:
+            raise RuntimeError("MinIO is required outside demo mode")
 
     # --- Startup ---
     # Run idempotent application migrations. This also repairs databases
@@ -60,8 +77,6 @@ async def lifespan(app: FastAPI):
                 print(f"Migration {migration_name} completed successfully.")
         except Exception as e:
             raise RuntimeError(f"Database migration failed: {e}") from e
-    elif os.environ.get("APP_MODE", "integration") != "demo":
-        raise RuntimeError("PostgreSQL is required outside demo mode")
 
     # Initialize default users if not present
     if pg_conn:
@@ -82,8 +97,16 @@ async def lifespan(app: FastAPI):
             raise RuntimeError(f"Default user initialization failed: {e}") from e
 
     # Start the real consumer in every mode. The simulator is opt-in.
-    background_tasks.append(asyncio.create_task(consume_kafka()))
-    if os.environ.get("ENABLE_MOCK_DATA", "false").lower() == "true":
+    if APP_MODE != "demo":
+        background_tasks.append(asyncio.create_task(consume_kafka()))
+        try:
+            await asyncio.wait_for(kafka_ready.wait(), timeout=30)
+        except asyncio.TimeoutError as exc:
+            for task in background_tasks:
+                task.cancel()
+            await asyncio.gather(*background_tasks, return_exceptions=True)
+            raise RuntimeError("Kafka consumer did not become ready") from exc
+    if ENABLE_MOCK_DATA:
         background_tasks.append(asyncio.create_task(simulate_events()))
 
     yield
@@ -142,7 +165,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "healthy", "clients_connected": len(manager.active_connections)}
+    return {"status": "healthy" if kafka_ready.is_set() or APP_MODE == "demo" else "degraded", "mode": APP_MODE, "clients_connected": len(manager.active_connections)}
 
 
 @app.get("/api/health/live")
@@ -152,13 +175,32 @@ def liveness_check():
 
 @app.get("/api/health/ready")
 def readiness_check():
-    dependencies = {
-        "postgres": pg_conn is not None,
-        "neo4j": graph_driver is not None,
-        "clickhouse": ch_client is not None,
-        "redis": redis_client is not None,
-    }
+    from fastapi import HTTPException
+
+    def check(client, probe):
+        if client is None:
+            return False
+        try:
+            return probe() is not False
+        except Exception:
+            return False
+
+    def postgres_probe():
+        if pg_conn is None:
+            raise RuntimeError("PostgreSQL not connected")
+        with pg_conn.cursor() as cur:
+            cur.execute("SELECT 1")
+
+    dependencies = {"postgres": check(pg_conn, postgres_probe)}
+    if APP_MODE != "demo":
+        s3_client = get_s3_client()
+        dependencies.update({
+            "kafka": kafka_ready.is_set(),
+            "redis": check(redis_client, redis_client.ping if redis_client else None),
+            "neo4j": check(graph_driver, graph_driver.verify_connectivity if graph_driver else None),
+            "clickhouse": check(ch_client, lambda: ch_client.execute("SELECT 1")),
+            "minio": check(s3_client, lambda: s3_client.head_bucket(Bucket="evidence")),
+        })
     if not all(dependencies.values()):
-        from fastapi import HTTPException
         raise HTTPException(status_code=503, detail={"status": "not_ready", **dependencies})
-    return {"status": "ready", **dependencies}
+    return {"status": "ready", "mode": APP_MODE, **dependencies}

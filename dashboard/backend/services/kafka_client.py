@@ -40,6 +40,7 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+kafka_ready = asyncio.Event()
 
 KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP_SERVER", "localhost:9092")
 
@@ -176,6 +177,7 @@ async def consume_kafka():
         retry = False
         try:
             await consumer.start()
+            kafka_ready.set()
             async for msg in consumer:
                 data = json.loads(msg.value.decode("utf-8"))
                 inserted = True
@@ -196,6 +198,7 @@ async def consume_kafka():
             print(f"Kafka consumer failed; retrying in 5 seconds: {exc}")
             retry = True
         finally:
+            kafka_ready.clear()
             try:
                 await consumer.stop()
             except Exception as exc:

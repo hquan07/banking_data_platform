@@ -79,6 +79,14 @@ The system utilizes a modern technology stack fully containerized with Docker.
 
 Clone the repository and run the following command at the project root directory:
 
+Create `.env` from `.env.example` and fill every credential before starting.
+`APP_MODE=integration` is the default: PostgreSQL, Kafka, Redis, Neo4j,
+ClickHouse and MinIO must be reachable, and API errors are reported instead of
+showing sample data. `APP_MODE=demo` permits sample API responses when an
+optional analytics dependency is unavailable. Set `ENABLE_MOCK_DATA=true`
+only in demo mode to broadcast sample events. PostgreSQL and dashboard
+credentials are required in both modes for authentication and alert storage.
+
 ```bash
 docker compose up -d
 ```
@@ -122,9 +130,9 @@ banking_data_platform/
 
 ## 🛠 Troubleshooting
 
-1. **Cannot connect to MinIO / Upload fails**: Ensure ports `9000` and `9001` are not occupied. The backend uses Presigned URLs, so the frontend client will PUT files directly to `http://localhost:9001/...`
+1. **Cannot connect to MinIO / Upload fails**: Ensure ports `9000` (API) and `9001` (console) are not occupied. The frontend uploads through presigned URLs on the API port `9000`.
 2. **No real-time data visible**: Check Kafka logs (`docker logs banking_kafka`) and verify if the Spark Streaming Job is running.
-3. **Mock Mode**: If the Backend fails to connect to certain databases or Kafka, it automatically falls back to **MOCK MODE** to ensure the UI remains functional with sample data for demonstration purposes.
+3. **Demo mode**: Set `APP_MODE=demo` explicitly. Integration mode fails startup or returns `503` when required services are unavailable. Check `/api/health/live` and `/api/health/ready` separately.
 
 ---
 *This project is designed as a Proof of Concept (PoC) for a real-time banking data processing platform utilizing Big Data technologies.*

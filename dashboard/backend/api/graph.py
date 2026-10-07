@@ -1,9 +1,9 @@
 """
 Neo4j graph network router.
 """
-import random
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from core.db import graph_driver
+from core.runtime import demo_mode
 
 router = APIRouter(prefix="/api/graph", tags=["Graph"])
 
@@ -36,10 +36,15 @@ def get_circular_graph():
                         "nodes": [{"id": n, "name": n, "group": 1} for n in nodes],
                         "links": links,
                     }
+                return {"nodes": [], "links": []}
         except Exception as e:
             print(f"Neo4j query error: {e}")
+            if not demo_mode():
+                raise HTTPException(status_code=503, detail="Graph database unavailable") from e
 
-    # Mock fallback
+    if not demo_mode():
+        raise HTTPException(status_code=503, detail="Graph database unavailable")
+    # Demo-only sample graph
     return {
         "nodes": [
             {"id": "ACC_92", "name": "ACC_92", "group": 1},

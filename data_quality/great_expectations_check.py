@@ -4,6 +4,8 @@ import os
 
 def run_dq_checks(data_path):
     print(f"Bắt đầu chạy Data Quality Checks cho dữ liệu tại {data_path}...")
+    if os.environ.get("ENABLE_MOCK_DATA", "false").lower() == "true" and os.environ.get("APP_MODE", "integration") != "demo":
+        raise RuntimeError("ENABLE_MOCK_DATA requires APP_MODE=demo")
     
     # Khởi tạo GX Context (trong production sẽ cấu hình kết nối tới S3/MinIO)
     context = gx.get_context(mode="ephemeral")

@@ -3,9 +3,10 @@ Analytics (ClickHouse) and KYC 360° router.
 """
 import datetime
 import random
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from core.db import pg_conn, ch_client, graph_driver
 from core.deps import get_current_user
+from core.runtime import demo_mode
 
 router = APIRouter(prefix="/api", tags=["Analytics"])
 
@@ -34,12 +35,15 @@ def get_history_analytics():
                     "total_amount": row[2],
                     "total_fraud": row[3],
                 })
-            if data:
-                return data
+            return data
         except Exception as e:
             print(f"ClickHouse query error: {e}")
+            if not demo_mode():
+                raise HTTPException(status_code=503, detail="Analytics database unavailable") from e
 
-    # Mock fallback
+    if not demo_mode():
+        raise HTTPException(status_code=503, detail="Analytics database unavailable")
+    # Demo-only sample data
     data = []
     for i in range(14, -1, -1):
         date = datetime.date.today() - datetime.timedelta(days=i)
@@ -54,6 +58,8 @@ def get_history_analytics():
 
 @router.get("/accounts/{account_id}/kyc")
 def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_user)):
+    if not demo_mode() and (pg_conn is None or graph_driver is None or ch_client is None):
+        raise HTTPException(status_code=503, detail="KYC dependencies unavailable")
     profile = {
         "account_id": account_id,
         "trust_score": None,
@@ -84,6 +90,8 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
                     profile["trust_score"] = 20
         except Exception as e:
             print(f"KYC Postgres error: {e}")
+            if not demo_mode():
+                raise HTTPException(status_code=503, detail="KYC database unavailable") from e
 
     # 2. Neo4j: Network graph for this account
     if graph_driver:
@@ -113,9 +121,11 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
                 }
         except Exception as e:
             print(f"KYC Neo4j error: {e}")
+            if not demo_mode():
+                raise HTTPException(status_code=503, detail="Graph database unavailable") from e
 
-    # Mock fallback for network graph
-    if not profile["network_graph"]["nodes"]:
+    # Demo-only graph data
+    if demo_mode() and not profile["network_graph"]["nodes"]:
         mock_peers = [f"ACC_{random.randint(1,100)}" for _ in range(4)]
         profile["network_graph"] = {
             "nodes": [{"id": account_id, "name": account_id, "group": 1}] + [{"id": p, "name": p, "group": 2} for p in mock_peers],
@@ -156,19 +166,20 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
                 ]
         except Exception as e:
             print(f"KYC ClickHouse error: {e}")
+            if not demo_mode():
+                raise HTTPException(status_code=503, detail="Analytics database unavailable") from e
 
-    # Fallback if no data found
-    if not profile["recent_transactions"]:
+    if demo_mode() and not profile["recent_transactions"]:
         profile["recent_transactions"] = [
             {"time": str(datetime.datetime.now() - datetime.timedelta(minutes=i * 5)), "amount": round(random.uniform(50, 5000), 2), "type": random.choice(["TRANSFER", "PAYMENT", "DEPOSIT"])}
             for i in range(3)
         ]
-    if not profile["devices"]:
+    if demo_mode() and not profile["devices"]:
         profile["devices"] = [
             {"name": "Unknown Device", "last_seen": "N/A", "ip": "N/A"}
         ]
 
-    if profile["trust_score"] is None:
+    if demo_mode() and profile["trust_score"] is None:
         profile["trust_score"] = 75
 
     return profile

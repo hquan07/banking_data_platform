@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from core.db import pg_conn, get_s3_client, EVIDENCE_BUCKET
 from core.deps import get_current_user
+from core.runtime import demo_mode
 
 router = APIRouter(prefix="/api", tags=["Alerts"])
 
@@ -56,8 +57,12 @@ def get_alerts(page: int = 1, limit: int = 50, current_user: dict = Depends(get_
                 return {"total": total, "page": page, "limit": limit, "data": data}
         except Exception as e:
             print(f"Postgres query error: {e}")
+            if not demo_mode():
+                raise HTTPException(status_code=503, detail="Alerts database unavailable") from e
 
-    # Mock fallback
+    if not demo_mode():
+        raise HTTPException(status_code=503, detail="Alerts database unavailable")
+    # Demo-only sample data
     return [
         {"alert_id": 1, "account_id": "ACC_44", "rule_name": "CIRCULAR_TRANSFER", "amount": 12000.0, "risk_score": 98, "status": "PENDING", "created_at": "2023-10-27 10:00:00", "xai_explanation": None, "notes": None, "evidence_file_url": None, "assignee_id": None},
         {"alert_id": 2, "account_id": "ACC_11", "rule_name": "HIGH_VELOCITY", "amount": 4500.0, "risk_score": 85, "status": "PENDING", "created_at": "2023-10-27 10:05:00", "xai_explanation": None, "notes": None, "evidence_file_url": None, "assignee_id": None},
@@ -143,10 +148,12 @@ def update_alert_status(alert_id: int, update: AlertStatusUpdate, current_user: 
                     ),
                 )
             return {"message": "Success"}
+        except HTTPException:
+            raise
         except Exception as e:
             print(f"Postgres update error: {e}")
-            return {"error": str(e)}
-    return {"message": "Mock updated"}
+            raise HTTPException(status_code=503, detail="Alerts database unavailable") from e
+    raise HTTPException(status_code=503, detail="Alerts database unavailable")
 
 
 @router.get("/alerts/export")
@@ -155,7 +162,7 @@ def export_alerts(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Only ADMIN can export reports")
 
     if not pg_conn:
-        raise HTTPException(status_code=500, detail="Database not connected")
+        raise HTTPException(status_code=503, detail="Database not connected")
 
     try:
         with pg_conn.cursor() as cur:

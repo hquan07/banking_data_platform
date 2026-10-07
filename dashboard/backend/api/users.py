@@ -20,7 +20,8 @@ def get_users(current_user: dict = Depends(get_current_user)):
                 return [{"id": row[0], "username": row[1], "role": row[2]} for row in rows]
         except Exception as e:
             print(f"Error fetching users: {e}")
-    return []
+            raise HTTPException(status_code=503, detail="Users database unavailable") from e
+    raise HTTPException(status_code=503, detail="Users database unavailable")
 
 
 @router.get("/admin/users-stats")
@@ -78,5 +79,5 @@ def get_users_stats(current_user: dict = Depends(get_current_user)):
                 return stats
         except Exception as e:
             print(f"Error fetching user stats: {e}")
-            raise HTTPException(status_code=500, detail="Database error")
-    return []
+            raise HTTPException(status_code=503, detail="Database error") from e
+    raise HTTPException(status_code=503, detail="Users database unavailable")

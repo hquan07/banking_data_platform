@@ -4,8 +4,10 @@ import time
 import random
 import uuid
 import redis
+import sys
 from datetime import datetime, timezone
 from kafka import KafkaProducer
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from shared.payment_contract import PAYMENT_TOPIC, SCHEMA_VERSION, normalize_payment_event
 
 def get_producer():

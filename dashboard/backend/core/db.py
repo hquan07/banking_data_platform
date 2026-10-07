@@ -94,12 +94,10 @@ def get_s3_client():
             config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
             region_name="us-east-1",
         )
-        try:
-            _s3_client.head_bucket(Bucket=EVIDENCE_BUCKET)
-        except Exception:
-            _s3_client.create_bucket(Bucket=EVIDENCE_BUCKET)
+        _s3_client.head_bucket(Bucket=EVIDENCE_BUCKET)
         print("MinIO (S3) connected. Bucket 'evidence' ready.")
         return _s3_client
     except Exception as e:
         print(f"MinIO lazy init error: {e}")
+        _s3_client = None
         return None

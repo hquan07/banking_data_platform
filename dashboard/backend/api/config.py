@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from core.db import pg_conn, redis_client
 from core.deps import get_current_user
+from core.runtime import demo_mode
 from services.kafka_client import current_tps
 import services.kafka_client as kafka_svc
 
@@ -32,6 +33,8 @@ async def update_tps(config: TPSConfig, current_user: dict = Depends(get_current
     kafka_svc.current_tps = config.tps
     if redis_client:
         redis_client.set("mock_tps", config.tps)
+    elif not demo_mode():
+        raise HTTPException(status_code=503, detail="Redis unavailable")
     return {"message": f"TPS updated to {config.tps}"}
 
 
@@ -57,7 +60,8 @@ def get_rules(current_user: dict = Depends(get_current_user)):
                 ]
         except Exception as e:
             print(f"Error fetching rules: {e}")
-    return []
+            raise HTTPException(status_code=503, detail="Rules database unavailable") from e
+    raise HTTPException(status_code=503, detail="Rules database unavailable")
 
 
 @router.put("/rules/{rule_id}")
@@ -66,7 +70,9 @@ def update_rule(rule_id: int, update: RuleUpdate, current_user: dict = Depends(g
         raise HTTPException(status_code=403, detail="Only ADMIN can modify rules")
 
     if not pg_conn:
-        raise HTTPException(status_code=500, detail="Database not connected")
+        raise HTTPException(status_code=503, detail="Database not connected")
+    if redis_client is None and not demo_mode():
+        raise HTTPException(status_code=503, detail="Redis unavailable")
 
     try:
         set_parts = []

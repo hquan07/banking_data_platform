@@ -3,10 +3,12 @@ import time
 import random
 import uuid
 import os
+import sys
 from datetime import datetime, timezone
 from kafka import KafkaProducer
 from faker import Faker
-from database import get_connection
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ingestion.database import get_connection
 from shared.payment_contract import PAYMENT_TOPIC, SCHEMA_VERSION, normalize_payment_event
 
 fake = Faker()
