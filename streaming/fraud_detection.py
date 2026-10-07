@@ -64,7 +64,8 @@ def start_fraud_engine(spark):
         .format("kafka") \
         .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
         .option("subscribe", "payment-events") \
-        .option("startingOffsets", "latest") \
+        .option("startingOffsets", "earliest") \
+        .option("failOnDataLoss", "true") \
         .load()
     
     parsed_df = parse_payment_stream(df).filter(col("validation_error").isNull())
@@ -159,6 +160,7 @@ def start_fraud_engine(spark):
         .writeStream \
         .outputMode("update") \
         .foreachBatch(process_velocity_with_redis) \
+        .option("checkpointLocation", os.environ.get("SPARK_CHECKPOINT_DIR", "/checkpoints/fraud-engine") + "/redis_velocity") \
         .start()
 
     # ==========================================

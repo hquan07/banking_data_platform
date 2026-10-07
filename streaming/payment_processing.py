@@ -1,6 +1,6 @@
 import os
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, struct, to_json
 from payment_schema import parse_payment_stream
 
 def create_spark_session():
@@ -22,14 +22,17 @@ def process_stream(spark):
         .format("kafka") \
         .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
         .option("subscribe", "payment-events") \
-        .option("startingOffsets", "latest") \
+        .option("startingOffsets", "earliest") \
+        .option("failOnDataLoss", "true") \
         .load()
     
     # Parse JSON and separate valid/invalid for DLQ
     parsed_df = parse_payment_stream(df)
     
     valid_df = parsed_df.filter(col("validation_error").isNull())
-    dlq_df = parsed_df.filter(col("validation_error").isNotNull()).select(col("raw_value").alias("value"))
+    dlq_df = parsed_df.filter(col("validation_error").isNotNull()).select(
+        to_json(struct("raw_value", "validation_error", "source_topic", "source_partition", "source_offset")).alias("value")
+    )
     
     # Write malformed events to DLQ topic
     dlq_query = dlq_df \
@@ -42,13 +45,6 @@ def process_stream(spark):
             "checkpointLocation",
             os.environ.get("SPARK_CHECKPOINT_DIR", "s3a://checkpoints") + "/payment_processor_dlq",
         ) \
-        .start()
-        
-    # Write to console (for debugging)
-    console_query = valid_df \
-        .writeStream \
-        .outputMode("append") \
-        .format("console") \
         .start()
         
     # Write to PostgreSQL
