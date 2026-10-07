@@ -91,6 +91,17 @@ credentials are required in both modes for authentication and alert storage.
 docker compose up -d
 ```
 
+For local integration testing, Compose builds MinIO Community and `mc` from
+pinned upstream source revisions in `docker/minio/Dockerfile`. This replaces
+the unavailable public `quay.io/minio/*:latest` images and reuses the existing
+`minio_data` volume. MinIO Community is archived and does not receive current
+security fixes; **do not use this image for production or real banking data**.
+MinIO's API and console bind to localhost only. Change the sample
+`MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` values in `.env` before storing
+anything sensitive.
+Production deployments should use a maintained, licensed MinIO AIStor release
+or another approved S3-compatible store after reviewing its migration plan.
+
 The initial startup may take a few minutes to pull images and initialize databases. The following containers will be launched:
 - `banking_kafka`, `banking_zookeeper`
 - `banking_postgres`, `banking_clickhouse`, `banking_neo4j`, `banking_redis`, `banking_minio`
