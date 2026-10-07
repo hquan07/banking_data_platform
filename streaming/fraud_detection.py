@@ -2,8 +2,8 @@ import os
 import sys
 import uuid
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col, to_timestamp, to_json, struct
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType
+from pyspark.sql.functions import col, to_json, struct
+from payment_schema import parse_payment_stream
 
 # Ensure modules in other folders can be imported
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -46,24 +46,10 @@ def predict_fraud_udf(amount: pd.Series, hour_of_day: pd.Series, velocity_1h: pd
     probs = rf_model.predict_proba(df)[:, 1]
     return pd.Series(probs)
 
-payment_schema = StructType([
-    StructField("payment_id", StringType(), True),
-    StructField("customer_id", StringType(), True),
-    StructField("account_id", StringType(), True),
-    StructField("merchant_id", StringType(), True),
-    StructField("amount", DoubleType(), True),
-    StructField("currency", StringType(), True),
-    StructField("payment_method", StringType(), True),
-    StructField("channel", StringType(), True),
-    StructField("location", StringType(), True),
-    StructField("device_id", StringType(), True),
-    StructField("timestamp", StringType(), True),
-    StructField("status", StringType(), True)
-])
-
 def create_spark_session():
     return SparkSession.builder \
         .appName("FraudDetectionEngine") \
+        .config("spark.sql.session.timeZone", "UTC") \
         .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262") \
         .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")) \
         .config("spark.hadoop.fs.s3a.access.key", os.environ.get("MINIO_ROOT_USER", "minioadmin")) \
@@ -81,10 +67,7 @@ def start_fraud_engine(spark):
         .option("startingOffsets", "latest") \
         .load()
     
-    parsed_df = df.selectExpr("CAST(value AS STRING)") \
-        .select(from_json(col("value"), payment_schema).alias("data")) \
-        .select("data.*") \
-        .withColumn("event_time", to_timestamp(col("timestamp")))
+    parsed_df = parse_payment_stream(df).filter(col("validation_error").isNull())
         
     watermarked_df = parsed_df.withWatermark("event_time", "10 minutes")
 

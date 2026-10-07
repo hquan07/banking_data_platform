@@ -6,6 +6,7 @@ import uuid
 import redis
 from datetime import datetime, timezone
 from kafka import KafkaProducer
+from shared.payment_contract import PAYMENT_TOPIC, SCHEMA_VERSION, normalize_payment_event
 
 def get_producer():
     return KafkaProducer(
@@ -17,7 +18,7 @@ def get_producer():
 
 def simulate_payments():
     producer = get_producer()
-    topic = 'payment-events'
+    topic = PAYMENT_TOPIC
     redis_client = redis.Redis(
         host=os.environ.get("REDIS_HOST", "banking_redis"),
         port=6379, decode_responses=True
@@ -39,6 +40,7 @@ def simulate_payments():
             for _ in range(tps):
                 start_time = time.time()
                 tx = {
+                    "schema_version": SCHEMA_VERSION,
                     "trace_id": str(uuid.uuid4()),
                     "event_id": uuid.uuid4().hex,
                     "payment_id": f"PAY_{uuid.uuid4().hex[:12].upper()}",
@@ -52,9 +54,11 @@ def simulate_payments():
                     "channel": random.choice(["POS", "ONLINE", "ATM"]),
                     "device_id": f"DEV_{random.randint(1, 100)}",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "location": "VN"
+                    "location": "VN",
+                    "status": "CREATED",
                 }
-                producer.send(topic, tx)
+                tx = normalize_payment_event(tx)
+                producer.send(topic, key=tx["payment_id"].encode("utf-8"), value=tx).get(timeout=10)
                 
                 # Trừ hao thời gian tạo tx
                 elapsed = time.time() - start_time

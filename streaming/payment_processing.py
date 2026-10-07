@@ -1,28 +1,12 @@
 import os
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType
-
-# Define the schema of the JSON payload from Kafka
-payment_schema = StructType([
-    StructField("payment_id", StringType(), True),
-    StructField("trace_id", StringType(), True),
-    StructField("customer_id", StringType(), True),
-    StructField("account_id", StringType(), True),
-    StructField("merchant_id", StringType(), True),
-    StructField("amount", DoubleType(), True),
-    StructField("currency", StringType(), True),
-    StructField("payment_method", StringType(), True),
-    StructField("channel", StringType(), True),
-    StructField("location", StringType(), True),
-    StructField("device_id", StringType(), True),
-    StructField("timestamp", StringType(), True),
-    StructField("status", StringType(), True)
-])
+from pyspark.sql.functions import col
+from payment_schema import parse_payment_stream
 
 def create_spark_session():
     return SparkSession.builder \
         .appName("PaymentStreamingProcessor") \
+        .config("spark.sql.session.timeZone", "UTC") \
         .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262") \
         .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")) \
         .config("spark.hadoop.fs.s3a.access.key", os.environ.get("MINIO_ROOT_USER", "minioadmin")) \
@@ -42,11 +26,10 @@ def process_stream(spark):
         .load()
     
     # Parse JSON and separate valid/invalid for DLQ
-    parsed_df = df.selectExpr("CAST(value AS STRING) as raw_value") \
-        .withColumn("data", from_json(col("raw_value"), payment_schema))
+    parsed_df = parse_payment_stream(df)
     
-    valid_df = parsed_df.filter(col("data").isNotNull()).select("data.*")
-    dlq_df = parsed_df.filter(col("data").isNull()).select(col("raw_value").alias("value"))
+    valid_df = parsed_df.filter(col("validation_error").isNull())
+    dlq_df = parsed_df.filter(col("validation_error").isNotNull()).select(col("raw_value").alias("value"))
     
     # Write malformed events to DLQ topic
     dlq_query = dlq_df \
@@ -82,12 +65,13 @@ def process_stream(spark):
     }
     
     def write_to_postgres(batch_df, batch_id):
-        # Convert timestamp string back to actual timestamp if needed, but jdbc usually handles string-to-timestamp implicitly for simple formats, or we could cast it.
-        # For MVP, we will cast it.
-        from pyspark.sql.functions import to_timestamp
-        casted_df = batch_df.withColumn("timestamp", to_timestamp("timestamp"))
-        
-        casted_df.write \
+        columns = [
+            "payment_id", "event_id", "schema_version", "trace_id", "customer_id",
+            "account_id", "merchant_id", "amount", "currency", "payment_method",
+            "channel", "location", "device_id", "status",
+        ]
+        payment_df = batch_df.select(*columns, col("event_time").alias("timestamp"))
+        payment_df.write \
             .jdbc(url=db_url, table="core_banking.payment_event", mode="append", properties=db_properties)
             
     db_query = valid_df \

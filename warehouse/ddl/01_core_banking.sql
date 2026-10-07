@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS core_banking.transaction (
 -- 6. Raw Payments Table (for initial batch load / simulation target)
 CREATE TABLE IF NOT EXISTS core_banking.payment_event (
     payment_id VARCHAR(50) PRIMARY KEY,
+    event_id VARCHAR(120),
+    schema_version INT NOT NULL DEFAULT 1,
     trace_id VARCHAR(50),
     customer_id VARCHAR(50),
     account_id VARCHAR(50),
@@ -86,7 +88,7 @@ CREATE TABLE IF NOT EXISTS core_banking.payment_event (
     channel VARCHAR(50), -- POS, ONLINE, ATM
     location VARCHAR(100),
     device_id VARCHAR(50),
-    timestamp TIMESTAMP,
+    timestamp TIMESTAMPTZ,
     status VARCHAR(20)
 );
 
