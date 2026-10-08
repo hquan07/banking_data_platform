@@ -20,6 +20,7 @@ const ENDPOINTS = {
   velocity: '/api/datasets/velocity-summary',
   account: '/api/datasets/account-risk',
   models: '/api/datasets/model-candidates',
+  behavior: '/api/datasets/behavior-distributions',
 };
 
 function Empty({ children }) {
@@ -35,7 +36,7 @@ export default function DatasetsTab() {
   const { token } = useContext(AuthContext);
   const [data, setData] = useState({
     status: [], performance: [], rules: [], types: [], balance: null, velocity: null,
-    account: null, models: [],
+    account: null, models: [], behavior: { velocity_heatmap: [], session_bins: [], session_missing_sentinel_count: 0 },
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -66,6 +67,10 @@ export default function DatasetsTab() {
   const loadedCount = useMemo(
     () => data.status.filter(item => item.status === 'loaded').length,
     [data.status],
+  );
+  const velocityMax = useMemo(
+    () => Math.max(0, ...data.behavior.velocity_heatmap.map(item => item.count)),
+    [data.behavior.velocity_heatmap],
   );
 
   if (loading) return <div role="status" className="dataset-empty">Đang tải trạng thái dataset...</div>;
@@ -278,6 +283,54 @@ export default function DatasetsTab() {
             </p>
           </>
         ) : <Empty>Chưa có dữ liệu BAF để phân tích account application.</Empty>}
+      </section>
+
+      <section className="panel col-span-12 dataset-chart-panel">
+        <h2 className="panel-title">BAF — velocity & session distributions</h2>
+        {data.behavior.velocity_heatmap.length ? (
+          <div className="dataset-split-grid">
+            <div>
+              <h3>Velocity 6h × 24h quantiles</h3>
+              <div className="velocity-heatmap" aria-label="Velocity quantile heatmap">
+                {data.behavior.velocity_heatmap.map(cell => {
+                  const intensity = velocityMax ? cell.count / velocityMax : 0;
+                  return (
+                    <div
+                      className="velocity-cell"
+                      key={`${cell.velocity_6h_quantile}-${cell.velocity_24h_quantile}`}
+                      title={`6h Q${cell.velocity_6h_quantile}, 24h Q${cell.velocity_24h_quantile}: ${cell.count} applications, ${cell.fraud_count} fraud`}
+                      style={{ background: `rgba(59, 130, 246, ${0.08 + intensity * 0.82})` }}
+                    >
+                      <small>Q{cell.velocity_6h_quantile}/Q{cell.velocity_24h_quantile}</small>
+                      <strong>{formatNumber(cell.count)}</strong>
+                      <span>{formatNumber(cell.fraud_count)} fraud</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="dataset-panel-note">Trục ngang: velocity 6h Q1→Q5; trục dọc: velocity 24h Q5→Q1.</p>
+            </div>
+            <div>
+              <h3>Session length quantiles</h3>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={data.behavior.session_bins.map(bin => ({
+                  ...bin,
+                  range: `${formatNumber(bin.minimum_minutes, 1)}–${formatNumber(bin.maximum_minutes, 1)}`,
+                }))} margin={{ top: 8, right: 12, left: 0, bottom: 42 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="range" angle={-35} textAnchor="end" interval={0} stroke="#94a3b8" />
+                  <YAxis allowDecimals={false} stroke="#94a3b8" />
+                  <Tooltip contentStyle={{ background: '#111827', border: '1px solid #334155' }} />
+                  <Bar dataKey="count" name="Applications" fill="#10b981" radius={[5, 5, 0, 0]} />
+                  <Bar dataKey="fraud_count" name="Fraud" fill="#ef4444" radius={[5, 5, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <p className="dataset-panel-note">
+                {formatNumber(data.behavior.session_missing_sentinel_count)} giá trị sentinel âm được tách khỏi histogram.
+              </p>
+            </div>
+          </div>
+        ) : <Empty>Chưa có dữ liệu BAF để tạo behavioral distributions.</Empty>}
       </section>
 
     </div>

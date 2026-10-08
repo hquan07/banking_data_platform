@@ -9,6 +9,7 @@ from core.deps import get_current_user
 from services.dataset_status import (
     account_risk_payload,
     balance_anomaly_payload,
+    behavior_distribution_payload,
     model_candidate_payload,
     status_payload,
 )
@@ -260,3 +261,68 @@ def get_model_candidates(current_user: dict = Depends(get_current_user)):
         return model_candidate_payload(rows)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Model candidate registry unavailable") from exc
+
+
+@router.get("/behavior-distributions")
+def get_behavior_distributions(current_user: dict = Depends(get_current_user)):
+    _database_required()
+    try:
+        with pg_conn.cursor() as cursor:
+            cursor.execute(
+                """
+                WITH ranked AS (
+                    SELECT
+                        ntile(5) OVER (
+                            ORDER BY (payload #>> '{features,velocity_6h}')::double precision
+                        ) AS velocity_6h_quantile,
+                        ntile(5) OVER (
+                            ORDER BY (payload #>> '{features,velocity_24h}')::double precision
+                        ) AS velocity_24h_quantile,
+                        ground_truth_is_fraud
+                    FROM benchmark_events
+                    WHERE dataset_id = 'ds4_baf'
+                )
+                SELECT velocity_6h_quantile, velocity_24h_quantile, count(*),
+                       count(*) FILTER (WHERE ground_truth_is_fraud)
+                FROM ranked
+                GROUP BY velocity_6h_quantile, velocity_24h_quantile
+                ORDER BY velocity_24h_quantile DESC, velocity_6h_quantile
+                """
+            )
+            velocity_rows = cursor.fetchall()
+            cursor.execute(
+                """
+                WITH ranked AS (
+                    SELECT
+                        ntile(10) OVER (
+                            ORDER BY (payload #>> '{features,session_length_in_minutes}')::double precision
+                        ) AS session_quantile,
+                        (payload #>> '{features,session_length_in_minutes}')::double precision
+                            AS session_minutes,
+                        ground_truth_is_fraud
+                    FROM benchmark_events
+                    WHERE dataset_id = 'ds4_baf'
+                      AND (payload #>> '{features,session_length_in_minutes}')::double precision >= 0
+                )
+                SELECT session_quantile, min(session_minutes), max(session_minutes),
+                       count(*), count(*) FILTER (WHERE ground_truth_is_fraud)
+                FROM ranked
+                GROUP BY session_quantile
+                ORDER BY session_quantile
+                """
+            )
+            session_rows = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT count(*)
+                FROM benchmark_events
+                WHERE dataset_id = 'ds4_baf'
+                  AND (payload #>> '{features,session_length_in_minutes}')::double precision < 0
+                """
+            )
+            missing_session_count = cursor.fetchone()[0]
+        return behavior_distribution_payload(
+            velocity_rows, session_rows, missing_session_count
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Behavior distributions unavailable") from exc

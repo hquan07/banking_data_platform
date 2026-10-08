@@ -117,3 +117,41 @@ def model_candidate_payload(rows: list[tuple]) -> list[dict]:
         }
         for row in rows
     ]
+
+
+def behavior_distribution_payload(
+    velocity_rows: list[tuple],
+    session_rows: list[tuple],
+    missing_session_count: int,
+) -> dict:
+    observed_velocity = {
+        (row[0], row[1]): {"count": row[2], "fraud_count": row[3]}
+        for row in velocity_rows
+    }
+    heatmap = []
+    for velocity_24h_quantile in range(5, 0, -1):
+        for velocity_6h_quantile in range(1, 6):
+            counts = observed_velocity.get(
+                (velocity_6h_quantile, velocity_24h_quantile),
+                {"count": 0, "fraud_count": 0},
+            )
+            heatmap.append({
+                "velocity_6h_quantile": velocity_6h_quantile,
+                "velocity_24h_quantile": velocity_24h_quantile,
+                **counts,
+            })
+
+    return {
+        "velocity_heatmap": heatmap,
+        "session_bins": [
+            {
+                "quantile": row[0],
+                "minimum_minutes": float(row[1]),
+                "maximum_minutes": float(row[2]),
+                "count": row[3],
+                "fraud_count": row[4],
+            }
+            for row in session_rows
+        ],
+        "session_missing_sentinel_count": missing_session_count,
+    }
