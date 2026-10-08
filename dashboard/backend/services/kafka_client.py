@@ -11,6 +11,7 @@ from fastapi import WebSocket
 from prometheus_client import Histogram
 from datetime import datetime, timezone
 from core.db import pg_conn, redis_client
+from services.kafka_payload import decode_message
 
 
 # =============================================
@@ -164,7 +165,7 @@ def persist_alert(data: dict) -> bool:
 
 async def consume_kafka():
     """Commit offsets only after alert persistence, and retry connection failures."""
-    from aiokafka import AIOKafkaConsumer
+    from aiokafka import AIOKafkaConsumer, TopicPartition
 
     while True:
         consumer = AIOKafkaConsumer(
@@ -179,7 +180,14 @@ async def consume_kafka():
             await consumer.start()
             kafka_ready.set()
             async for msg in consumer:
-                data = json.loads(msg.value.decode("utf-8"))
+                data = decode_message(msg.topic, msg.value)
+                if data is None:
+                    print(
+                        f"Skipping invalid payment payload at {msg.topic} "
+                        f"partition={msg.partition} offset={msg.offset}; Spark routes it to DLQ"
+                    )
+                    await consumer.commit({TopicPartition(msg.topic, msg.partition): msg.offset + 1})
+                    continue
                 inserted = True
                 if msg.topic in ("fraud-events", "aml-events"):
                     inserted = persist_alert(data)
