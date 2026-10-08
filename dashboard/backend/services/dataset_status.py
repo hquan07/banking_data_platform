@@ -61,3 +61,36 @@ def balance_anomaly_payload(row: tuple | None) -> dict | None:
         "source_flag_true_positive": row[7],
         "source_flag_false_positive": row[8],
     }
+
+
+def account_risk_payload(
+    summary: tuple | None,
+    source_rows: list[tuple],
+    device_rows: list[tuple],
+) -> dict | None:
+    """Format aggregate BAF features without deriving uncalibrated risk labels."""
+    if summary is None or not summary[0]:
+        return None
+
+    def segment(row: tuple, name_key: str) -> dict:
+        total = row[1]
+        fraud_count = row[2]
+        return {
+            name_key: row[0] or "unknown",
+            "count": total,
+            "fraud_count": fraud_count,
+            "fraud_rate": fraud_count / total if total else 0,
+        }
+
+    return {
+        "total_applications": summary[0],
+        "fraud_count": summary[1],
+        "fraud_rate": summary[1] / summary[0],
+        "average_income": float(summary[2]),
+        "average_credit_risk_score": float(summary[3]),
+        "average_session_minutes": float(summary[4]),
+        "average_name_email_similarity": float(summary[5]),
+        "foreign_request_count": summary[6],
+        "by_source": [segment(row, "source") for row in source_rows],
+        "by_device_os": [segment(row, "device_os") for row in device_rows],
+    }

@@ -482,6 +482,19 @@ body {
   margin: 0;
 }
 
+.dataset-split-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 12px 0;
+}
+
+.dataset-split-grid h3 {
+  color: #cbd5e1;
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
 .dataset-table-wrap {
   overflow-x: auto;
 }
@@ -531,6 +544,10 @@ body {
 
   .dataset-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dataset-split-grid {
+    grid-template-columns: 1fr;
   }
 }
 

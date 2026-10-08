@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.db import pg_conn
 from core.deps import get_current_user
-from services.dataset_status import balance_anomaly_payload, status_payload
+from services.dataset_status import account_risk_payload, balance_anomaly_payload, status_payload
 
 
 router = APIRouter(prefix="/api/datasets", tags=["Datasets"])
@@ -185,3 +185,52 @@ def get_velocity_summary(current_user: dict = Depends(get_current_user)):
         }
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Velocity analytics unavailable") from exc
+
+
+@router.get("/account-risk")
+def get_account_risk(current_user: dict = Depends(get_current_user)):
+    _database_required()
+    try:
+        with pg_conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    count(*),
+                    count(*) FILTER (WHERE ground_truth_is_fraud),
+                    avg((payload #>> '{features,income}')::double precision),
+                    avg((payload #>> '{features,credit_risk_score}')::double precision),
+                    avg((payload #>> '{features,session_length_in_minutes}')::double precision),
+                    avg((payload #>> '{features,name_email_similarity}')::double precision),
+                    count(*) FILTER (
+                        WHERE (payload #>> '{features,foreign_request}')::integer = 1
+                    )
+                FROM benchmark_events
+                WHERE dataset_id = 'ds4_baf'
+                """
+            )
+            summary = cursor.fetchone()
+            cursor.execute(
+                """
+                SELECT payload #>> '{features,source}', count(*),
+                       count(*) FILTER (WHERE ground_truth_is_fraud)
+                FROM benchmark_events
+                WHERE dataset_id = 'ds4_baf'
+                GROUP BY payload #>> '{features,source}'
+                ORDER BY count(*) DESC
+                """
+            )
+            source_rows = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT payload #>> '{features,device_os}', count(*),
+                       count(*) FILTER (WHERE ground_truth_is_fraud)
+                FROM benchmark_events
+                WHERE dataset_id = 'ds4_baf'
+                GROUP BY payload #>> '{features,device_os}'
+                ORDER BY count(*) DESC
+                """
+            )
+            device_rows = cursor.fetchall()
+        return account_risk_payload(summary, source_rows, device_rows)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Account risk analytics unavailable") from exc

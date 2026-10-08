@@ -18,6 +18,7 @@ const ENDPOINTS = {
   types: '/api/datasets/transaction-types',
   balance: '/api/datasets/balance-anomalies',
   velocity: '/api/datasets/velocity-summary',
+  account: '/api/datasets/account-risk',
 };
 
 function Empty({ children }) {
@@ -32,7 +33,7 @@ function formatNumber(value, maximumFractionDigits = 0) {
 export default function DatasetsTab() {
   const { token } = useContext(AuthContext);
   const [data, setData] = useState({
-    status: [], performance: [], rules: [], types: [], balance: null, velocity: null,
+    status: [], performance: [], rules: [], types: [], balance: null, velocity: null, account: null,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -193,6 +194,57 @@ export default function DatasetsTab() {
             </p>
           </>
         ) : <Empty>Chưa có dữ liệu PaySim để phân tích số dư.</Empty>}
+      </section>
+
+      <section className="panel col-span-12 dataset-chart-panel">
+        <h2 className="panel-title">BAF — account application analytics</h2>
+        {data.account ? (
+          <>
+            <div className="dataset-metric-grid">
+              <div><span>Applications</span><strong>{formatNumber(data.account.total_applications)}</strong></div>
+              <div><span>Ground-truth fraud</span><strong>{formatNumber(data.account.fraud_count)}</strong></div>
+              <div><span>Fraud rate</span><strong>{formatNumber(data.account.fraud_rate * 100, 2)}%</strong></div>
+              <div><span>Foreign requests</span><strong>{formatNumber(data.account.foreign_request_count)}</strong></div>
+              <div><span>Credit score TB</span><strong>{formatNumber(data.account.average_credit_risk_score, 2)}</strong></div>
+              <div><span>Session TB</span><strong>{formatNumber(data.account.average_session_minutes, 2)} phút</strong></div>
+              <div><span>Income TB</span><strong>{formatNumber(data.account.average_income, 3)}</strong></div>
+              <div><span>Name/email similarity</span><strong>{formatNumber(data.account.average_name_email_similarity, 3)}</strong></div>
+            </div>
+            <div className="dataset-split-grid">
+              <div>
+                <h3>Theo application source</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={data.account.by_source} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis dataKey="source" stroke="#94a3b8" />
+                    <YAxis allowDecimals={false} stroke="#94a3b8" />
+                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #334155' }} />
+                    <Bar dataKey="count" name="Applications" fill="#8b5cf6" radius={[5, 5, 0, 0]} />
+                    <Bar dataKey="fraud_count" name="Fraud" fill="#ef4444" radius={[5, 5, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div>
+                <h3>Theo device OS</h3>
+                <div className="dataset-table-wrap">
+                  <table className="dataset-table">
+                    <thead><tr><th>OS</th><th>Applications</th><th>Fraud</th><th>Rate</th></tr></thead>
+                    <tbody>{data.account.by_device_os.map(row => (
+                      <tr key={row.device_os}>
+                        <td>{row.device_os}</td><td>{formatNumber(row.count)}</td>
+                        <td>{formatNumber(row.fraud_count)}</td>
+                        <td>{formatNumber(row.fraud_rate * 100, 2)}%</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <p className="dataset-panel-note">
+              Đây là thống kê mô tả theo source feature; chưa tạo risk label hoặc alert từ ngưỡng chưa hiệu chỉnh.
+            </p>
+          </>
+        ) : <Empty>Chưa có dữ liệu BAF để phân tích account application.</Empty>}
       </section>
 
     </div>
