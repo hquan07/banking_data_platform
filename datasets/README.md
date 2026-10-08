@@ -49,6 +49,15 @@ validation, null rates, inferred types, bounded cardinality and numeric ranges.
 The command exits non-zero when a file is absent or violates its expected
 minimum schema/row count.
 
+For PaySim, reproduce the source-sequence audit before changing graph rules:
+
+```bash
+PYTHONPATH=. python datasets/audit_paysim_sequences.py
+```
+
+The audit distinguishes adjacent TRANSFER/CASH_OUT source rows from actual
+participant linkage; those concepts must not be treated as equivalent.
+
 ## Canonical mapping
 
 `schema_mapping.py` converts each source row to `benchmark-events` v1. The
