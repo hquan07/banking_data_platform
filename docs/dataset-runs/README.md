@@ -3,7 +3,7 @@
 | Dataset | Acquisition | Profile | Canary | Current gate |
 | --- | --- | --- | --- | --- |
 | DS1 Credit Card | Complete | Valid | Offline model evaluated | Candidate rejected for low precision/recall |
-| DS3 PaySim | Complete | Valid | 1,000 events passed | Full replay is an operator workload decision |
+| DS3 PaySim | Complete | Valid | 1,000-event canary + 10,000-event controlled replay passed | Full replay is an operator workload decision |
 | DS4 BAF Base | Complete | Valid | 1,000 events passed | Alert thresholds require source-specific calibration |
 
 Raw CSVs, generated profiles and model binaries are local artifacts excluded

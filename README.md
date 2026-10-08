@@ -3,7 +3,8 @@
 A real-time banking data platform featuring a comprehensive Fraud Detection Engine, Anti-Money Laundering (AML) analysis, and a Security Dashboard tailored for investigators.
 
 **Data source status:** the opt-in benchmark replay is available. DS1, DS3 and
-DS4 have valid local profiles; 1,000-event DS3 and DS4 canaries have passed.
+DS4 have valid local profiles; DS3 has 11,000 reconciled events and the
+1,000-event DS4 canary has passed.
 Runtime mock generators, canned API responses and static sample charts remain
 removed. See
 `docs/dataset-runs/README.md` for the current evidence and gates.

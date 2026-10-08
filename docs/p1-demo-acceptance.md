@@ -6,9 +6,10 @@ states when no events or records exist. The API returns a service error when a
 required datastore is unavailable instead of substituting sample values.
 
 The public benchmark adapter is available as an explicit, source-scoped replay
-workflow. DS1, DS3 and DS4 have validated local profiles; 1,000-row DS3 and DS4
-canaries have been replayed and reconciled. Benchmark replay is opt-in and is
-not presented as a live banking feed.
+workflow. DS1, DS3 and DS4 have validated local profiles; DS3 has a reconciled
+1,000-row canary plus a controlled 10,000-row increment, while the 1,000-row
+DS4 canary has passed. Benchmark replay is opt-in and is not presented as a
+live banking feed.
 
 Live payment and transfer sources are still unconfigured. Their Kafka
 consumers, contracts, fraud rules, alert workflow and graph processing remain
@@ -23,4 +24,4 @@ rule evaluation input.
 
 The original mock-data cleanup was followed by an explicit purge of this
 project's Kafka and datastore volumes. The current persisted benchmark records
-come only from the documented DS3 and DS4 canary runs.
+come only from the documented DS3 and DS4 runs.
