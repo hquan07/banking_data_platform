@@ -1,0 +1,7 @@
+FROM apache/superset@sha256:16b50bbef6648912a79e3293d418fefa743ce555d36c5af6b85d859119ed7f88
+
+USER root
+RUN uv pip install --python /app/.venv/bin/python \
+    clickhouse-sqlalchemy==0.2.9 \
+    sqlalchemy==1.4.54 \
+    psycopg2-binary==2.9.13

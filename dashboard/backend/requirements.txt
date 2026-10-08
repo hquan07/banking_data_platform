@@ -2,7 +2,7 @@ fastapi==0.109.2
 uvicorn==0.27.1
 aiokafka==0.10.0
 websockets==12.0
-neo4j
+neo4j==6.4.0
 clickhouse-driver==0.2.6
 psycopg2-binary==2.9.9
 bcrypt==3.2.2
