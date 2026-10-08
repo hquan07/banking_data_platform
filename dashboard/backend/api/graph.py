@@ -3,6 +3,7 @@ Neo4j graph network router.
 """
 from fastapi import APIRouter, HTTPException
 from core.db import graph_driver
+from services.graph_analytics import fraud_chain_payload
 
 router = APIRouter(prefix="/api/graph", tags=["Graph"])
 
@@ -98,3 +99,42 @@ def get_benchmark_money_flow():
         ]
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Benchmark money flow unavailable") from exc
+
+
+@router.get("/fraud-chains")
+def get_benchmark_fraud_chains():
+    if graph_driver is None:
+        raise HTTPException(status_code=503, detail="Graph database unavailable")
+    query = """
+    MATCH (victim:BenchmarkAccount)-[transfer:BENCHMARK_TRANSACTION]->
+          (mule:BenchmarkAccount)-[cashout:BENCHMARK_TRANSACTION]->
+          (exit:BenchmarkAccount)
+    WHERE transfer.transaction_type = 'TRANSFER'
+      AND cashout.transaction_type = 'CASH_OUT'
+      AND cashout.relative_step >= transfer.relative_step
+      AND cashout.relative_step <= transfer.relative_step + 24
+      AND transfer.amount >= cashout.amount * 0.80
+      AND transfer.amount <= cashout.amount * 1.20
+    RETURN victim.display_id AS victim,
+           mule.display_id AS mule,
+           exit.display_id AS exit,
+           transfer.event_id AS transfer_event_id,
+           cashout.event_id AS cashout_event_id,
+           transfer.amount AS transfer_amount,
+           cashout.amount AS cashout_amount,
+           transfer.relative_step AS transfer_step,
+           cashout.relative_step AS cashout_step,
+           transfer.ground_truth_is_fraud AS ground_truth_fraud
+    ORDER BY cashout.relative_step DESC
+    LIMIT 100
+    """
+    try:
+        with graph_driver.session() as session:
+            records = list(session.run(query))
+        return {
+            "dataset_id": "ds3_paysim",
+            "provenance": "synthetic_simulation",
+            "chains": fraud_chain_payload(records),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Benchmark fraud chains unavailable") from exc

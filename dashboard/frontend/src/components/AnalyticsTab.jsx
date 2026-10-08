@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 export default function AnalyticsTab() {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
@@ -8,6 +9,9 @@ export default function AnalyticsTab() {
   const graphContainerRef = useRef(null);
   const [graphWidth, setGraphWidth] = useState(800);
   const [graphSource, setGraphSource] = useState('');
+  const [moneyFlow, setMoneyFlow] = useState([]);
+  const [fraudChains, setFraudChains] = useState([]);
+  const [insightError, setInsightError] = useState('');
 
   useEffect(() => {
     const baseUrl = window._env_?.API_URL || 'http://localhost:8000';
@@ -35,6 +39,24 @@ export default function AnalyticsTab() {
       .then(setGraphData)
       .catch(err => setGraphError(err.message))
       .finally(() => setGraphLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const baseUrl = window._env_?.API_URL || 'http://localhost:8000';
+    Promise.all([
+      fetch(baseUrl + '/api/graph/money-flow'),
+      fetch(baseUrl + '/api/graph/fraud-chains'),
+    ])
+      .then(async ([flowResponse, chainResponse]) => {
+        if (!flowResponse.ok || !chainResponse.ok) throw new Error('Không tải được PaySim graph analytics');
+        const [flow, chainResult] = await Promise.all([flowResponse.json(), chainResponse.json()]);
+        if (!Array.isArray(flow) || !Array.isArray(chainResult?.chains)) {
+          throw new Error('Định dạng PaySim graph analytics không hợp lệ');
+        }
+        setMoneyFlow(flow);
+        setFraudChains(chainResult.chains);
+      })
+      .catch(err => setInsightError(err.message));
   }, []);
 
   useEffect(() => {
@@ -69,6 +91,40 @@ export default function AnalyticsTab() {
             </div>
           )}
         </div>
+      </div>
+      <div className="panel col-span-6">
+        <h2 className="panel-title">PaySim money flow</h2>
+        <div className="dataset-provenance">Nguồn: PaySim — synthetic simulation</div>
+        {moneyFlow.length ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={moneyFlow} margin={{ top: 12, right: 16, left: 8, bottom: 12 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey="transaction_type" stroke="#94a3b8" />
+              <YAxis stroke="#94a3b8" />
+              <Tooltip contentStyle={{ background: '#111827', border: '1px solid #334155' }} />
+              <Bar dataKey="total_amount" name="Total amount" fill="#3b82f6" radius={[5, 5, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : <div className="dataset-empty">{insightError || 'Chưa có money-flow benchmark.'}</div>}
+      </div>
+      <div className="panel col-span-6">
+        <h2 className="panel-title">TRANSFER → CASH_OUT chains</h2>
+        <div className="dataset-provenance">Detection không sử dụng ground-truth label</div>
+        {fraudChains.length ? (
+          <div className="dataset-table-wrap">
+            <table className="dataset-table">
+              <thead><tr><th>Victim</th><th>Mule</th><th>Exit</th><th>Transfer</th><th>Cash out</th><th>Label</th></tr></thead>
+              <tbody>{fraudChains.map(chain => (
+                <tr key={`${chain.transfer_event_id}-${chain.cashout_event_id}`}>
+                  <td>{chain.victim}</td><td>{chain.mule}</td><td>{chain.exit}</td>
+                  <td>{Number(chain.transfer_amount).toLocaleString('vi-VN')}</td>
+                  <td>{Number(chain.cashout_amount).toLocaleString('vi-VN')}</td>
+                  <td>{chain.ground_truth_fraud ? 'fraud' : 'normal'}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : <div className="dataset-empty">{insightError || 'Chưa phát hiện chuỗi trong phạm vi dữ liệu đã replay.'}</div>}
       </div>
     </div>
   );
