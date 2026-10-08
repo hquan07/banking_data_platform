@@ -19,6 +19,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
   const [kycAccountId, setKycAccountId] = useState(null);
   const [totalAlerts, setTotalAlerts] = useState(0);
   const [selectedAlerts, setSelectedAlerts] = useState([]);
+  const [caseError, setCaseError] = useState('');
   const itemsPerPage = 7;
 
   useEffect(() => {
@@ -59,7 +60,9 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
   };
 
   const handleUpdateStatus = (id, status, notes = null, assigneeId = null) => {
-    const body = { status };
+    const current = pgAlerts.find(item => item.alert_id === id);
+    if (!current) return;
+    const body = { status, version: current.version };
     if (notes) body.notes = notes;
     if (assigneeId) body.assignee_id = parseInt(assigneeId);
 
@@ -70,12 +73,14 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(body)
-    }).then(() => {
+    }).then(async res => {
+      if (!res.ok) throw new Error((await res.json()).detail || 'Case update failed');
       fetchAlerts();
       setExpandedAlert(null);
       setNoteText('');
       setSelectedAssignee('');
-    }).catch(console.error);
+      setCaseError('');
+    }).catch(err => { setCaseError(err.message); fetchAlerts(); });
   };
 
   const handleBulkResolve = () => {
@@ -83,20 +88,25 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
     if (!window.confirm(`Xác nhận RESOLVED ${selectedAlerts.length} cảnh báo?`)) return;
     
     Promise.all(
-      selectedAlerts.map(id => 
+      selectedAlerts.map(id => {
+        const current = pgAlerts.find(item => item.alert_id === id);
+        if (!current || current.status !== 'INVESTIGATING') return Promise.resolve();
+        return (
         fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts/${id}/status`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ status: 'RESOLVED' })
+          body: JSON.stringify({ status: 'RESOLVED', version: current.version })
         })
-      )
+        .then(async res => { if (!res.ok) throw new Error((await res.json()).detail || 'Bulk update failed'); })
+        );
+      })
     ).then(() => {
       fetchAlerts();
       setSelectedAlerts([]);
-    }).catch(console.error);
+    }).catch(err => { setCaseError(err.message); fetchAlerts(); });
   };
 
   const handleUploadEvidence = async (alertId) => {
@@ -112,14 +122,23 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
         const res = await fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/evidence/presigned-url?filename=${encodeURIComponent(file.name)}&alert_id=${alertId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        const { upload_url } = await res.json();
+        if (!res.ok) throw new Error((await res.json()).detail || 'Could not prepare evidence upload');
+        const { upload_url, object_key } = await res.json();
 
         // Step 2: Upload directly to MinIO via presigned URL
-        await fetch(upload_url, {
+        const uploadRes = await fetch(upload_url, {
           method: 'PUT',
           body: file,
           headers: { 'Content-Type': 'application/octet-stream' }
         });
+        if (!uploadRes.ok) throw new Error('Evidence upload failed');
+
+        const completeRes = await fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts/${alertId}/evidence/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ object_key })
+        });
+        if (!completeRes.ok) throw new Error((await completeRes.json()).detail || 'Evidence confirmation failed');
 
         alert(`✅ File "${file.name}" đã được upload thành công!`);
         fetchAlerts();
@@ -188,6 +207,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
             </button>
           </div>
         )}
+        {caseError && <p role="alert" style={{color: '#ef4444'}}>{caseError}</p>}
 
         <div style={{overflowX: 'visible'}}>
           <table style={{width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginTop: '1rem'}}>
@@ -198,12 +218,12 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
                     type="checkbox" 
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedAlerts(currentAlerts.filter(a => a.status === 'PENDING').map(a => a.alert_id));
+                        setSelectedAlerts(currentAlerts.filter(a => a.status === 'INVESTIGATING').map(a => a.alert_id));
                       } else {
                         setSelectedAlerts([]);
                       }
                     }}
-                    checked={currentAlerts.filter(a => a.status === 'PENDING').length > 0 && selectedAlerts.length === currentAlerts.filter(a => a.status === 'PENDING').length}
+                    checked={currentAlerts.filter(a => a.status === 'INVESTIGATING').length > 0 && selectedAlerts.length === currentAlerts.filter(a => a.status === 'INVESTIGATING').length}
                   />
                 </th>
                 <th style={{padding: '8px'}}>ID</th>
@@ -220,7 +240,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
                 <React.Fragment key={alert.alert_id}>
                   <tr style={{borderBottom: '1px solid rgba(255,255,255,0.05)'}}>
                     <td style={{padding: '12px 8px'}}>
-                      {alert.status === 'PENDING' && (
+                      {alert.status === 'INVESTIGATING' && (
                         <input 
                           type="checkbox" 
                           checked={selectedAlerts.includes(alert.alert_id)}
@@ -269,6 +289,11 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
                     <td style={{padding: '12px 8px'}}>
                       {alert.status === 'PENDING' ? (
                         <div style={{display: 'flex', gap: '8px'}}>
+                          <button onClick={() => handleUpdateStatus(alert.alert_id, 'INVESTIGATING')} style={{background: '#3b82f6', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px'}}>Start Investigation</button>
+                          <button onClick={() => handleUpdateStatus(alert.alert_id, 'IGNORED')} style={{background: '#64748b', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px'}}>Ignore</button>
+                        </div>
+                      ) : alert.status === 'INVESTIGATING' ? (
+                        <div style={{display: 'flex', gap: '8px'}}>
                           <button 
                             onClick={() => setExpandedAlert(expandedAlert === alert.alert_id ? null : alert.alert_id)}
                             style={{background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'}}
@@ -289,7 +314,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
                   </tr>
 
                   {/* Expandable Investigation Panel */}
-                  {expandedAlert === alert.alert_id && (
+                  {expandedAlert === alert.alert_id && alert.status === 'INVESTIGATING' && (
                     <tr>
                       <td colSpan="7" style={{padding: '0 8px 12px 8px'}}>
                         <div style={{
