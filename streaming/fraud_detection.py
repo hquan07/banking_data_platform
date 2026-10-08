@@ -1,6 +1,5 @@
 import os
 import sys
-import uuid
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, to_json, struct
 from payment_schema import parse_payment_stream
@@ -13,39 +12,6 @@ from fraud.rules.velocity import apply_velocity_rule
 from fraud.rules.velocity_redis import process_velocity_with_redis
 from fraud.rules.shared_device import apply_shared_device_rule
 from aml.rules.structuring import apply_structuring_rule
-
-import pandas as pd
-import joblib
-from pyspark.sql.functions import pandas_udf
-from pyspark.sql.types import DoubleType
-
-# Tải model (giả định script chạy trên môi trường có file fraud_model.pkl)
-MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fraud", "scoring", "fraud_model.pkl")
-try:
-    rf_model = joblib.load(MODEL_PATH)
-    print(f"Loaded ML model from {MODEL_PATH}")
-except Exception as e:
-    print(f"Failed to load ML model: {e}")
-    rf_model = None
-
-# Định nghĩa Pandas UDF để chạy dự đoán trên Spark Workers
-@pandas_udf(DoubleType())
-def predict_fraud_udf(amount: pd.Series, hour_of_day: pd.Series, velocity_1h: pd.Series, diff_from_avg: pd.Series, is_international: pd.Series) -> pd.Series:
-    if rf_model is None:
-        return pd.Series([0.0] * len(amount))
-    
-    # Tạo DataFrame để đưa vào mô hình scikit-learn
-    df = pd.DataFrame({
-        'amount': amount,
-        'hour_of_day': hour_of_day,
-        'velocity_1h': velocity_1h,
-        'diff_from_avg': diff_from_avg,
-        'is_international': is_international
-    })
-    
-    # Dự đoán xác suất rủi ro (lấy probability của class 1)
-    probs = rf_model.predict_proba(df)[:, 1]
-    return pd.Series(probs)
 
 def create_spark_session():
     return SparkSession.builder \
@@ -68,42 +34,10 @@ def start_fraud_engine(spark):
         
     watermarked_df = parsed_df.withWatermark("event_time", "10 minutes")
 
-    # ==========================================
-    # RULE 1: MACHINE LEARNING (Stateless/Batch)
-    # ==========================================
-    # Giả lập trích xuất thêm các features cho ML từ dữ liệu luồng
-    from pyspark.sql.functions import hour, rand, when, lit
-    
-    ml_features_df = parsed_df \
-        .withColumn("hour_of_day", hour(col("event_time"))) \
-        .withColumn("velocity_1h", (rand() * 10).cast("int")) \
-        .withColumn("diff_from_avg", rand() * 10) \
-        .withColumn("is_international", when(col("location") != "VN", 1).otherwise(0))
-        
-    ml_scored_df = ml_features_df.withColumn(
-        "ml_risk_score", 
-        predict_fraud_udf(
-            col("amount"), col("hour_of_day"), col("velocity_1h"), 
-            col("diff_from_avg"), col("is_international")
-        )
-    )
-    
-    # Lọc ra các giao dịch có xác suất gian lận > 70%
-    high_risk_df = ml_scored_df.filter(col("ml_risk_score") > 0.70) \
-        .withColumn("rule", lit("ML_MODEL_FRAUD")) \
-        .withColumn("risk_score", col("ml_risk_score") * 100) \
-        .withColumn("risk_level", lit("HIGH")) \
-        .withColumn("decision", lit("REVIEW"))
-    
-    query_ml_txn = high_risk_df \
-        .selectExpr("CAST(payment_id AS STRING) AS key", "to_json(struct(*)) AS value") \
-        .writeStream \
-        .outputMode("append") \
-        .format("kafka") \
-        .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
-        .option("topic", "fraud-events") \
-        .option("checkpointLocation", os.environ.get("SPARK_CHECKPOINT_DIR", "s3a://checkpoints") + "/ml_fraud") \
-        .start()
+    # No ML scoring until a real labeled dataset, time-split evaluation and
+    # versioned model artifact have been approved. The legacy synthetic model
+    # is deliberately never loaded or used for live case creation.
+    from pyspark.sql.functions import lit
 
     # ==========================================
     # RULE 2: LARGE AMOUNT

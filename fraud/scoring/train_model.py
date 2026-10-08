@@ -1,73 +1,112 @@
-import os
+"""Train an offline candidate only from trusted, labeled historical payments.
+
+The output is deliberately not activated for live scoring. Promotion requires
+review of the holdout metrics and a serving feature pipeline with the same schema.
+"""
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+
 import joblib
 import pandas as pd
-import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import (
+    average_precision_score,
+    brier_score_loss,
+    confusion_matrix,
+    precision_score,
+    recall_score,
+)
 
-def create_mock_data(n_samples=5000):
-    np.random.seed(42)
-    # Đặc trưng: amount, hour_of_day, velocity_1h (số giao dịch trong 1h), 
-    # diff_from_avg (chênh lệch so với TB), is_international
-    
-    amounts = np.random.exponential(scale=100, size=n_samples)
-    hour_of_day = np.random.randint(0, 24, size=n_samples)
-    velocity_1h = np.random.poisson(lam=2, size=n_samples)
-    diff_from_avg = amounts / (np.random.uniform(50, 200, size=n_samples))
-    is_international = np.random.binomial(1, 0.05, size=n_samples)
-    
-    # Tạo nhãn (Fraud = 1, Normal = 0)
-    # Rules giả lập để train model học được:
-    # 1. Số tiền quá lớn và là quốc tế
-    # 2. Vận tốc giao dịch > 10
-    # 3. Chênh lệch > 5 lần
-    labels = np.zeros(n_samples)
-    
-    for i in range(n_samples):
-        prob = 0.01 # base probability
-        if amounts[i] > 3000 and is_international[i]: prob += 0.6
-        if velocity_1h[i] > 10: prob += 0.5
-        if diff_from_avg[i] > 5.0: prob += 0.4
-        if hour_of_day[i] >= 23 or hour_of_day[i] <= 4: prob += 0.1
-        
-        if np.random.random() < prob:
-            labels[i] = 1
-            
-    df = pd.DataFrame({
-        'amount': amounts,
-        'hour_of_day': hour_of_day,
-        'velocity_1h': velocity_1h,
-        'diff_from_avg': diff_from_avg,
-        'is_international': is_international,
-        'is_fraud': labels
-    })
-    
-    return df
 
-def train_and_save_model():
-    print("1. Đang tạo dữ liệu giả lập...")
-    df = create_mock_data(10000)
-    
-    X = df.drop('is_fraud', axis=1)
-    y = df['is_fraud']
-    
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    print("2. Đang huấn luyện mô hình Random Forest...")
-    model = RandomForestClassifier(n_estimators=50, max_depth=10, random_state=42, class_weight='balanced')
-    model.fit(X_train, y_train)
-    
-    print("3. Đánh giá mô hình...")
-    y_pred = model.predict(X_test)
-    print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
-    print("Report:")
-    print(classification_report(y_test, y_pred))
-    
-    # Lưu mô hình
-    model_path = os.path.join(os.path.dirname(__file__), 'fraud_model.pkl')
+FEATURES = (
+    "amount", "hour_of_day", "velocity_1h", "diff_from_avg", "is_international"
+)
+REQUIRED = (*FEATURES, "event_time", "is_fraud")
+
+
+def prepare_data(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    missing = set(REQUIRED) - set(frame.columns)
+    if missing:
+        raise ValueError(f"Missing required labeled-data columns: {sorted(missing)}")
+    data = frame.loc[:, list(REQUIRED)].copy()
+    data["event_time"] = pd.to_datetime(data["event_time"], utc=True, errors="raise")
+    if data.isna().any().any():
+        raise ValueError("Labeled data contains missing values")
+    if not data["is_fraud"].isin([0, 1]).all():
+        raise ValueError("is_fraud must contain only 0 or 1")
+    for feature in FEATURES:
+        data[feature] = pd.to_numeric(data[feature], errors="raise")
+    if (data["amount"] <= 0).any() or (data["velocity_1h"] < 0).any():
+        raise ValueError("Invalid amount or velocity")
+    if not data["hour_of_day"].between(0, 23).all():
+        raise ValueError("hour_of_day must be between 0 and 23")
+    if not data["is_international"].isin([0, 1]).all():
+        raise ValueError("is_international must contain only 0 or 1")
+    data = data.sort_values("event_time", kind="stable").reset_index(drop=True)
+    if len(data) < 200:
+        raise ValueError("At least 200 labeled records are required")
+    split = int(len(data) * 0.8)
+    train, holdout = data.iloc[:split], data.iloc[split:]
+    if train["event_time"].max() >= holdout["event_time"].min():
+        raise ValueError("Training and holdout timestamps overlap")
+    if train["is_fraud"].nunique() != 2 or holdout["is_fraud"].nunique() != 2:
+        raise ValueError("Both periods must contain positive and negative labels")
+    return train, holdout
+
+
+def train_candidate(input_path: Path, output_dir: Path, version: str, threshold: float) -> dict:
+    if not version or "/" in version or ".." in version:
+        raise ValueError("A safe, nonempty model version is required")
+    if not 0 < threshold < 1:
+        raise ValueError("Threshold must be between 0 and 1")
+    dataset_bytes = input_path.read_bytes()
+    dataset_hash = hashlib.sha256(dataset_bytes).hexdigest()
+    train, holdout = prepare_data(pd.read_csv(input_path))
+    model = RandomForestClassifier(
+        n_estimators=100, max_depth=10, class_weight="balanced", random_state=42
+    )
+    model.fit(train[list(FEATURES)], train["is_fraud"])
+    probability = model.predict_proba(holdout[list(FEATURES)])[:, 1]
+    predicted = probability >= threshold
+    truth = holdout["is_fraud"]
+    tn, fp, fn, tp = confusion_matrix(truth, predicted, labels=[0, 1]).ravel()
+    metadata = {
+        "version": version,
+        "dataset_sha256": dataset_hash,
+        "feature_schema": list(FEATURES),
+        "train_end_utc": train["event_time"].max().isoformat(),
+        "holdout_start_utc": holdout["event_time"].min().isoformat(),
+        "train_rows": len(train),
+        "holdout_rows": len(holdout),
+        "threshold": threshold,
+        "metrics": {
+            "precision": precision_score(truth, predicted, zero_division=0),
+            "recall": recall_score(truth, predicted, zero_division=0),
+            "pr_auc": average_precision_score(truth, probability),
+            "false_positive_rate": fp / (fp + tn),
+            "brier_score": brier_score_loss(truth, probability),
+            "true_positive": int(tp), "false_positive": int(fp),
+            "false_negative": int(fn), "true_negative": int(tn),
+        },
+        "status": "CANDIDATE_NOT_DEPLOYED",
+    }
+    version_dir = output_dir / version
+    version_dir.mkdir(parents=True, exist_ok=False)
+    model_path = version_dir / "model.joblib"
     joblib.dump(model, model_path)
-    print(f"4. Đã lưu mô hình tại: {model_path}")
+    metadata["model_sha256"] = hashlib.sha256(model_path.read_bytes()).hexdigest()
+    (version_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    return metadata
+
 
 if __name__ == "__main__":
-    train_and_save_model()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--labeled-csv", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--version", required=True)
+    parser.add_argument("--threshold", type=float, default=0.7)
+    args = parser.parse_args()
+    print(json.dumps(train_candidate(args.labeled_csv, args.output_dir, args.version, args.threshold), indent=2))
