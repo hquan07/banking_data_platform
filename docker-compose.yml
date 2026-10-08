@@ -103,6 +103,7 @@ services:
       context: .
       dockerfile: docker/spark/Dockerfile
     container_name: banking_spark_worker
+    mem_limit: 3g
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
@@ -380,6 +381,7 @@ services:
       context: .
       dockerfile: docker/spark/Dockerfile
     restart: on-failure
+    mem_limit: 2g
     command:
       - /opt/bitnami/spark/bin/spark-submit
       - --master
@@ -461,6 +463,7 @@ services:
       dockerfile: docker/spark/Dockerfile
     container_name: banking_fraud_engine
     restart: on-failure
+    mem_limit: 2g
     command:
       - /opt/bitnami/spark/bin/spark-submit
       - --master

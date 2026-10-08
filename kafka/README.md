@@ -24,6 +24,13 @@ retry topic and delayed replay worker are not enabled yet.
 Both Spark consumers cap each Kafka microbatch at 1,000 offsets by default via
 `SPARK_MAX_OFFSETS_PER_TRIGGER`. Tune this against throughput and checkpoint lag;
 the cap is per streaming query, not a total across the two applications.
+Compose caps each Spark driver container at 2 GiB and the worker at 3 GiB;
+adjust these together with Spark executor settings after measuring workload.
+
+The Redis velocity counter uses each event's UTC timestamp in a five-minute
+sliding sorted set. Retries of an event ID are ignored for seven days; an event
+older than the current account window is ignored as late. The Redis window is
+diagnostic; the Spark watermark-based velocity rule publishes fraud alerts.
 
 When upgrading an existing installation that had no Kafka volume, stop Kafka
 and all producers/consumers first, copy `/bitnami/kafka/data` from the stopped
