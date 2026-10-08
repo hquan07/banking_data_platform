@@ -6,10 +6,10 @@ states when no events or records exist. The API returns a service error when a
 required datastore is unavailable instead of substituting sample values.
 
 The public benchmark adapter is available as an explicit, source-scoped replay
-workflow. DS1, DS3 and DS4 have validated local profiles; DS3 has a reconciled
-1,000-row canary plus a controlled 10,000-row increment, while the 1,000-row
-DS4 canary has passed. Benchmark replay is opt-in and is not presented as a
-live banking feed.
+workflow. DS1, DS3 and DS4 have validated local profiles; DS1 and DS4 have
+reconciled 1,000-row canaries, while DS3 has a reconciled 1,000-row canary plus
+a controlled 10,000-row increment. Benchmark replay is opt-in and is not
+presented as a live banking feed.
 
 DS1 and DS4 model artifacts are audited offline candidates only. DS4 uses all
 30 source features with months 0–5 for training, month 6 for threshold
