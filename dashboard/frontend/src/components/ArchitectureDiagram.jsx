@@ -89,7 +89,7 @@ const initialNodes = [
   node('spark-fraud', 600, 290, 'Fraud processors', 'Live + benchmark rules', 'Spark xử lý payment; benchmark processor lưu provenance và rule evaluation theo nguồn.', 'shield', '#f59e0b'),
   node('backend', 900, 290, 'FastAPI backend', 'Auth + case API', 'Xử lý auth, case lifecycle, analytics và evidence.', 'server', '#3b82f6'),
   node('minio', 0, 435, 'MinIO', 'Silver + evidence', 'Lưu Silver parquet, quarantine và case evidence.', 'archive', '#10b981'),
-  node('graph-processor', 300, 435, 'Graph processors', 'AML + PaySim namespace', 'Phát hiện chu trình live và TRANSFER→CASH_OUT trong graph benchmark tách biệt.', 'graph', '#f59e0b'),
+  node('graph-processor', 300, 435, 'Graph processors', 'AML + PaySim namespace', 'Phát hiện chu trình live và PaySim TRANSFER→CASH_OUT sequence theo source rows; không giả lập participant link.', 'graph', '#f59e0b'),
   node('redis', 600, 435, 'Redis', 'Velocity + state', 'Lưu velocity window và trạng thái xử lý.', 'database', '#10b981'),
   node('observability', 900, 435, 'Prometheus + Grafana', 'Metrics + alerts', 'Giám sát metrics, SLO và alert vận hành.', 'bell', '#a78bfa'),
   node('postgres', 300, 580, 'PostgreSQL', 'Ledger + benchmark + cases', 'Lưu payment, benchmark events/evaluations, alert, audit và DQ runs.', 'database', '#10b981'),

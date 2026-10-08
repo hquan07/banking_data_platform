@@ -41,3 +41,16 @@ The canary passed. A full 6.36-million-row replay was not started automatically;
 it is an operator workload decision because it changes Kafka retention volume,
 database size and dashboard query cost. The source remains clearly labeled
 synthetic in events, graph nodes and UI provenance.
+
+## Full-source sequence audit
+
+A read-only chunked scan of all 6,362,620 source rows found 8,213 fraud-labeled
+rows: 4,097 `TRANSFER` and 4,116 `CASH_OUT`. There are 4,075 adjacent
+`TRANSFER` → `CASH_OUT` pairs with the same relative step and amount, but zero
+pairs where `TRANSFER.nameDest` equals `CASH_OUT.nameOrig` under the proposed
+24-step and ±20% amount criteria.
+
+The original mule-chain assumption is therefore rejected for this dataset.
+The graph pipeline records `TRANSFER_CASHOUT_SEQUENCE` using adjacent source
+rows, equal step and equal amount, and explicitly marks `participant_linked`
+as false. It does not create a fabricated victim → mule → exit relationship.

@@ -47,10 +47,16 @@ CREATE INDEX IF NOT EXISTS ix_alerts_dataset ON alerts (dataset_id, created_at D
 
 INSERT INTO rules (name, description, threshold, window_seconds, max_count)
 VALUES (
-    'TRANSFER_CASHOUT_CHAIN',
-    'PaySim benchmark: transfer followed by a similar cash-out within 24 relative hours',
+    'TRANSFER_CASHOUT_SEQUENCE',
+    'PaySim benchmark: adjacent TRANSFER and CASH_OUT source rows with equal step and amount; participants are not linked',
     0.80,
-    86400,
+    1,
     1
 )
 ON CONFLICT (name) DO NOTHING;
+
+UPDATE rules
+SET is_active = FALSE,
+    description = 'Deprecated: PaySim participant identifiers do not link TRANSFER destinations to CASH_OUT origins',
+    updated_at = NOW()
+WHERE name = 'TRANSFER_CASHOUT_CHAIN';

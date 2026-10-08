@@ -18,7 +18,7 @@ const paths = [
     nodes: [
       ['Live event sources', 'Nguồn payment-events và transfer-events bên ngoài vẫn chưa cấu hình'],
       ['Graph processors', 'Live Account và PaySim BenchmarkAccount tách biệt'],
-      ['Neo4j', 'Chu trình live + flow TRANSFER→CASH_OUT từ PaySim'],
+      ['Neo4j', 'Chu trình live + PaySim sequence tách biệt, không giả participant link'],
       ['Dashboard backend', 'Lưu alert thành case có audit trail'],
     ],
   },

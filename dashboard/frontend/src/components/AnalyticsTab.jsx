@@ -10,7 +10,7 @@ export default function AnalyticsTab() {
   const [graphWidth, setGraphWidth] = useState(800);
   const [graphSource, setGraphSource] = useState('');
   const [moneyFlow, setMoneyFlow] = useState([]);
-  const [fraudChains, setFraudChains] = useState([]);
+  const [fraudSequences, setFraudSequences] = useState([]);
   const [insightError, setInsightError] = useState('');
 
   useEffect(() => {
@@ -45,16 +45,16 @@ export default function AnalyticsTab() {
     const baseUrl = window._env_?.API_URL || 'http://localhost:8000';
     Promise.all([
       fetch(baseUrl + '/api/graph/money-flow'),
-      fetch(baseUrl + '/api/graph/fraud-chains'),
+      fetch(baseUrl + '/api/graph/fraud-sequences'),
     ])
       .then(async ([flowResponse, chainResponse]) => {
         if (!flowResponse.ok || !chainResponse.ok) throw new Error('Không tải được PaySim graph analytics');
         const [flow, chainResult] = await Promise.all([flowResponse.json(), chainResponse.json()]);
-        if (!Array.isArray(flow) || !Array.isArray(chainResult?.chains)) {
+        if (!Array.isArray(flow) || !Array.isArray(chainResult?.sequences)) {
           throw new Error('Định dạng PaySim graph analytics không hợp lệ');
         }
         setMoneyFlow(flow);
-        setFraudChains(chainResult.chains);
+        setFraudSequences(chainResult.sequences);
       })
       .catch(err => setInsightError(err.message));
   }, []);
@@ -108,23 +108,25 @@ export default function AnalyticsTab() {
         ) : <div className="dataset-empty">{insightError || 'Chưa có money-flow benchmark.'}</div>}
       </div>
       <div className="panel col-span-6">
-        <h2 className="panel-title">TRANSFER → CASH_OUT chains</h2>
-        <div className="dataset-provenance">Detection không sử dụng ground-truth label</div>
-        {fraudChains.length ? (
+        <h2 className="panel-title">TRANSFER → CASH_OUT sequences</h2>
+        <div className="dataset-provenance">Adjacent source rows · same step/amount · không có participant link</div>
+        {fraudSequences.length ? (
           <div className="dataset-table-wrap">
             <table className="dataset-table">
-              <thead><tr><th>Victim</th><th>Mule</th><th>Exit</th><th>Transfer</th><th>Cash out</th><th>Label</th></tr></thead>
-              <tbody>{fraudChains.map(chain => (
-                <tr key={`${chain.transfer_event_id}-${chain.cashout_event_id}`}>
-                  <td>{chain.victim}</td><td>{chain.mule}</td><td>{chain.exit}</td>
-                  <td>{Number(chain.transfer_amount).toLocaleString('vi-VN')}</td>
-                  <td>{Number(chain.cashout_amount).toLocaleString('vi-VN')}</td>
-                  <td>{chain.ground_truth_fraud ? 'fraud' : 'normal'}</td>
+              <thead><tr><th>Rows</th><th>Transfer path</th><th>Cash-out path</th><th>Amount</th><th>Linked?</th><th>Label</th></tr></thead>
+              <tbody>{fraudSequences.map(sequence => (
+                <tr key={`${sequence.transfer_event_id}-${sequence.cashout_event_id}`}>
+                  <td>{sequence.transfer_source_row} → {sequence.cashout_source_row}</td>
+                  <td>{sequence.transfer_origin} → {sequence.transfer_destination}</td>
+                  <td>{sequence.cashout_origin} → {sequence.cashout_destination}</td>
+                  <td>{Number(sequence.transfer_amount).toLocaleString('vi-VN')}</td>
+                  <td>{sequence.participant_linked ? 'có' : 'không'}</td>
+                  <td>{sequence.ground_truth_fraud ? 'fraud' : 'normal'}</td>
                 </tr>
               ))}</tbody>
             </table>
           </div>
-        ) : <div className="dataset-empty">{insightError || 'Chưa phát hiện chuỗi trong phạm vi dữ liệu đã replay.'}</div>}
+        ) : <div className="dataset-empty">{insightError || 'Chưa phát hiện sequence trong phạm vi dữ liệu đã replay.'}</div>}
       </div>
     </div>
   );

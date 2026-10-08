@@ -3,7 +3,7 @@ Neo4j graph network router.
 """
 from fastapi import APIRouter, HTTPException
 from core.db import graph_driver
-from services.graph_analytics import fraud_chain_payload
+from services.graph_analytics import fraud_sequence_payload
 
 router = APIRouter(prefix="/api/graph", tags=["Graph"])
 
@@ -101,25 +101,28 @@ def get_benchmark_money_flow():
         raise HTTPException(status_code=503, detail="Benchmark money flow unavailable") from exc
 
 
-@router.get("/fraud-chains")
-def get_benchmark_fraud_chains():
+@router.get("/fraud-sequences")
+def get_benchmark_fraud_sequences():
     if graph_driver is None:
         raise HTTPException(status_code=503, detail="Graph database unavailable")
     query = """
-    MATCH (victim:BenchmarkAccount)-[transfer:BENCHMARK_TRANSACTION]->
-          (mule:BenchmarkAccount)-[cashout:BENCHMARK_TRANSACTION]->
-          (exit:BenchmarkAccount)
+    MATCH (transfer_origin:BenchmarkAccount)-[transfer:BENCHMARK_TRANSACTION]->
+          (transfer_destination:BenchmarkAccount)
+    MATCH (cashout_origin:BenchmarkAccount)-[cashout:BENCHMARK_TRANSACTION]->
+          (cashout_destination:BenchmarkAccount)
     WHERE transfer.transaction_type = 'TRANSFER'
       AND cashout.transaction_type = 'CASH_OUT'
-      AND cashout.relative_step >= transfer.relative_step
-      AND cashout.relative_step <= transfer.relative_step + 24
-      AND transfer.amount >= cashout.amount * 0.80
-      AND transfer.amount <= cashout.amount * 1.20
-    RETURN victim.display_id AS victim,
-           mule.display_id AS mule,
-           exit.display_id AS exit,
+      AND cashout.source_row_number = transfer.source_row_number + 1
+      AND cashout.relative_step = transfer.relative_step
+      AND abs(cashout.amount - transfer.amount) <= 0.01
+    RETURN transfer_origin.display_id AS transfer_origin,
+           transfer_destination.display_id AS transfer_destination,
+           cashout_origin.display_id AS cashout_origin,
+           cashout_destination.display_id AS cashout_destination,
            transfer.event_id AS transfer_event_id,
            cashout.event_id AS cashout_event_id,
+           transfer.source_row_number AS transfer_source_row,
+           cashout.source_row_number AS cashout_source_row,
            transfer.amount AS transfer_amount,
            cashout.amount AS cashout_amount,
            transfer.relative_step AS transfer_step,
@@ -134,7 +137,8 @@ def get_benchmark_fraud_chains():
         return {
             "dataset_id": "ds3_paysim",
             "provenance": "synthetic_simulation",
-            "chains": fraud_chain_payload(records),
+            "match_basis": "adjacent_source_rows_same_step_and_amount",
+            "sequences": fraud_sequence_payload(records),
         }
     except Exception as exc:
-        raise HTTPException(status_code=503, detail="Benchmark fraud chains unavailable") from exc
+        raise HTTPException(status_code=503, detail="Benchmark fraud sequences unavailable") from exc
