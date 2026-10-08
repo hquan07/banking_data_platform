@@ -45,7 +45,7 @@ export default function HistoryTab() {
             />
             <Legend />
             <Bar yAxisId="left" dataKey="total_tx" name="Total Transactions" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-            <Bar yAxisId="right" dataKey="total_fraud" name="Fraudulent TX" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            <Bar yAxisId="right" dataKey="total_fraud" name="Alerts created (all statuses)" fill="#ef4444" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

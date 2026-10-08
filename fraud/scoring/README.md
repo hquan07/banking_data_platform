@@ -15,6 +15,14 @@ feature schema, threshold, confusion counts, precision, recall, PR-AUC, false
 positive rate, and Brier calibration score. It does **not** register or deploy
 the candidate.
 
+For a reviewed, permissioned dataset and an environment with pandas,
+scikit-learn and joblib installed:
+
+```bash
+python -m fraud.scoring.train_model --labeled-csv /secure/path/labeled.csv \
+  --output-dir /secure/path/candidates --version review-2026-10-08
+```
+
 Before enabling inference, supply permissioned historical labels and implement
 the same point-in-time features in serving, including account profile, device,
 location, and graph context. Then review holdout performance, approve an
