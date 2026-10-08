@@ -49,3 +49,11 @@ under `datasets/profiles/`; they contain file checksums, row counts, schema
 validation, null rates, inferred types, bounded cardinality and numeric ranges.
 The command exits non-zero when a file is absent or violates its expected
 minimum schema/row count.
+
+## Canonical mapping
+
+`schema_mapping.py` converts each source row to `benchmark-events` v1. The
+contract deliberately keeps source-specific event types and relative time. It
+does not invent missing account/customer IDs, currencies, locations or dates.
+See `shared/benchmark_contract.md` for the wire format and leakage boundary for
+ground-truth labels.
