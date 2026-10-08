@@ -6,13 +6,28 @@ The scheduled Airflow DAG that generated random training metrics and claimed
 deployment has been removed.
 Do not treat previous `ML_MODEL_FRAUD` cases as validated model findings.
 
-`train_model.py` accepts an explicit, trusted CSV with `event_time`, `is_fraud`
+For this demo-only project, generate reproducible synthetic labels and run the
+offline training workflow:
+
+```bash
+python3 -m fraud.scoring.demo_dataset --output /tmp/banking-demo-labeled.csv --seed 42
+python3 -m fraud.scoring.train_model --labeled-csv /tmp/banking-demo-labeled.csv \
+  --output-dir /tmp/banking-demo-candidates --version demo-v1
+```
+
+The fixture carries `data_origin=synthetic_demo`; candidate metadata records
+`evaluation_scope=pipeline_test_only` and `production_eligible=false`. Its
+precision, recall, PR-AUC and calibration demonstrate the evaluation code, not
+real-world fraud-detection performance. Spark does not load the candidate or
+create live cases from it.
+
+`train_model.py` accepts an explicit CSV with `event_time`, `is_fraud`
 (confirmed 0/1 outcome), and the five feature columns listed in the script. It
 rejects missing/invalid data, sorts by UTC event time, keeps the last 20% as a
 strict temporal holdout, and writes a candidate model and metadata into a new
 version directory. Metadata contains the dataset and artifact SHA-256 hashes,
 feature schema, threshold, confusion counts, precision, recall, PR-AUC, false
-positive rate, and Brier calibration score. It does **not** register or deploy
+positive rate, Brier calibration score, and data origin. It does **not** register or deploy
 the candidate.
 
 For a reviewed, permissioned dataset and an environment with pandas,

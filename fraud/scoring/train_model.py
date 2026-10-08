@@ -64,7 +64,12 @@ def train_candidate(input_path: Path, output_dir: Path, version: str, threshold:
         raise ValueError("Threshold must be between 0 and 1")
     dataset_bytes = input_path.read_bytes()
     dataset_hash = hashlib.sha256(dataset_bytes).hexdigest()
-    train, holdout = prepare_data(pd.read_csv(input_path))
+    frame = pd.read_csv(input_path)
+    origins = set(frame["data_origin"].dropna().unique()) if "data_origin" in frame else {"unverified"}
+    if len(origins) != 1 or not origins <= {"synthetic_demo", "unverified"}:
+        raise ValueError("data_origin must be uniformly synthetic_demo or omitted")
+    data_origin = origins.pop()
+    train, holdout = prepare_data(frame)
     model = RandomForestClassifier(
         n_estimators=100, max_depth=10, class_weight="balanced", random_state=42
     )
@@ -92,6 +97,9 @@ def train_candidate(input_path: Path, output_dir: Path, version: str, threshold:
             "false_negative": int(fn), "true_negative": int(tn),
         },
         "status": "CANDIDATE_NOT_DEPLOYED",
+        "data_origin": data_origin,
+        "evaluation_scope": "pipeline_test_only" if data_origin == "synthetic_demo" else "unverified_labels",
+        "production_eligible": False,
     }
     version_dir = output_dir / version
     version_dir.mkdir(parents=True, exist_ok=False)

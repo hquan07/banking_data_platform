@@ -8,6 +8,7 @@ pd = pytest.importorskip("pandas")
 pytest.importorskip("sklearn")
 
 from fraud.scoring.train_model import prepare_data, train_candidate
+from fraud.scoring.demo_dataset import generate_rows, write_demo_csv
 
 
 def labeled_frame():
@@ -43,3 +44,16 @@ def test_refuses_overlapping_periods_and_unlabeled_data():
         prepare_data(frame)
     with pytest.raises(ValueError, match="Missing"):
         prepare_data(labeled_frame().drop(columns="is_fraud"))
+
+
+def test_demo_dataset_is_reproducible_and_never_production_eligible(tmp_path):
+    assert generate_rows(300, seed=7) == generate_rows(300, seed=7)
+    source = tmp_path / "synthetic.csv"
+    write_demo_csv(source, count=300, seed=7)
+    metadata = train_candidate(source, tmp_path / "models", "demo-v1", 0.7)
+    assert metadata["data_origin"] == "synthetic_demo"
+    assert metadata["evaluation_scope"] == "pipeline_test_only"
+    assert metadata["production_eligible"] is False
+    assert metadata["status"] == "CANDIDATE_NOT_DEPLOYED"
+    with pytest.raises(FileExistsError):
+        write_demo_csv(source)
