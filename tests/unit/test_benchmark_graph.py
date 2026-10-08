@@ -9,6 +9,7 @@ GRAPH_MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GRAPH_MODULE)
 graph_record = GRAPH_MODULE.graph_record
 build_sequence_alert = GRAPH_MODULE.build_sequence_alert
+sequence_alerts = GRAPH_MODULE.sequence_alerts
 
 
 def _event(tx_type="TRANSFER", label=False):
@@ -57,3 +58,20 @@ def test_non_paysim_event_is_not_added_to_benchmark_graph():
     event = deepcopy(_event())
     event["dataset_id"] = "ds1_creditcard"
     assert graph_record(event) is None
+
+
+def test_batch_sequence_matches_are_deduplicated():
+    transfer = graph_record(_event("TRANSFER", False))
+    cashout_event = _event("CASH_OUT", False)
+    cashout_event["event_id"] = "ds3_paysim:11"
+    cashout_event["trace_id"] = "ds3_paysim:11"
+    cashout_event["source_row_id"] = "11"
+    cashout = graph_record(cashout_event)
+
+    alerts = sequence_alerts([
+        {"current": transfer, "counterpart": cashout},
+        {"current": cashout, "counterpart": transfer},
+    ])
+
+    assert len(alerts) == 1
+    assert alerts[0]["source_event_ids"] == ["ds3_paysim:10", "ds3_paysim:11"]
