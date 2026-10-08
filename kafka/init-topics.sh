@@ -27,3 +27,5 @@ ensure_topic payment-events 604800000
 ensure_topic payment-events-dlq 2592000000
 ensure_topic fraud-events 2592000000
 ensure_topic aml-events 2592000000
+ensure_topic transfer-events 604800000
+ensure_topic transfer-events-dlq 2592000000

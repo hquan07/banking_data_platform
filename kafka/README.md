@@ -5,7 +5,7 @@ this volume when restarting or recreating containers. The broker is a single
 node, so every topic has replication factor 1; this is durable across container
 recreation but **not** highly available.
 
-`kafka_topics_init` creates or verifies four three-partition topics and applies
+`kafka_topics_init` creates or verifies six three-partition topics and applies
 their retention policy on every Compose startup:
 
 | Topic | Retention | Key |
@@ -14,6 +14,8 @@ their retention policy on every Compose startup:
 | `payment-events-dlq` | 30 days | none (source partition/offset in payload) |
 | `fraud-events` | 30 days | payment or account ID (rule-dependent) |
 | `aml-events` | 30 days | account ID |
+| `transfer-events` | 7 days | source account ID |
+| `transfer-events-dlq` | 30 days | none (source partition/offset in payload) |
 
 The initializer refuses an existing topic with a different partition count or
 replication factor. Increasing partitions for a keyed topic can change key

@@ -1,88 +1,117 @@
+"""Idempotent Kafka transfer graph sink and 3–5 edge AML cycle detector."""
+
+import hashlib
+import json
 import os
+from datetime import datetime, timedelta, timezone
+
+from kafka import KafkaConsumer, KafkaProducer, TopicPartition
+from kafka.structs import OffsetAndMetadata
 from neo4j import GraphDatabase
+
+from shared.transfer_contract import normalize_transfer_event
+
 
 class BankingGraph:
     def __init__(self, uri, user, password):
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        with self.driver.session() as session:
+            for label in ("Customer", "Account", "Merchant"):
+                session.run(
+                    f"CREATE CONSTRAINT {label.lower()}_id_unique IF NOT EXISTS "
+                    f"FOR (n:{label}) REQUIRE n.id IS UNIQUE"
+                ).consume()
 
     def close(self):
         self.driver.close()
 
-    def create_nodes(self, customer_id, account_id, merchant_id=None):
+    def record_transaction(self, event, source):
+        event = normalize_transfer_event(event)
         with self.driver.session() as session:
-            session.execute_write(self._create_customer_account, customer_id, account_id)
-            if merchant_id:
-                session.execute_write(self._create_merchant, merchant_id)
+            paths = session.execute_write(self._write_and_find_cycles, event, source)
+        alerts = []
+        for path in paths:
+            ids = sorted([event["event_id"], *path["event_ids"]])
+            cycle_id = "graph-" + hashlib.sha256(":/".join(ids).encode()).hexdigest()
+            alerts.append({
+                "event_id": cycle_id, "trace_id": event["trace_id"],
+                "account_id": event["from_account_id"], "rule": "CIRCULAR_TRANSFER",
+                "amount": round(float(event["amount"]) + path["path_amount"], 2),
+                "currency": event["currency"], "risk_score": 90, "risk_level": "HIGH",
+                "decision": "REVIEW", "timestamp": event["timestamp"],
+                "source_event_ids": ids,
+            })
+        return alerts
 
     @staticmethod
-    def _create_customer_account(tx, customer_id, account_id):
-        query = (
-            "MERGE (c:Customer {id: $customer_id}) "
-            "MERGE (a:Account {id: $account_id}) "
-            "MERGE (c)-[:OWNS]->(a)"
+    def _write_and_find_cycles(tx, event, source):
+        tx.run(
+            """MERGE (a:Account {id: $from_account_id})
+               MERGE (b:Account {id: $to_account_id})
+               MERGE (a)-[t:TRANSFERRED_TO {event_id: $event_id}]->(b)
+               ON CREATE SET t.amount = $amount, t.currency = $currency,
+                   t.event_time = datetime($event_time), t.trace_id = $trace_id,
+                   t.source_topic = $source_topic, t.source_partition = $source_partition,
+                   t.source_offset = $source_offset""",
+            from_account_id=event["from_account_id"], to_account_id=event["to_account_id"],
+            event_id=event["event_id"], amount=float(event["amount"]),
+            currency=event["currency"], event_time=event["timestamp"],
+            trace_id=event["trace_id"], source_topic=source["topic"],
+            source_partition=source["partition"], source_offset=source["offset"],
+        ).consume()
+        event_time = datetime.fromisoformat(event["timestamp"].replace("Z", "+00:00"))
+        window_start = (event_time - timedelta(hours=1)).astimezone(timezone.utc).isoformat()
+        result = tx.run(
+            """MATCH (b:Account {id: $to_account_id}), (a:Account {id: $from_account_id})
+               MATCH p = (b)-[:TRANSFERRED_TO*2..4]->(a)
+               WHERE all(r IN relationships(p) WHERE
+                   r.event_time >= datetime($window_start)
+                   AND r.event_time <= datetime($event_time)
+                   AND r.amount >= $min_amount AND r.currency = $currency)
+                 AND all(n IN nodes(p) WHERE single(m IN nodes(p) WHERE m = n))
+               RETURN [r IN relationships(p) | r.event_id] AS event_ids,
+                      reduce(total = 0.0, r IN relationships(p) | total + r.amount) AS path_amount
+               LIMIT 20""",
+            to_account_id=event["to_account_id"], from_account_id=event["from_account_id"],
+            window_start=window_start, event_time=event["timestamp"],
+            min_amount=float(os.environ.get("GRAPH_MIN_TRANSFER_AMOUNT", "1000")),
+            currency=event["currency"],
         )
-        tx.run(query, customer_id=customer_id, account_id=account_id)
+        return [dict(record) for record in result]
 
-    @staticmethod
-    def _create_merchant(tx, merchant_id):
-        query = "MERGE (m:Merchant {id: $merchant_id})"
-        tx.run(query, merchant_id=merchant_id)
 
-    def record_transaction(self, from_account, to_account, amount, tx_id):
-        with self.driver.session() as session:
-            session.execute_write(self._create_transaction, from_account, to_account, amount, tx_id)
+def run_consumer():
+    bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "banking_kafka:9092")
+    graph = BankingGraph(
+        os.environ["NEO4J_URI"], os.environ["NEO4J_USER"], os.environ["NEO4J_PASSWORD"]
+    )
+    consumer = KafkaConsumer(
+        "transfer-events", bootstrap_servers=bootstrap, group_id="neo4j-aml-v1",
+        enable_auto_commit=False, auto_offset_reset="earliest",
+    )
+    producer = KafkaProducer(bootstrap_servers=bootstrap, acks="all", retries=10)
+    try:
+        for message in consumer:
+            source = {"topic": message.topic, "partition": message.partition, "offset": message.offset}
+            try:
+                event = normalize_transfer_event(json.loads(message.value.decode("utf-8")))
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                payload = {"raw_value": message.value.decode("utf-8", errors="replace"),
+                           "validation_error": str(exc), "source": source}
+                producer.send("transfer-events-dlq", value=json.dumps(payload).encode()).get(timeout=20)
+            else:
+                for alert in graph.record_transaction(event, source):
+                    producer.send(
+                        "aml-events", key=alert["account_id"].encode(),
+                        value=json.dumps(alert).encode(),
+                    ).get(timeout=20)
+            consumer.commit({TopicPartition(message.topic, message.partition):
+                             OffsetAndMetadata(message.offset + 1, "")})
+    finally:
+        producer.close()
+        consumer.close()
+        graph.close()
 
-    @staticmethod
-    def _create_transaction(tx, from_account, to_account, amount, tx_id):
-        query = (
-            "MATCH (a:Account {id: $from_account}) "
-            "MATCH (b:Account {id: $to_account}) "
-            "CREATE (a)-[t:TRANSFERRED_TO {amount: $amount, tx_id: $tx_id}]->(b)"
-        )
-        tx.run(query, from_account=from_account, to_account=to_account, amount=amount, tx_id=tx_id)
-
-    def detect_circular_transactions(self):
-        with self.driver.session() as session:
-            result = session.execute_read(self._find_cycles)
-            for record in result:
-                print(f"[AML GRAPH ALERT] Phát hiện giao dịch vòng lặp: {record['path']}")
-
-    @staticmethod
-    def _find_cycles(tx):
-        # Tìm các chu trình chuyển tiền (cycles) khép kín từ 3-5 bước nhảy
-        query = (
-            "MATCH path = (a:Account)-[t:TRANSFERRED_TO*3..5]->(a) "
-            "RETURN [n in nodes(path) | n.id] AS path LIMIT 10"
-        )
-        return list(tx.run(query))
 
 if __name__ == "__main__":
-    print("Khởi tạo kết nối tới Neo4j Graph DB...")
-    # Khởi tạo graph instance
-    graph = BankingGraph(
-        os.environ.get("NEO4J_URI", "neo4j://localhost:7687"),
-        os.environ.get("NEO4J_USER", ""),
-        os.environ.get("NEO4J_PASSWORD", "")
-    )
-    
-    # ----------------------------------------------------
-    # DEMO: Trong thực tế, Spark Structured Streaming 
-    # sẽ đẩy dữ liệu Kafka vào đây (Sink: Neo4j)
-    # ----------------------------------------------------
-    
-    print("Nạp các Nodes (Tài khoản)...")
-    graph.create_nodes("CUS_1", "ACC_1")
-    graph.create_nodes("CUS_2", "ACC_2")
-    graph.create_nodes("CUS_3", "ACC_3")
-    
-    print("Nạp các Edges (Giao dịch vòng tròn)...")
-    # A -> B -> C -> A
-    graph.record_transaction("ACC_1", "ACC_2", 5000, "TX_01")
-    graph.record_transaction("ACC_2", "ACC_3", 4900, "TX_02")
-    graph.record_transaction("ACC_3", "ACC_1", 4800, "TX_03")
-    
-    print("Chạy thuật toán quét rửa tiền (AML Circular Pattern)...")
-    graph.detect_circular_transactions()
-    
-    graph.close()
-    print("Hoàn thành quá trình phân tích đồ thị!")
+    run_consumer()
