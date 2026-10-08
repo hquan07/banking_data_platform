@@ -40,6 +40,14 @@ def test_baf_negative_missing_sentinel_is_not_short_session():
     }}) == []
 
 
+def test_baf_high_raw_values_are_not_scored_before_calibration():
+    assert evaluate_baf({"features": {
+        "device_fraud_count": 10,
+        "date_of_birth_distinct_emails_4w": 99,
+        "session_length_in_minutes": 0.1,
+    }}) == []
+
+
 def test_ds1_and_ds2_are_not_scored_without_calibrated_model():
     assert evaluate_benchmark_payload("ds1_creditcard", {"amount": 999_999}) == []
     assert evaluate_benchmark_payload("ds2_ieee_cis", {"identity": {"id_12": "Found"}}) == []

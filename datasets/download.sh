@@ -49,7 +49,7 @@ download_ds3() {
 download_ds4() {
   mkdir -p "${raw_dir}/bank-account-fraud"
   kaggle datasets download \
-    -d feedzai/bank-account-fraud-dataset-neurips-2022 \
+    -d sgpjesus/bank-account-fraud-dataset-neurips-2022 \
     -f Base.csv -p "${raw_dir}/bank-account-fraud"
   unzip -o "${raw_dir}/bank-account-fraud/Base.csv.zip" \
     -d "${raw_dir}/bank-account-fraud"

@@ -94,7 +94,7 @@ def run_consumer() -> None:
     consumer = KafkaConsumer(
         "benchmark-events",
         bootstrap_servers=bootstrap,
-        group_id="benchmark-processor-v1",
+        group_id="benchmark-processor-v2",
         enable_auto_commit=False,
         auto_offset_reset="earliest",
     )

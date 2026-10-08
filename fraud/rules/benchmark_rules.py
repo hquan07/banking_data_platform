@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 
-EVALUATOR_VERSION = "benchmark-rules-v1"
+EVALUATOR_VERSION = "benchmark-rules-v2"
 OUTFLOW_TYPES = frozenset({"CASH_OUT", "DEBIT", "PAYMENT", "TRANSFER"})
 
 
@@ -70,25 +70,11 @@ def evaluate_paysim(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def evaluate_baf(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Evaluate explicit BAF application attributes; preserve negative sentinels."""
-    features = payload.get("features") or {}
-    signals = []
-    device_history = _number(features.get("device_fraud_count"))
-    if device_history is not None and device_history > 0:
-        signals.append(_signal("DEVICE_FRAUD_HISTORY", 90, {
-            "device_fraud_count": device_history,
-        }))
-    reused_emails = _number(features.get("date_of_birth_distinct_emails_4w"))
-    if reused_emails is not None and reused_emails > 3:
-        signals.append(_signal("IDENTITY_REUSE", 80, {
-            "date_of_birth_distinct_emails_4w": reused_emails,
-        }))
-    session_length = _number(features.get("session_length_in_minutes"))
-    if session_length is not None and 0 <= session_length < 1:
-        signals.append(_signal("SHORT_APPLICATION_SESSION", 70, {
-            "session_length_in_minutes": session_length,
-        }))
-    return signals
+    """Keep BAF fail-closed until source-specific thresholds are calibrated."""
+    # Canary profiling showed device_fraud_count is constant zero and a proposed
+    # identity-reuse threshold flagged most rows. Persist all features for
+    # offline calibration, but do not turn uncalibrated values into cases.
+    return []
 
 
 def evaluate_benchmark_payload(dataset_id: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
