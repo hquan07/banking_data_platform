@@ -4,7 +4,7 @@
 | --- | --- | --- | --- | --- |
 | DS1 Credit Card | Complete | Valid | Offline model evaluated | Candidate rejected for low precision/recall |
 | DS3 PaySim | Complete | Valid | 1,000-event canary + 10,000-event controlled replay passed | Full replay is an operator workload decision |
-| DS4 BAF Base | Complete | Valid | 1,000 events passed | Alert thresholds require source-specific calibration |
+| DS4 BAF Base | Complete | Valid | 1,000 events passed; supervised candidate audited | Candidate is not deployed to runtime |
 
 Raw CSVs, generated profiles and model binaries are local artifacts excluded
 from Git. The per-source manifests in this directory record checksums,

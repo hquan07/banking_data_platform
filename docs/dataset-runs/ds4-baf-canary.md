@@ -40,6 +40,7 @@ were retained for later source-specific model calibration.
 
 ## Decision
 
-Ingestion and analytics are accepted; rule-based alerting is not. DS4 remains
-an offline account-application benchmark until a temporally split, calibrated
-candidate is reviewed. It must not be represented as payment behavior.
+Ingestion and analytics are accepted; rule-based alerting is not. A supervised,
+month-split candidate has since been evaluated in
+`ds4-baf-model-candidate.md`, but it remains offline and is not loaded by the
+streaming evaluator. DS4 must not be represented as payment behavior.

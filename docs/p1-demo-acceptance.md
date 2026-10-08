@@ -11,6 +11,11 @@ workflow. DS1, DS3 and DS4 have validated local profiles; DS3 has a reconciled
 DS4 canary has passed. Benchmark replay is opt-in and is not presented as a
 live banking feed.
 
+DS1 and DS4 model artifacts are audited offline candidates only. DS4 uses all
+30 source features with months 0–5 for training, month 6 for threshold
+selection and month 7 for the final holdout. Neither candidate is loaded by
+the streaming evaluator or presented as production-ready.
+
 Live payment and transfer sources are still unconfigured. Their Kafka
 consumers, contracts, fraud rules, alert workflow and graph processing remain
 available for authorized external events. `APP_MODE` accepts `integration` and

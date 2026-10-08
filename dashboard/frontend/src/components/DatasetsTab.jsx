@@ -109,7 +109,7 @@ export default function DatasetsTab() {
       </section>
 
       <section className="panel col-span-12">
-        <h2 className="panel-title">DS1 — offline model candidate</h2>
+        <h2 className="panel-title">Offline model candidates</h2>
         {data.models.length ? data.models.map(candidate => (
           <article className="model-candidate" key={candidate.version}>
             <div className="model-candidate-heading">
