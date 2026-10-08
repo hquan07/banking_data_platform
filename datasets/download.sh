@@ -23,7 +23,9 @@ require_tools() {
 download_ds1() {
   mkdir -p "${raw_dir}/creditcard"
   kaggle datasets download -d mlg-ulb/creditcardfraud \
-    -f creditcard.csv -p "${raw_dir}/creditcard" --unzip
+    -f creditcard.csv -p "${raw_dir}/creditcard"
+  unzip -o "${raw_dir}/creditcard/creditcard.csv.zip" -d "${raw_dir}/creditcard"
+  rm "${raw_dir}/creditcard/creditcard.csv.zip"
 }
 
 download_ds2() {
@@ -39,14 +41,19 @@ download_ds2() {
 download_ds3() {
   mkdir -p "${raw_dir}/paysim"
   kaggle datasets download -d ealaxi/paysim1 \
-    -p "${raw_dir}/paysim" --unzip
+    -p "${raw_dir}/paysim"
+  unzip -o "${raw_dir}/paysim/paysim1.zip" -d "${raw_dir}/paysim"
+  rm "${raw_dir}/paysim/paysim1.zip"
 }
 
 download_ds4() {
   mkdir -p "${raw_dir}/bank-account-fraud"
   kaggle datasets download \
     -d feedzai/bank-account-fraud-dataset-neurips-2022 \
-    -f Base.csv -p "${raw_dir}/bank-account-fraud" --unzip
+    -f Base.csv -p "${raw_dir}/bank-account-fraud"
+  unzip -o "${raw_dir}/bank-account-fraud/Base.csv.zip" \
+    -d "${raw_dir}/bank-account-fraud"
+  rm "${raw_dir}/bank-account-fraud/Base.csv.zip"
 }
 
 require_tools
