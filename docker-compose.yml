@@ -75,6 +75,7 @@ services:
       - DATASET_REPLAY_RATE=${DATASET_REPLAY_RATE:-50}
       - DATASET_MAX_EVENTS=${DATASET_MAX_EVENTS:-0}
       - DATASET_START_ROW=${DATASET_START_ROW:-0}
+      - DATASET_MAX_IN_FLIGHT=${DATASET_MAX_IN_FLIGHT:-500}
     command: ["python", "kafka/producers/dataset_replay.py"]
     volumes:
       - ./datasets/raw:/workspace/datasets/raw:ro

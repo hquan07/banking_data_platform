@@ -15,17 +15,24 @@ replay = REPLAY_MODULE.replay
 
 
 class FakeFuture:
+    def __init__(self):
+        self.awaited = False
+
     def get(self, timeout):
+        self.awaited = True
         return self
 
 
 class FakeProducer:
     def __init__(self):
         self.messages = []
+        self.futures = []
 
     def send(self, topic, key, value):
         self.messages.append((topic, key.decode(), json.loads(value)))
-        return FakeFuture()
+        future = FakeFuture()
+        self.futures.append(future)
+        return future
 
     def flush(self, timeout):
         return None
@@ -59,6 +66,7 @@ def test_replay_publishes_valid_rows_and_routes_invalid_rows_to_dlq(tmp_path):
     assert producer.messages[0][1] == "ds1_creditcard:0"
     assert producer.messages[1][0] == "benchmark-events-dlq"
     assert producer.messages[1][2]["source_row_id"] == "1"
+    assert all(future.awaited for future in producer.futures)
 
 
 def test_replay_honors_stable_start_row_and_limit(tmp_path):
@@ -70,3 +78,13 @@ def test_replay_honors_stable_start_row_and_limit(tmp_path):
 
     assert result["scanned"] == 1
     assert producer.messages[0][1] == "ds1_creditcard:1"
+
+
+def test_replay_bounds_unacknowledged_sends(tmp_path):
+    raw_dir = tmp_path / "raw"
+    _write_ds1(raw_dir)
+    producer = FakeProducer()
+
+    replay(producer, "ds1_creditcard", raw_dir, rate=0, max_in_flight=1)
+
+    assert all(future.awaited for future in producer.futures)

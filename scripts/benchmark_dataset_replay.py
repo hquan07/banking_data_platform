@@ -248,6 +248,7 @@ def run_benchmark(args: argparse.Namespace) -> dict:
     if producer.returncode:
         raise RuntimeError(f"Dataset replay failed ({producer.returncode}):\n{producer_output}")
     producer_summary = parse_producer_summary(producer_output)
+    observed_rate = args.events / producer_seconds
 
     drain_started = time.monotonic()
     drain_timed_out = False
@@ -282,6 +283,7 @@ def run_benchmark(args: argparse.Namespace) -> dict:
     passed = all((
         producer_summary.get("published") == args.events,
         producer_summary.get("rejected") == 0,
+        observed_rate >= args.rate * args.minimum_rate_ratio,
         count_delta["events"] == args.events,
         count_delta["evaluations"] == args.events,
         dlq_delta == 0,
@@ -297,13 +299,15 @@ def run_benchmark(args: argparse.Namespace) -> dict:
             "start_row": args.start_row,
             "events": args.events,
             "target_rate_eps": args.rate,
+            "minimum_rate_ratio": args.minimum_rate_ratio,
             "poll_interval_seconds": args.poll_interval,
             "drain_timeout_seconds": args.drain_timeout,
         },
         "producer": {
             **producer_summary,
             "elapsed_seconds": round(producer_seconds, 3),
-            "observed_rate_eps": round(args.events / producer_seconds, 3),
+            "observed_rate_eps": round(observed_rate, 3),
+            "rate_gate_eps": round(args.rate * args.minimum_rate_ratio, 3),
         },
         "kafka": {
             "initial_lag": initial_lag,
@@ -332,6 +336,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--start-row", type=int, required=True)
     parser.add_argument("--events", type=int, default=15_000)
     parser.add_argument("--rate", type=float, default=50)
+    parser.add_argument("--minimum-rate-ratio", type=float, default=0.95)
     parser.add_argument("--poll-interval", type=float, default=5)
     parser.add_argument("--drain-timeout", type=float, default=300)
     parser.add_argument("--consumer-group", action="append", default=list(DEFAULT_GROUPS))
@@ -345,6 +350,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("start-row must be non-negative; events and rate must be positive")
     if args.poll_interval <= 0 or args.drain_timeout <= 0 or args.api_repetitions <= 0:
         parser.error("poll interval, drain timeout and API repetitions must be positive")
+    if not 0 < args.minimum_rate_ratio <= 1:
+        parser.error("minimum-rate-ratio must be greater than zero and at most one")
     return args
 
 

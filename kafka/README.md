@@ -51,6 +51,9 @@ DATASET_ID=ds3_paysim DATASET_MAX_EVENTS=1000 \
 `DATASET_START_ROW` resumes from a deterministic source row. Stable event IDs
 and downstream unique constraints provide replay deduplication, but operators must still avoid comparing
 metrics from overlapping replay runs unless the run boundary is recorded.
+The producer keeps at most `DATASET_MAX_IN_FLIGHT` unacknowledged sends
+(default 500), then waits for the oldest Kafka acknowledgement. This preserves
+`acks=all` delivery checks without serializing every event behind one ACK.
 
 The Redis velocity counter uses each event's UTC timestamp in a five-minute
 sliding sorted set. Retries of an event ID are ignored for seven days; an event
