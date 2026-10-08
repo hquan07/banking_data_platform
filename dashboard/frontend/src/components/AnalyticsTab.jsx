@@ -32,7 +32,7 @@ export default function AnalyticsTab({ sankeyData, funnelData }) {
   return (
     <div className="grid">
       <div className="panel col-span-6" style={{height: '400px'}}>
-        <h2 className="panel-title">Money Flow Analysis (dữ liệu minh họa)</h2>
+        <h2 className="panel-title">Money Flow Analysis (dữ liệu minh họa tĩnh)</h2>
         <ResponsiveContainer width="100%" height={350}>
           <Sankey
             data={JSON.parse(JSON.stringify(sankeyData))}
@@ -50,7 +50,7 @@ export default function AnalyticsTab({ sankeyData, funnelData }) {
       </div>
 
       <div className="panel col-span-6" style={{height: '400px'}}>
-        <h2 className="panel-title">Transaction Pipeline Funnel (dữ liệu minh họa)</h2>
+        <h2 className="panel-title">Transaction Pipeline Funnel (dữ liệu minh họa tĩnh)</h2>
         <ResponsiveContainer width="100%" height={350}>
           <FunnelChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
             <Tooltip 

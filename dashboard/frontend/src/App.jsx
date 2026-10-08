@@ -31,7 +31,7 @@ function MainApp() {
 
   const [mapData, setMapData] = useState([]);
   
-  const [sankeyData, setSankeyData] = useState({
+  const [sankeyData] = useState({
     nodes: [{ name: 'Bank A' }, { name: 'Bank B' }, { name: 'Crypto Ex' }, { name: 'Offshore' }],
     links: [
       { source: 0, target: 1, value: 50000 },
@@ -41,7 +41,7 @@ function MainApp() {
     ]
   });
 
-  const [funnelData, setFunnelData] = useState([
+  const [funnelData] = useState([
     { name: 'Total TX', value: 10000, fill: '#3b82f6' },
     { name: 'DQ Passed', value: 9800, fill: '#10b981' },
     { name: 'Fraud Checked', value: 9500, fill: '#f59e0b' },
@@ -83,27 +83,6 @@ function MainApp() {
           });
         }
         
-        // Update Funnel
-        setFunnelData(prev => {
-          const newData = [...prev];
-          newData[0].value += 1;
-          if (Math.random() > 0.02) newData[1].value += 1;
-          if (Math.random() > 0.05) newData[2].value += 1;
-          if (Math.random() > 0.08) newData[3].value += 1;
-          return newData;
-        });
-
-        // Update Sankey
-        setSankeyData(prev => {
-          const newLinks = [...prev.links];
-          const randomLinkIdx = Math.floor(Math.random() * newLinks.length);
-          newLinks[randomLinkIdx] = {
-            ...newLinks[randomLinkIdx],
-            value: newLinks[randomLinkIdx].value + message.data.amount
-          };
-          return { ...prev, links: newLinks };
-        });
-
       } else if (message.topic === "fraud-events" || message.topic === "aml-events") {
         setAlerts(prev => {
           const newAlerts = [message.data, ...prev];
@@ -151,9 +130,9 @@ function MainApp() {
     ]
   };
 
-  const scatterData = Array.from({length: 40}, (_, i) => {
-    const isAnomaly = Math.random() > 0.9;
-    const amount = isAnomaly ? Math.random() * 8000 + 5000 : Math.random() * 1000 + 50;
+  const scatterData = React.useMemo(() => Array.from({length: 40}, (_, i) => {
+    const isAnomaly = i % 11 === 0;
+    const amount = isAnomaly ? 6500 + i * 120 : 100 + (i * 137) % 900;
     return {
       x: Date.now() - (40 - i) * 60000,
       y: amount,
@@ -161,7 +140,7 @@ function MainApp() {
       isAnomaly,
       reason: isAnomaly ? (amount > 10000 ? 'Struct/Smurf' : 'Large Transfer') : 'Normal'
     }
-  });
+  }), []);
 
   const riskyAccountsData = [
     { name: 'ACC_92', score: 98 },
@@ -226,7 +205,7 @@ function MainApp() {
         <header className="header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
           <div className="status-indicators">
             <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`}></span>
-            <span className="status-text">{isConnected ? 'System Online (WebSocket Connected)' : 'System Offline (Connecting...)'}</span>
+            <span className="status-text">{isConnected ? 'WebSocket đã kết nối' : 'WebSocket chưa kết nối'}</span>
             <span style={{marginLeft: '20px', color: '#94a3b8'}}>Streaming TPS: <strong style={{color: '#fff'}}>{tps}</strong></span>
           </div>
           <div className="user-profile" style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
@@ -239,6 +218,10 @@ function MainApp() {
             </button>
           </div>
         </header>
+
+        <div role="note" style={{ margin: '12px 20px 0', padding: '10px 14px', borderRadius: 8, border: '1px solid #f59e0b66', background: '#f59e0b18', color: '#fcd34d', fontSize: 13 }}>
+          DEMO DATA — Giao dịch và nhãn fraud là dữ liệu mô phỏng. Các biểu đồ minh họa không thể hiện hiệu quả phát hiện gian lận trên dữ liệu thật.
+        </div>
 
         {/* Dynamic Tab Content */}
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '2rem', padding: '10px 20px'}}>
@@ -268,7 +251,7 @@ function MainApp() {
 
           <div className="status-badge" style={{borderColor: isConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}}>
             <span className="dot" style={{backgroundColor: isConnected ? '#10b981' : '#ef4444'}}></span>
-            {isConnected ? 'LIVE (Kafka Connected)' : 'DISCONNECTED'}
+            {isConnected ? 'DEMO STREAM (WebSocket)' : 'DEMO STREAM (Disconnected)'}
           </div>
         </div>
         <main className="dashboard-container">

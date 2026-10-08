@@ -8,7 +8,7 @@ export default function OverviewTab({ data, mapData }) {
   return (
     <div className="grid">
       <div className="panel col-span-12">
-        <h2 className="panel-title">Real-time Transaction Volume (TPS)</h2>
+        <h2 className="panel-title">Giá trị thanh toán nhận qua WebSocket (demo)</h2>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={data}>
             <defs>
@@ -30,7 +30,7 @@ export default function OverviewTab({ data, mapData }) {
       </div>
 
       <div className="panel col-span-12">
-        <h2 className="panel-title">Geographic Activity Heatmap (Vietnam / Southeast Asia)</h2>
+        <h2 className="panel-title">Vị trí giao dịch mô phỏng (khi sự kiện có tọa độ)</h2>
         <div style={{height: '400px', width: '100%', display: 'flex', justifyContent: 'center', overflow: 'hidden', borderRadius: '8px'}}>
           <ComposableMap
             projection="geoMercator"

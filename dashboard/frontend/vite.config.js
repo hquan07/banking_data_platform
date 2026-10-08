@@ -9,7 +9,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          charts: ['recharts'],
           graph: ['react-force-graph-2d'],
           icons: ['lucide-react']
         }
