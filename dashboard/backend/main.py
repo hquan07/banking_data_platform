@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
     if pg_conn:
         try:
             sql_dir = os.path.join(os.path.dirname(__file__), "sql")
-            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql", "p1_dq_results.sql", "p1_trace_context.sql"):
+            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql", "p1_dq_results.sql", "p1_trace_context.sql", "dataset_benchmark.sql"):
                 migration_path = os.path.join(sql_dir, migration_name)
                 if not os.path.exists(migration_path):
                     continue

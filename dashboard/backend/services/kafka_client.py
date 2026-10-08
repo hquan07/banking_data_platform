@@ -59,24 +59,27 @@ def persist_alert(data: dict) -> bool:
         raise RuntimeError("PostgreSQL is unavailable for alert persistence")
     event_id = data.get("event_id")
     account_id = data.get("account_id")
+    entity_id = data.get("entity_id") or account_id
     rule = data.get("rule")
-    if not event_id or not account_id or not rule:
-        raise ValueError("Alert requires event_id, account_id and rule")
+    if not event_id or not entity_id or not rule:
+        raise ValueError("Alert requires event_id, entity_id and rule")
     amount = data.get("amount") or 0
     risk_score = data.get("risk_score", data.get("fraud_score", 0))
     with pg_conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO alerts
-                (event_id, trace_id, payment_id, account_id, rule_name, amount,
-                 risk_score, risk_level, decision)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (event_id, trace_id, payment_id, account_id, entity_id,
+                 entity_type, dataset_id, rule_name, amount, risk_score,
+                 risk_level, decision)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (event_id, rule_name) WHERE event_id IS NOT NULL DO NOTHING
             RETURNING alert_id
             """,
             (
-                event_id, data.get("trace_id"), data.get("payment_id"), account_id, rule, amount,
-                risk_score, data.get("risk_level", "MEDIUM"),
+                event_id, data.get("trace_id"), data.get("payment_id"), account_id,
+                entity_id, data.get("entity_type", "account"), data.get("dataset_id"),
+                rule, amount, risk_score, data.get("risk_level", "MEDIUM"),
                 data.get("decision", "REVIEW"),
             ),
         )
