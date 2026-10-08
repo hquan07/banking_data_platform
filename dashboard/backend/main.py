@@ -25,6 +25,7 @@ from api.graph import router as graph_router
 from api.analytics import router as analytics_router
 from api.users import router as users_router
 from api.config import router as config_router
+from api.datasets import router as datasets_router
 
 import logging
 from pythonjsonlogger import jsonlogger
@@ -197,6 +198,7 @@ app.include_router(graph_router)
 app.include_router(analytics_router)
 app.include_router(users_router)
 app.include_router(config_router)
+app.include_router(datasets_router)
 
 
 # =============================================

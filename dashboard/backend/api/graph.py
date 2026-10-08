@@ -41,3 +41,60 @@ def get_circular_graph():
             raise HTTPException(status_code=503, detail="Graph database unavailable") from e
 
     raise HTTPException(status_code=503, detail="Graph database unavailable")
+
+
+@router.get("/benchmark")
+def get_benchmark_graph():
+    if graph_driver is None:
+        raise HTTPException(status_code=503, detail="Graph database unavailable")
+    query = """
+    MATCH (source:BenchmarkAccount)-[event:BENCHMARK_TRANSACTION]->(target:BenchmarkAccount)
+    RETURN source.display_id AS source, target.display_id AS target,
+           event.amount AS amount, event.transaction_type AS transaction_type,
+           event.relative_step AS relative_step
+    ORDER BY event.relative_step DESC
+    LIMIT 500
+    """
+    try:
+        with graph_driver.session() as session:
+            records = list(session.run(query))
+        nodes = set()
+        links = []
+        for record in records:
+            nodes.add(record["source"])
+            nodes.add(record["target"])
+            links.append({
+                "source": record["source"], "target": record["target"],
+                "value": record["amount"], "transaction_type": record["transaction_type"],
+                "relative_step": record["relative_step"],
+            })
+        return {
+            "dataset_id": "ds3_paysim",
+            "provenance": "synthetic_simulation",
+            "nodes": [{"id": node, "name": node, "group": 1} for node in sorted(nodes)],
+            "links": links,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Benchmark graph unavailable") from exc
+
+
+@router.get("/money-flow")
+def get_benchmark_money_flow():
+    if graph_driver is None:
+        raise HTTPException(status_code=503, detail="Graph database unavailable")
+    query = """
+    MATCH ()-[event:BENCHMARK_TRANSACTION]->()
+    RETURN event.transaction_type AS transaction_type,
+           count(*) AS count, sum(event.amount) AS total_amount
+    ORDER BY total_amount DESC
+    """
+    try:
+        with graph_driver.session() as session:
+            records = list(session.run(query))
+        return [
+            {"transaction_type": row["transaction_type"], "count": row["count"],
+             "total_amount": row["total_amount"]}
+            for row in records
+        ]
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Benchmark money flow unavailable") from exc
