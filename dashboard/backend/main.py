@@ -7,8 +7,10 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Gauge
 
 from core.db import pg_conn, graph_driver, ch_client, redis_client, get_s3_client
 from core.security import get_password_hash
@@ -66,7 +68,7 @@ async def lifespan(app: FastAPI):
     if pg_conn:
         try:
             sql_dir = os.path.join(os.path.dirname(__file__), "sql")
-            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql"):
+            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql", "p1_dq_results.sql"):
                 migration_path = os.path.join(sql_dir, migration_name)
                 if not os.path.exists(migration_path):
                     continue
@@ -138,6 +140,33 @@ app.add_middleware(
 )
 
 Instrumentator().instrument(app).expose(app)
+
+DQ_LAST_SUCCESS = Gauge("dq_last_run_success", "Whether the latest customer Silver DQ run passed")
+DQ_RUN_PRESENT = Gauge("dq_last_run_present", "Whether a customer Silver DQ result exists")
+DQ_LAST_INVALID = Gauge("dq_last_run_invalid_records", "Invalid records in the latest customer Silver DQ run")
+DQ_LAST_DUPLICATE_RATE = Gauge("dq_last_run_duplicate_rate", "Duplicate account rate in latest customer Silver DQ run")
+
+
+@app.middleware("http")
+async def refresh_dq_metrics(request: Request, call_next):
+    if request.url.path == "/metrics" and pg_conn is not None:
+        try:
+            with pg_conn.cursor() as cur:
+                cur.execute(
+                    "SELECT success, invalid_count, duplicate_rate FROM dq_run_results "
+                    "ORDER BY checked_at DESC LIMIT 1"
+                )
+                row = cur.fetchone()
+            if row:
+                DQ_RUN_PRESENT.set(1)
+                DQ_LAST_SUCCESS.set(int(row[0]))
+                DQ_LAST_INVALID.set(row[1])
+                DQ_LAST_DUPLICATE_RATE.set(row[2])
+            else:
+                DQ_RUN_PRESENT.set(0)
+        except Exception:
+            logger.exception("Could not refresh DQ metrics")
+    return await call_next(request)
 
 # =============================================
 # Register Routers

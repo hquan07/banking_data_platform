@@ -48,7 +48,7 @@ def run_pipeline(spark):
             concat(substring(customer_df["last_name"], 1, 1), lit("***")).alias("last_name"),
             regexp_replace(customer_df["email"], "^(.*)@(.*)$", "***@$2").alias("email"),
             concat(lit("*******"), substring(customer_df["phone"], -4, 4)).alias("phone"),
-            customer_df["address"],
+            lit("REDACTED").alias("address"),
             customer_df["country"],
             customer_df["gender"],
             account_df["account_id"],
