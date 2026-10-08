@@ -39,6 +39,7 @@ def get_alerts(
     account_id: Optional[str] = None, payment_id: Optional[str] = None,
     rule: Optional[str] = None, status: Optional[str] = None,
     risk_level: Optional[str] = None,
+    search: Optional[str] = Query(None, max_length=100),
     created_from: Optional[datetime] = None, created_to: Optional[datetime] = None,
     current_user: dict = Depends(get_current_user),
 ):
@@ -58,6 +59,10 @@ def get_alerts(
                     if value:
                         clauses.append(f"{column} = %s")
                         params.append(value)
+                if search and search.strip():
+                    pattern = "%" + search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+                    clauses.append("(account_id ILIKE %s OR payment_id ILIKE %s OR rule_name ILIKE %s)")
+                    params.extend([pattern] * 3)
                 if created_from:
                     clauses.append("created_at >= %s")
                     params.append(created_from)

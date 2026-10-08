@@ -20,21 +20,32 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
   const [totalAlerts, setTotalAlerts] = useState(0);
   const [selectedAlerts, setSelectedAlerts] = useState([]);
   const [caseError, setCaseError] = useState('');
+  const [loadingCases, setLoadingCases] = useState(true);
+  const [searchText, setSearchText] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const itemsPerPage = 7;
+
+  useEffect(() => {
+    const timeout = setTimeout(() => { setCurrentPage(1); setDebouncedSearch(searchText.trim()); }, 350);
+    return () => clearTimeout(timeout);
+  }, [searchText]);
 
   useEffect(() => {
     fetchAlerts();
     fetchUsers();
     const interval = setInterval(fetchAlerts, 3000);
     return () => clearInterval(interval);
-  }, [currentPage]);
+  }, [currentPage, debouncedSearch, token]);
 
   const fetchAlerts = () => {
     if (!token) return;
-    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts?page=${currentPage}&limit=${itemsPerPage}`, {
+    setLoadingCases(true);
+    const params = new URLSearchParams({ page: currentPage, limit: itemsPerPage });
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts?${params}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
-      .then(res => res.json())
+      .then(async res => { if (!res.ok) throw new Error((await res.json()).detail || 'Cannot load cases'); return res.json(); })
       .then(data => {
         if (data.data) {
           setPgAlerts(data.data);
@@ -43,8 +54,10 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
           setPgAlerts(data);
           setTotalAlerts(data.length);
         }
+        setCaseError('');
       })
-      .catch(console.error);
+      .catch(err => setCaseError(err.message))
+      .finally(() => setLoadingCases(false));
   };
 
   const fetchUsers = () => {
@@ -207,7 +220,18 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
             </button>
           </div>
         )}
+        <label style={{display: 'block', marginTop: 12, color: '#cbd5e1'}}>
+          Tìm theo account, payment hoặc rule
+          <input
+            type="search"
+            value={searchText}
+            onChange={event => setSearchText(event.target.value)}
+            maxLength={100}
+            style={{display: 'block', width: '100%', maxWidth: 360, marginTop: 6, padding: 8, borderRadius: 6}}
+          />
+        </label>
         {caseError && <p role="alert" style={{color: '#ef4444'}}>{caseError}</p>}
+        {loadingCases && <p role="status" style={{color: '#94a3b8'}}>Đang tải cases...</p>}
 
         <div style={{overflowX: 'visible'}}>
           <table style={{width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginTop: '1rem'}}>
@@ -407,8 +431,8 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
                   )}
                 </React.Fragment>
               ))}
-              {pgAlerts.length === 0 && (
-                <tr><td colSpan="8" style={{textAlign: 'center', padding: '20px', color: '#64748b'}}>No alerts in Postgres database</td></tr>
+              {!loadingCases && !caseError && pgAlerts.length === 0 && (
+                <tr><td colSpan="8" style={{textAlign: 'center', padding: '20px', color: '#64748b'}}>Không có case phù hợp.</td></tr>
               )}
             </tbody>
           </table>
@@ -444,7 +468,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
 
       {/* Fraud Distribution */}
       <div className="panel col-span-6">
-        <h2 className="panel-title">Fraud Distribution</h2>
+        <h2 className="panel-title">Fraud Distribution (dữ liệu minh họa)</h2>
         <ResponsiveContainer width="100%" height={250}>
           <PieChart>
             <Pie data={donutData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
@@ -462,7 +486,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
 
       {/* Top Risky Accounts */}
       <div className="panel col-span-6">
-        <h2 className="panel-title">Top Risky Accounts</h2>
+        <h2 className="panel-title">Top Risky Accounts (dữ liệu minh họa)</h2>
         <ResponsiveContainer width="100%" height={250}>
           <BarChart data={riskyAccountsData} layout="vertical" margin={{top: 5, right: 30, left: 20, bottom: 5}}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" horizontal={false} />
@@ -480,7 +504,7 @@ export default function SecurityTab({ alerts, graphData, scatterData, riskyAccou
 
       {/* Anomaly Scatter Plot */}
       <div className="panel col-span-12" style={{height: '350px'}}>
-        <h2 className="panel-title">Anomaly Detection (Scatter Plot)</h2>
+        <h2 className="panel-title">Anomaly Detection (dữ liệu minh họa)</h2>
         <ResponsiveContainer width="100%" height={300}>
           <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />

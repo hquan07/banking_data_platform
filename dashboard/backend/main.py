@@ -14,6 +14,7 @@ from prometheus_client import Gauge
 
 from core.db import pg_conn, graph_driver, ch_client, redis_client, get_s3_client
 from core.security import get_password_hash
+from core.deps import resolve_user_token
 from core.runtime import APP_MODE, ENABLE_MOCK_DATA, validate_runtime_config
 from services.kafka_client import manager, consume_kafka, simulate_events, kafka_ready
 
@@ -208,7 +209,16 @@ app.include_router(config_router)
 # =============================================
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
+    protocols = [item.strip() for item in websocket.headers.get("sec-websocket-protocol", "").split(",")]
+    if len(protocols) != 2 or protocols[0] != "bearer":
+        await websocket.close(code=1008)
+        return
+    try:
+        resolve_user_token(protocols[1])
+    except Exception:
+        await websocket.close(code=1008)
+        return
+    await manager.connect(websocket, subprotocol="bearer")
     try:
         while True:
             data = await websocket.receive_text()

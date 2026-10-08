@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { Activity, ShieldAlert, Zap, Server, LayoutDashboard, BarChart3, History, Settings, Users, Network } from 'lucide-react';
-import OverviewTab from './components/OverviewTab';
-import SecurityTab from './components/SecurityTab';
-import AnalyticsTab from './components/AnalyticsTab';
-import HistoryTab from './components/HistoryTab';
-import RulesManagementTab from './components/RulesManagementTab';
-import UserManagementTab from './components/UserManagementTab';
-import ArchitectureTab from './components/ArchitectureTab';
+const OverviewTab = lazy(() => import('./components/OverviewTab'));
+const SecurityTab = lazy(() => import('./components/SecurityTab'));
+const AnalyticsTab = lazy(() => import('./components/AnalyticsTab'));
+const HistoryTab = lazy(() => import('./components/HistoryTab'));
+const RulesManagementTab = lazy(() => import('./components/RulesManagementTab'));
+const UserManagementTab = lazy(() => import('./components/UserManagementTab'));
+const ArchitectureTab = lazy(() => import('./components/ArchitectureTab'));
 import Login from './components/Login';
 import { AuthProvider, AuthContext } from './components/AuthContext';
 import './index.css';
@@ -49,7 +49,8 @@ function MainApp() {
 
   useEffect(() => {
     let isMounted = true;
-    const ws = new WebSocket((window._env_?.WS_URL || "ws://localhost:8000") + "/ws/stream");
+    if (!token) return undefined;
+    const ws = new WebSocket((window._env_?.WS_URL || "ws://localhost:8000") + "/ws/stream", ['bearer', token]);
 
     ws.onopen = () => {
       console.log("Connected to WebSocket");
@@ -124,7 +125,7 @@ function MainApp() {
       ws.close();
       clearInterval(interval);
     };
-  }, []);
+  }, [token]);
 
   const donutData = [
     { name: 'Velocity (Redis)', value: 45, color: '#ef4444' },
@@ -240,7 +241,7 @@ function MainApp() {
         {/* Dynamic Tab Content */}
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '2rem', padding: '10px 20px'}}>
           {/* TPS Control Slider */}
-          <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '0.5rem 1rem', borderRadius: '8px'}}>
+          {['ADMIN', 'OPERATOR'].includes(user?.role) && <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '0.5rem 1rem', borderRadius: '8px'}}>
             <span style={{fontSize: '0.875rem', color: 'var(--text-secondary)'}}>Mock TPS ({targetTps}):</span>
             <input 
               type="range" 
@@ -261,7 +262,7 @@ function MainApp() {
               }}
               style={{cursor: 'pointer', accentColor: 'var(--accent-color)'}}
             />
-          </div>
+          </div>}
 
           <div className="status-badge" style={{borderColor: isConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}}>
             <span className="dot" style={{backgroundColor: isConnected ? '#10b981' : '#ef4444'}}></span>
@@ -274,27 +275,28 @@ function MainApp() {
           <div className="metric-card col-span-4">
             <div className="metric-header">
               <Activity className="icon" size={20} />
-              <span>TPS / Lưu lượng</span>
+              <span>Lưu lượng WebSocket của phiên</span>
             </div>
             <div className="metric-value">{tps} <span style={{fontSize: '1rem', color: 'var(--text-secondary)'}}>tx/s</span></div>
           </div>
           <div className="metric-card col-span-4">
             <div className="metric-header">
               <Zap className="icon" size={20} style={{color: '#10b981'}} />
-              <span>Giá trị lưu chuyển (24h)</span>
+              <span>Giá trị quan sát từ khi mở trang</span>
             </div>
             <div className="metric-value">${totalValue.toLocaleString()}</div>
           </div>
           <div className="metric-card col-span-4">
             <div className="metric-header">
               <Server className="icon" size={20} style={{color: '#8b5cf6'}} />
-              <span>System Health</span>
+              <span>Kết nối WebSocket</span>
             </div>
-            <div className="metric-value" style={{color: '#10b981'}}>99.9%</div>
+            <div className="metric-value" style={{color: isConnected ? '#10b981' : '#ef4444'}}>{isConnected ? 'Đã kết nối' : 'Mất kết nối'}</div>
           </div>
         </div>
 
         {/* Tab Content */}
+        <Suspense fallback={<div role="status">Đang tải nội dung...</div>}>
         {activeTab === 'overview' && <OverviewTab data={chartData} mapData={mapData} />}
         {activeTab === 'security' && <SecurityTab alerts={alerts} graphData={graphData} scatterData={scatterData} riskyAccountsData={riskyAccountsData} donutData={donutData} />}
         {activeTab === 'analytics' && <AnalyticsTab sankeyData={sankeyData} funnelData={funnelData} />}
@@ -302,6 +304,7 @@ function MainApp() {
         {activeTab === 'users' && <UserManagementTab />}
         {activeTab === 'rules' && <RulesManagementTab />}
         {activeTab === 'architecture' && <ArchitectureTab />}
+        </Suspense>
         </main>
       </div>
     </div>
