@@ -17,7 +17,8 @@
   metrics. The dashboard loads tabs on demand and labels illustrative charts.
 - Superset connector installation moved into a pinned image, and metadata is
   mounted on a persistent named volume. Frontend uses `npm ci`; direct Spark
-  and backend Python dependencies are pinned.
+  and backend Python dependencies are pinned. Stateful Compose services use
+  the exact digests of the images running when this release was verified.
 
 ## Data migration and rollback
 

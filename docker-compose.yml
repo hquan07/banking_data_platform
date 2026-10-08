@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:15
+    image: postgres@sha256:7e2070cf6ad06fb3cbbd141b1bafbb7fd5bb63e2b6001e6daf34448eb555e4b3
     container_name: banking_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -23,7 +23,7 @@ services:
       - data_network
 
   kafka:
-    image: bitnamilegacy/kafka:latest
+    image: bitnamilegacy/kafka@sha256:f45d5b813412e1ef7ce67b467309a84e4c6dc03d7626a0b6da867db9b69bd107
     container_name: banking_kafka
     ports:
       - "9092:9092"
@@ -54,7 +54,7 @@ services:
       - backend_network
 
   kafka_topics_init:
-    image: bitnamilegacy/kafka:latest
+    image: bitnamilegacy/kafka@sha256:f45d5b813412e1ef7ce67b467309a84e4c6dc03d7626a0b6da867db9b69bd107
     entrypoint: ["/bin/bash", "/config/init-topics.sh"]
     volumes:
       - ./kafka/init-topics.sh:/config/init-topics.sh:ro
@@ -217,7 +217,7 @@ services:
       - data_network
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
     container_name: banking_prometheus
     ports:
       - "9090:9090"
@@ -228,7 +228,7 @@ services:
       - data_network
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana@sha256:b28bae15e219c998fb0e0424ed724930cc61b1f61fb404d47c862f9a23f9e572
     container_name: banking_grafana
     ports:
       - "3000:3000"
@@ -242,7 +242,7 @@ services:
       - backend_network
 
   kafka-exporter:
-    image: danielqsj/kafka-exporter:latest
+    image: danielqsj/kafka-exporter@sha256:d1014f41712d979f4fd01427b2ecd684e0b22fd756bfcd6a9d0c6b550038c724
     container_name: banking_kafka_exporter
     restart: on-failure
     command: ["--kafka.server=banking_kafka:9092"]
@@ -256,7 +256,7 @@ services:
       - data_network
 
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server@sha256:5d6b622bbb109f40d12333187e44ae80864cf72aa71ae9a4704a53496615e941
     container_name: banking_clickhouse
     ports:
       - "8123:8123"
@@ -278,7 +278,7 @@ services:
       - data_network
 
   redis:
-    image: redis:latest
+    image: redis@sha256:c94085d298b738be22c9ccdc0ac3761fa6649df7dd82ad1d42367f3cb9714935
     container_name: banking_redis
     command: redis-server --appendonly yes
     volumes:
