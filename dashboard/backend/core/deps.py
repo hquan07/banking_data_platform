@@ -3,7 +3,8 @@ FastAPI dependency injection functions.
 """
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from core.security import SECRET_KEY, ALGORITHM
 from core.db import pg_conn
 
@@ -23,7 +24,7 @@ def resolve_user_token(token: str):
         user_id: int = payload.get("id")
         if not username or not isinstance(user_id, int):
             raise credentials_exception
-    except JWTError:
+    except InvalidTokenError:
         raise credentials_exception
     if pg_conn is None:
         raise HTTPException(status_code=503, detail="User database unavailable")
