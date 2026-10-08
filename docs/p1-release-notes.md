@@ -8,8 +8,9 @@
 - Customer Silver DQ checks read parquet, quarantine invalid rows, and persist
   run-scoped evidence. Payment and transfer events have explicit v1 contracts
   and DLQs. Approved payment retries use `payment-events-retry`.
-- Graph transfer processing is idempotent and detects account cycles. A real
-  upstream payment/transfer dataset source is not connected yet.
+- Graph transfer processing is idempotent and detects account cycles. The
+  benchmark replay path now handles public datasets; upstream live
+  payment/transfer sources remain unconfigured.
 - Runtime mock generators, canned API responses, synthetic training/demo
   registry utilities, and static sample dashboard charts have been removed.
   APIs report unavailable dependencies and dashboards show empty states until
@@ -19,8 +20,8 @@
 - Superset connector installation uses a pinned image and persistent metadata
   volume. Frontend uses `npm ci`; direct Spark and backend Python dependencies
   are pinned. Stateful Compose services use pinned image versions.
-- The Architecture Map retains the Banking Data Platform diagram and labels
-  the event source as unconfigured rather than depicting a mock producer.
+- The Architecture Map retains the Banking Data Platform diagram and shows the
+  opt-in benchmark replay separately from unconfigured live sources.
 
 See `docs/p1-demo-acceptance.md` for the current data-source status and the
 database-volume cleanup boundary.
@@ -46,7 +47,7 @@ removing mock-data generation because their provenance may be mixed.
 
 - A permissioned, labeled fraud dataset and a point-in-time feature pipeline
   are required before approving or deploying an ML model.
-- Connect and validate an authorized payment/transfer dataset source before
-  expecting dashboard analytics or AML graph records.
+- Connect authorized live payment/transfer sources before interpreting the
+  platform as a live banking system. Benchmark results remain source-scoped.
 - Load testing, backup/restore rehearsal and a security review are still needed
   before claiming production readiness. CI/CD remains out of scope.

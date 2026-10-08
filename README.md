@@ -2,11 +2,11 @@
 
 A real-time banking data platform featuring a comprehensive Fraud Detection Engine, Anti-Money Laundering (AML) analysis, and a Security Dashboard tailored for investigators.
 
-**Data source status:** no dataset replay source is connected at present.
-Runtime mock generators, canned API responses and static sample charts were
-removed; dashboards show empty states until events or records arrive. See
-`docs/p1-demo-acceptance.md` for the current source boundary and the
-database-volume cleanup note.
+**Data source status:** the opt-in benchmark replay is available. DS1, DS3 and
+DS4 have valid local profiles; 1,000-event DS3 and DS4 canaries have passed.
+DS2 remains blocked on Kaggle competition access. Runtime mock generators,
+canned API responses and static sample charts remain removed. See
+`docs/dataset-runs/README.md` for the current evidence and gates.
 
 This project is built on a **Big Data / Event-Driven** architecture, utilizing real-time data streaming and multiple specialized databases to achieve high performance.
 
@@ -27,13 +27,17 @@ The platform follows a robust event-driven microservices architecture, secured b
 ```mermaid
 graph TD
     %% Define Nodes
-    Source["External / Dataset Source (not connected)"] -->|Events when configured| Kafka[("Apache Kafka")]
+    Replay["Dataset Catalog + Opt-in Replay"] -->|benchmark-events| Kafka[("Apache Kafka")]
+    External["External Payment / Transfer Source"] -.->|not configured| Kafka
     Kafka -->|Consumes Events| Spark["Apache Spark (Rule Engine)"]
+    Kafka -->|benchmark-events| Benchmark["Benchmark Processor"]
     
     %% Databases
     Spark -->|Writes Alerts| Postgres[("PostgreSQL (Alerts & Users)")]
     Spark -->|Writes History| ClickHouse[("ClickHouse (OLAP Analytics)")]
     Spark -->|Writes Graph| Neo4j[("Neo4j (Network Graph)")]
+    Benchmark -->|Events + evaluations| Postgres
+    Benchmark -->|PaySim namespace| Neo4j
     
     %% Backend
     Postgres <--> Backend["FastAPI Backend"]
@@ -137,7 +141,8 @@ banking_data_platform/
 │       ├── src/
 │       │   ├── components/    # Tabs (Security, Analytics, Rules, KYC...)
 │       │   └── index.css      # Custom UI styling
-├── data_generator/            # Script generating fake transactions to Kafka
+├── datasets/                  # Public dataset catalog, acquisition and profiling
+├── kafka/producers/           # Opt-in benchmark dataset replay
 ├── docker/                    # init.sql scripts for DB startup
 ├── spark_jobs/                # PySpark Streaming Scripts (Fraud Rule Engine)
 └── docker-compose.yml         # Infrastructure configuration
@@ -147,7 +152,7 @@ banking_data_platform/
 
 1. **Cannot connect to MinIO / Upload fails**: Ensure ports `9000` (API) and `9001` (console) are not occupied. The frontend uploads through presigned URLs on the API port `9000`.
 2. **No real-time data visible**: Check Kafka logs (`docker logs banking_kafka`) and verify if the Spark Streaming Job is running.
-3. **No events visible**: No payment or transfer source is connected by default. Check `/api/health/live` and `/api/health/ready`; charts remain empty until an event source is configured.
+3. **No events visible**: No live payment or transfer source is connected by default. Check `/api/health/live` and `/api/health/ready`. Use the Datasets tab for an explicit benchmark replay; charts remain empty when neither a live source nor a replay run is active.
 
 ---
 *This project is designed as a Proof of Concept (PoC) for a real-time banking data processing platform utilizing Big Data technologies.*

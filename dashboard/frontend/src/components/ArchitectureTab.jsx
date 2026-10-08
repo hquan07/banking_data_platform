@@ -6,19 +6,19 @@ const paths = [
   {
     title: 'Thanh toán & phân tích gian lận',
     nodes: [
-      ['Dataset source', 'Chưa cấu hình nguồn phát payment-events'],
-      ['Kafka', 'payment-events, fraud-events, AML và DLQ'],
+      ['Dataset catalog + replay', 'DS1/DS3/DS4 đã profile; replay benchmark-events theo yêu cầu'],
+      ['Kafka', 'payment, transfer, benchmark, fraud, AML và DLQ'],
       ['Spark payment processor', 'Kiểm tra schema, ghi giao dịch'],
-      ['PostgreSQL + ClickHouse', 'Sổ giao dịch và phân tích lịch sử'],
-      ['Spark fraud engine', 'Rule-based detection; ML chưa được phê duyệt'],
+      ['Benchmark processor', 'Lưu provenance/evaluation; rule theo từng nguồn'],
+      ['PostgreSQL + ClickHouse', 'Benchmark analytics và lịch sử payment'],
     ],
   },
   {
     title: 'Chuyển tiền & AML graph',
     nodes: [
-      ['Transfer source', 'Chưa cấu hình nguồn phát transfer-events'],
-      ['Graph processor', 'Consumer idempotent, replay từ Kafka'],
-      ['Neo4j', 'Quan hệ tài khoản, vòng chuyển tiền 3–5 nút'],
+      ['Live event sources', 'Nguồn payment-events và transfer-events bên ngoài vẫn chưa cấu hình'],
+      ['Graph processors', 'Live Account và PaySim BenchmarkAccount tách biệt'],
+      ['Neo4j', 'Chu trình live + flow TRANSFER→CASH_OUT từ PaySim'],
       ['Dashboard backend', 'Lưu alert thành case có audit trail'],
     ],
   },

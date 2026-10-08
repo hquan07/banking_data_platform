@@ -24,7 +24,7 @@ const statusLabels = {
   unhealthy: 'Không phản hồi hoặc probe thất bại',
   degraded: 'API phản hồi nhưng chưa sẵn sàng',
   documented: 'Chưa có health probe trên sơ đồ',
-  planned: 'Dataset source chưa được cấu hình',
+  planned: 'Nguồn live chưa được cấu hình',
 };
 
 function ArchitectureNode({ data, selected }) {
@@ -78,23 +78,23 @@ const node = (id, x, y, label, sublabel, description, icon, color, planned = fal
 
 // This is the deployed banking topology, not the NewsPulse services in the visual reference.
 const initialNodes = [
-  node('payment-producer', 0, 0, 'Dataset source', 'Chưa cấu hình', 'Chưa có dataset replay source được kết nối.', 'database', '#f59e0b', true),
-  node('transfer-source', 300, 0, 'Transfer source', 'Chưa cấu hình', 'Chưa có nguồn transfer-events được kết nối.', 'network', '#f59e0b', true),
+  node('payment-producer', 0, 0, 'Dataset catalog + replay', 'Opt-in benchmark source', 'Profile và replay DS1–DS4 vào benchmark-events; DS2 hiện chờ Kaggle access.', 'database', '#10b981'),
+  node('transfer-source', 300, 0, 'Live event sources', 'Chưa cấu hình', 'Chưa có nguồn payment-events hoặc transfer-events bên ngoài được kết nối.', 'network', '#f59e0b', true),
   node('user', 900, 0, 'Dashboard user', 'Web client', 'Người dùng truy cập giao diện và case management.', 'user', '#3b82f6'),
   node('retry', 0, 145, 'Payment retry worker', 'Approved retry', 'Phát lại payment-events-retry đã được duyệt.', 'retry', '#3b82f6'),
-  node('kafka', 300, 145, 'Kafka broker', 'Event streaming + DLQ', 'Truyền payment, transfer, fraud và AML events; giữ retry/DLQ.', 'zap', '#ef4444'),
+  node('kafka', 300, 145, 'Kafka broker', 'Event streaming + DLQ', 'Truyền payment, transfer, benchmark, fraud và AML events; giữ retry/DLQ.', 'zap', '#ef4444'),
   node('frontend', 900, 145, 'React dashboard', 'Web + WebSocket', 'Giao diện phân tích, alert và Architecture Map.', 'monitor', '#3b82f6'),
   node('airflow', 0, 290, 'Airflow + DQ', 'Silver orchestration', 'Chạy Silver data quality và lưu run-scoped evidence.', 'server', '#a78bfa'),
   node('spark-payment', 300, 290, 'Spark payment', 'Stream processor', 'Validate schema/event-time và ghi payment ledger.', 'activity', '#f59e0b'),
-  node('spark-fraud', 600, 290, 'Spark fraud', 'Rule-based engine', 'Phát hiện fraud bằng rule; chưa có nguồn dataset được kết nối.', 'shield', '#f59e0b'),
+  node('spark-fraud', 600, 290, 'Fraud processors', 'Live + benchmark rules', 'Spark xử lý payment; benchmark processor lưu provenance và rule evaluation theo nguồn.', 'shield', '#f59e0b'),
   node('backend', 900, 290, 'FastAPI backend', 'Auth + case API', 'Xử lý auth, case lifecycle, analytics và evidence.', 'server', '#3b82f6'),
   node('minio', 0, 435, 'MinIO', 'Silver + evidence', 'Lưu Silver parquet, quarantine và case evidence.', 'archive', '#10b981'),
-  node('graph-processor', 300, 435, 'Graph processor', 'AML cycle detection', 'Consumer idempotent; phát hiện chu trình 3–5 tài khoản.', 'graph', '#f59e0b'),
+  node('graph-processor', 300, 435, 'Graph processors', 'AML + PaySim namespace', 'Phát hiện chu trình live và TRANSFER→CASH_OUT trong graph benchmark tách biệt.', 'graph', '#f59e0b'),
   node('redis', 600, 435, 'Redis', 'Velocity + state', 'Lưu velocity window và trạng thái xử lý.', 'database', '#10b981'),
   node('observability', 900, 435, 'Prometheus + Grafana', 'Metrics + alerts', 'Giám sát metrics, SLO và alert vận hành.', 'bell', '#a78bfa'),
-  node('postgres', 300, 580, 'PostgreSQL', 'Ledger + cases', 'Lưu payment, user, alert, audit và DQ runs.', 'database', '#10b981'),
+  node('postgres', 300, 580, 'PostgreSQL', 'Ledger + benchmark + cases', 'Lưu payment, benchmark events/evaluations, alert, audit và DQ runs.', 'database', '#10b981'),
   node('clickhouse', 600, 580, 'ClickHouse', 'OLAP analytics', 'Kho phân tích lịch sử giao dịch.', 'storage', '#10b981'),
-  node('neo4j', 900, 580, 'Neo4j', 'AML graph', 'Đồ thị tài khoản và quan hệ chuyển tiền.', 'graph', '#10b981'),
+  node('neo4j', 900, 580, 'Neo4j', 'AML graph', 'Đồ thị Account live và BenchmarkAccount synthetic ở namespace riêng.', 'graph', '#10b981'),
 ];
 
 const edge = (source, target, label, color, planned = false) => ({
@@ -106,12 +106,12 @@ const edge = (source, target, label, color, planned = false) => ({
 });
 
 const edges = [
-  edge('payment-producer', 'kafka', 'payment-events', '#ef4444'),
-  edge('transfer-source', 'kafka', 'transfer-events', '#f59e0b', true),
+  edge('payment-producer', 'kafka', 'benchmark-events', '#10b981'),
+  edge('transfer-source', 'kafka', 'payment + transfer', '#f59e0b', true),
   edge('retry', 'kafka', 'approved retry', '#ef4444'),
-  edge('kafka', 'spark-payment', 'consume', '#ef4444'),
-  edge('kafka', 'spark-fraud', 'consume', '#ef4444'),
-  edge('kafka', 'graph-processor', 'AML events', '#ef4444'),
+  edge('kafka', 'spark-payment', 'payment-events', '#ef4444'),
+  edge('kafka', 'spark-fraud', 'payment + benchmark', '#ef4444'),
+  edge('kafka', 'graph-processor', 'transfer + benchmark', '#ef4444'),
   edge('spark-payment', 'postgres', 'payments', '#f59e0b'),
   edge('spark-payment', 'clickhouse', 'analytics', '#f59e0b'),
   edge('spark-fraud', 'redis', 'velocity', '#f59e0b'),

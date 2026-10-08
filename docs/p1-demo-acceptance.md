@@ -5,18 +5,23 @@ rows and canned API responses have been removed. The dashboard now shows empty
 states when no events or records exist. The API returns a service error when a
 required datastore is unavailable instead of substituting sample values.
 
-No public dataset adapter is connected yet. Kafka consumers, the transfer
-contract, fraud rules, alert workflow and graph processing remain available,
-but they require events from an external source before the charts and case
-lists contain data. `APP_MODE` accepts `integration` and `production`; there is
-no runtime demo mode or `ENABLE_MOCK_DATA` switch.
+The public benchmark adapter is available as an explicit, source-scoped replay
+workflow. DS1, DS3 and DS4 have validated local profiles; 1,000-row DS3 and DS4
+canaries have been replayed and reconciled. DS2 remains blocked until the
+operator authenticates with Kaggle and accepts the IEEE-CIS competition rules.
+Benchmark replay is opt-in and is not presented as a live banking feed.
+
+Live payment and transfer sources are still unconfigured. Their Kafka
+consumers, contracts, fraud rules, alert workflow and graph processing remain
+available for authorized external events. `APP_MODE` accepts `integration` and
+`production`; there is no runtime demo mode or `ENABLE_MOCK_DATA` switch.
 
 Static analytics panels that had no data-backed API have been removed. The
-Architecture Map remains and identifies the payment and transfer sources as
-unconfigured. A dataset replay adapter should add source identity and run
-provenance without putting ground-truth labels into live scoring messages.
+Architecture Map remains and distinguishes the dataset replay path from the
+unconfigured live payment/transfer path. Replayed records carry dataset and run
+provenance; ground-truth labels are stored separately and never passed into the
+rule evaluation input.
 
-The clean-up changes application code and documentation only. It does not
-delete database rows, Kafka records, checkpoints, Neo4j nodes, MinIO objects or
-other mounted-volume contents. Those records need a provenance review before
-any targeted purge.
+The original mock-data cleanup was followed by an explicit purge of this
+project's Kafka and datastore volumes. The current persisted benchmark records
+come only from the documented DS3 and DS4 canary runs.
