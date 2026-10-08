@@ -1,0 +1,56 @@
+{
+  "catalog_version": 1,
+  "datasets": [
+    {
+      "id": "ds1_creditcard",
+      "name": "Credit Card Fraud Detection",
+      "domain": "card transaction classification",
+      "provenance_type": "anonymized real transactions",
+      "source": "mlg-ulb/creditcardfraud",
+      "source_url": "https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud",
+      "access": "Kaggle dataset terms apply",
+      "expected_files": ["creditcard/creditcard.csv"],
+      "time_semantics": "Time is seconds since the first observation; the calendar origin is unavailable",
+      "entity_limitations": "No customer, account, card, merchant, channel, currency or location identifiers are provided"
+    },
+    {
+      "id": "ds2_ieee_cis",
+      "name": "IEEE-CIS Fraud Detection",
+      "domain": "card-not-present ecommerce fraud",
+      "provenance_type": "anonymized competition data",
+      "source": "ieee-fraud-detection",
+      "source_url": "https://www.kaggle.com/competitions/ieee-fraud-detection/data",
+      "access": "Kaggle competition rules must be accepted before download",
+      "expected_files": [
+        "ieee-cis/train_transaction.csv",
+        "ieee-cis/train_identity.csv"
+      ],
+      "time_semantics": "TransactionDT is a relative timedelta from an undisclosed reference, not a wall-clock timestamp",
+      "entity_limitations": "Address and card fields are anonymized codes and must not be presented as decoded geography or identity"
+    },
+    {
+      "id": "ds3_paysim",
+      "name": "PaySim Synthetic Financial Dataset",
+      "domain": "mobile money transaction simulation",
+      "provenance_type": "synthetic simulation derived from aggregate real-world patterns",
+      "source": "ealaxi/paysim1",
+      "source_url": "https://www.kaggle.com/datasets/ealaxi/paysim1",
+      "access": "Kaggle dataset terms apply",
+      "expected_files": ["paysim/PS_20174392719_1491204439457_log.csv"],
+      "time_semantics": "step is an hourly simulation offset",
+      "entity_limitations": "Participant IDs and balances belong to a simulator and are not real banking identities"
+    },
+    {
+      "id": "ds4_baf",
+      "name": "Bank Account Fraud (BAF) Base",
+      "domain": "bank account opening application fraud",
+      "provenance_type": "privacy-preserving synthetic benchmark derived from anonymized real data",
+      "source": "feedzai/bank-account-fraud-dataset-neurips-2022",
+      "source_url": "https://www.kaggle.com/datasets/feedzai/bank-account-fraud-dataset-neurips-2022",
+      "access": "Kaggle dataset terms and the benchmark license apply",
+      "expected_files": ["bank-account-fraud/Base.csv"],
+      "time_semantics": "month is a discrete benchmark period (0-7), not a calendar timestamp",
+      "entity_limitations": "Rows are account-opening applications, not payment transactions or linked customer histories"
+    }
+  ]
+}

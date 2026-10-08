@@ -1,0 +1,4 @@
+raw/**
+!raw/.gitkeep
+profiles/*.json
+profiles/*.csv

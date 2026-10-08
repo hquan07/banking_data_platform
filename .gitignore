@@ -16,6 +16,12 @@ dashboard/frontend/dist/
 .runtime/
 .spark-checkpoints/
 
+# Public benchmark datasets are downloaded locally and never committed.
+datasets/raw/**
+!datasets/raw/.gitkeep
+datasets/profiles/*.json
+datasets/profiles/*.csv
+
 # MacOS
 .DS_Store
 
