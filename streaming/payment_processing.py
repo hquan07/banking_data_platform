@@ -77,6 +77,7 @@ def process_stream(spark):
         .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")) \
         .option("subscribe", "payment-events") \
         .option("startingOffsets", "earliest") \
+        .option("maxOffsetsPerTrigger", os.environ.get("SPARK_MAX_OFFSETS_PER_TRIGGER", "1000")) \
         .option("failOnDataLoss", "true") \
         .load()
     

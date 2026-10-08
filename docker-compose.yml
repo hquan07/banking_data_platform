@@ -47,9 +47,22 @@ services:
       interval: 10s
       timeout: 10s
       retries: 20
+    volumes:
+      - kafka_data:/bitnami/kafka/data
     networks:
       - data_network
       - backend_network
+
+  kafka_topics_init:
+    image: bitnamilegacy/kafka:latest
+    entrypoint: ["/bin/bash", "/config/init-topics.sh"]
+    volumes:
+      - ./kafka/init-topics.sh:/config/init-topics.sh:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - data_network
 
   debezium:
     image: quay.io/debezium/connect:2.4
@@ -230,11 +243,13 @@ services:
   kafka-exporter:
     image: danielqsj/kafka-exporter:latest
     container_name: banking_kafka_exporter
+    restart: on-failure
     command: ["--kafka.server=banking_kafka:9092"]
     ports:
       - "9308:9308"
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     networks:
       - backend_network
       - data_network
@@ -377,6 +392,7 @@ services:
     environment:
       - SPARK_MODE=client
       - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
+      - SPARK_MAX_OFFSETS_PER_TRIGGER=1000
       - POSTGRES_HOST=banking_postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DB=${POSTGRES_DB}
@@ -400,6 +416,8 @@ services:
         condition: service_started
       kafka:
         condition: service_healthy
+      kafka_topics_init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       clickhouse:
@@ -431,8 +449,8 @@ services:
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka_topics_init:
+        condition: service_completed_successfully
     networks:
       - backend_network
       - data_network
@@ -455,6 +473,7 @@ services:
     environment:
       - SPARK_MODE=client
       - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
+      - SPARK_MAX_OFFSETS_PER_TRIGGER=1000
       - POSTGRES_HOST=banking_postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DB=${POSTGRES_DB}
@@ -475,6 +494,8 @@ services:
         condition: service_started
       kafka:
         condition: service_healthy
+      kafka_topics_init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -485,6 +506,7 @@ services:
 
 volumes:
   postgres_data:
+  kafka_data:
   minio_data:
   clickhouse_data:
   neo4j_data:
