@@ -1,10 +1,14 @@
 import os
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, current_timestamp, regexp_replace, concat, substring, lit
+
+
+def write_silver(silver_df, path):
+    silver_df.write.mode("overwrite").parquet(path)
 
 def create_spark_session():
+    from pyspark.sql import SparkSession
+
     return SparkSession.builder \
         .appName("CustomerBatchPipeline") \
         .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.postgresql:postgresql:42.6.0") \
@@ -16,6 +20,8 @@ def create_spark_session():
         .getOrCreate()
 
 def run_pipeline(spark):
+    from pyspark.sql.functions import col, current_timestamp, regexp_replace, concat, substring, lit
+
     print("Starting Customer Batch Pipeline...")
     
     host = os.environ.get("POSTGRES_HOST", "localhost")
@@ -56,15 +62,10 @@ def run_pipeline(spark):
     print("Loading data into MinIO Data Lake (Silver Layer)...")
     s3_path = "s3a://banking-lake/silver/customers/"
     
-    # We must ensure the bucket exists in MinIO or handle it.
-    # We will assume 'banking-lake' bucket is created manually or by another script.
-    # For MVP robustness, we just write. Spark will create the folder, but MinIO needs the bucket.
-    
-    try:
-        silver_df.write.mode("overwrite").parquet(s3_path)
-        print("Successfully written to Data Lake!")
-    except Exception as e:
-        print(f"Warning: Could not write to MinIO (Bucket might not exist yet): {e}")
+    # A failed Silver write must fail the Airflow task; otherwise downstream
+    # quality checks can inspect stale data while this run still loads Gold.
+    write_silver(silver_df, s3_path)
+    print("Successfully written to Data Lake!")
 
     # 4. LOAD to Data Warehouse (Postgres DWH)
     print("Loading data into Data Warehouse (Gold Layer / Star Schema)...")

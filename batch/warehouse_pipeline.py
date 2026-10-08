@@ -1,8 +1,21 @@
 import os
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
+
+
+def read_silver(spark, path):
+    return spark.read.parquet(path)
+
+
+def write_clickhouse(dim_customer_df, url, properties):
+    dim_customer_df.write.jdbc(
+        url=url,
+        table="dim_customer",
+        mode="overwrite",
+        properties=properties,
+    )
 
 def create_spark_session():
+    from pyspark.sql import SparkSession
+
     # We include ClickHouse JDBC driver to write from Spark directly to ClickHouse
     return SparkSession.builder \
         .appName("ClickHouseWarehousePipeline") \
@@ -15,16 +28,14 @@ def create_spark_session():
         .getOrCreate()
 
 def run_pipeline(spark):
+    from pyspark.sql.functions import col
+
     print("Starting ClickHouse Warehouse Pipeline...")
     
     # 1. EXTRACT (Read from Data Lake - MinIO Silver Layer)
     print("Extracting customer data from MinIO (Silver)...")
     s3_path = "s3a://banking-lake/silver/customers/"
-    try:
-        silver_df = spark.read.parquet(s3_path)
-    except Exception as e:
-        print(f"Failed to read from MinIO, make sure customer_pipeline.py has run: {e}")
-        return
+    silver_df = read_silver(spark, s3_path)
         
     # 2. TRANSFORM (Prepare for ClickHouse Star Schema)
     dim_customer_df = silver_df.select(
@@ -54,18 +65,9 @@ def run_pipeline(spark):
         "driver": "com.clickhouse.jdbc.ClickHouseDriver"
     }
     
-    try:
-        # Note: In a real environment, the table should be created in ClickHouse with MergeTree engine first.
-        # Spark JDBC will create a basic table if it doesn't exist, but it might not be optimal MergeTree.
-        dim_customer_df.write.jdbc(
-            url=clickhouse_url, 
-            table="dim_customer", 
-            mode="overwrite", 
-            properties=clickhouse_properties
-        )
-        print("Successfully loaded into ClickHouse!")
-    except Exception as e:
-        print(f"Error writing to ClickHouse: {e}")
+    # Fail the task on sink errors instead of reporting a successful run.
+    write_clickhouse(dim_customer_df, clickhouse_url, clickhouse_properties)
+    print("Successfully loaded into ClickHouse!")
 
 if __name__ == "__main__":
     spark = create_spark_session()
