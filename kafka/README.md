@@ -49,7 +49,7 @@ DATASET_ID=ds3_paysim DATASET_MAX_EVENTS=1000 \
 
 `DATASET_REPLAY_RATE=0` disables pacing; the default is 50 events per second.
 `DATASET_START_ROW` resumes from a deterministic source row. Stable event IDs
-make downstream idempotency possible, but operators must still avoid comparing
+and downstream unique constraints provide replay deduplication, but operators must still avoid comparing
 metrics from overlapping replay runs unless the run boundary is recorded.
 
 The Redis velocity counter uses each event's UTC timestamp in a five-minute

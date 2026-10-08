@@ -85,7 +85,6 @@ def main() -> int:
         bootstrap_servers=args.bootstrap,
         acks="all",
         retries=10,
-        enable_idempotence=True,
     )
     try:
         summary = replay(

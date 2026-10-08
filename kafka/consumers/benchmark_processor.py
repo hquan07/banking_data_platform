@@ -98,7 +98,7 @@ def run_consumer() -> None:
         enable_auto_commit=False,
         auto_offset_reset="earliest",
     )
-    producer = KafkaProducer(bootstrap_servers=bootstrap, acks="all", retries=10, enable_idempotence=True)
+    producer = KafkaProducer(bootstrap_servers=bootstrap, acks="all", retries=10)
     try:
         for message in consumer:
             source = {"topic": message.topic, "partition": message.partition, "offset": message.offset}
