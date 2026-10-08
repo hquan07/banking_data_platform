@@ -1,6 +1,7 @@
 """Synthetic labels are deterministic and explicitly marked as demo data."""
 
 import csv
+from datetime import datetime, timezone
 
 import pytest
 
@@ -29,3 +30,11 @@ def test_csv_is_created_once(tmp_path):
 def test_rejects_too_few_rows():
     with pytest.raises(ValueError, match="200"):
         generate_rows(199)
+    with pytest.raises(ValueError, match="timezone-aware"):
+        generate_rows(300, start=datetime(2026, 2, 1))
+
+
+def test_later_monitoring_period_is_separate():
+    train = generate_rows(300, seed=7)
+    monitor = generate_rows(300, seed=8, start=datetime(2026, 2, 1, tzinfo=timezone.utc))
+    assert train[-1]["event_time"] < monitor[0]["event_time"]

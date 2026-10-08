@@ -2,6 +2,12 @@
 
 A real-time banking data platform featuring a comprehensive Fraud Detection Engine, Anti-Money Laundering (AML) analysis, and a Security Dashboard tailored for investigators.
 
+**Demo/PoC only:** transactions, transfer scenarios and fraud labels are
+synthetic. Dashboard charts that are illustrative are labeled as such. ML
+candidate metrics verify the offline workflow, not model quality on real
+banking data; synthetic models never score live transactions. See
+`docs/p1-demo-acceptance.md` for the P1 demo acceptance boundary.
+
 This project is built on a **Big Data / Event-Driven** architecture, utilizing real-time data streaming and multiple specialized databases to achieve high performance.
 
 ## ✨ Key Features

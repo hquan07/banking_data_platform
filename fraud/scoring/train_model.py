@@ -84,6 +84,7 @@ def train_candidate(input_path: Path, output_dir: Path, version: str, threshold:
         "feature_schema": list(FEATURES),
         "train_end_utc": train["event_time"].max().isoformat(),
         "holdout_start_utc": holdout["event_time"].min().isoformat(),
+        "holdout_end_utc": holdout["event_time"].max().isoformat(),
         "train_rows": len(train),
         "holdout_rows": len(holdout),
         "threshold": threshold,
@@ -96,10 +97,17 @@ def train_candidate(input_path: Path, output_dir: Path, version: str, threshold:
             "true_positive": int(tp), "false_positive": int(fp),
             "false_negative": int(fn), "true_negative": int(tn),
         },
+        "baseline": {
+            "feature_mean": {name: float(train[name].mean()) for name in FEATURES},
+            "feature_std": {name: float(train[name].std(ddof=0)) for name in FEATURES},
+            "positive_rate": float(train["is_fraud"].mean()),
+        },
         "status": "CANDIDATE_NOT_DEPLOYED",
         "data_origin": data_origin,
         "evaluation_scope": "pipeline_test_only" if data_origin == "synthetic_demo" else "unverified_labels",
         "production_eligible": False,
+        "interpretation": "Synthetic metrics validate the demo workflow, not real fraud performance"
+        if data_origin == "synthetic_demo" else "Labels and serving features require review",
     }
     version_dir = output_dir / version
     version_dir.mkdir(parents=True, exist_ok=False)

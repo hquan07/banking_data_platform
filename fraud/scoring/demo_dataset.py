@@ -15,11 +15,14 @@ FIELDS = ("event_time", "amount", "hour_of_day", "velocity_1h", "diff_from_avg",
           "is_international", "is_fraud", "data_origin")
 
 
-def generate_rows(count: int = 600, seed: int = 42) -> list[dict]:
+def generate_rows(count: int = 600, seed: int = 42,
+                  start: datetime | None = None) -> list[dict]:
     if count < 200:
         raise ValueError("at least 200 rows are required for a temporal holdout")
     rng = random.Random(seed)
-    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    start = start or datetime(2026, 1, 1, tzinfo=timezone.utc)
+    if start.tzinfo is None:
+        raise ValueError("start must be timezone-aware")
     rows = []
     for index in range(count):
         scripted_fraud = index % 17 == 0 or index % 29 == 0
@@ -37,14 +40,15 @@ def generate_rows(count: int = 600, seed: int = 42) -> list[dict]:
     return rows
 
 
-def write_demo_csv(path: Path, count: int = 600, seed: int = 42) -> None:
+def write_demo_csv(path: Path, count: int = 600, seed: int = 42,
+                   start: datetime | None = None) -> None:
     if path.exists():
         raise FileExistsError(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("x", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=FIELDS)
         writer.writeheader()
-        writer.writerows(generate_rows(count, seed))
+        writer.writerows(generate_rows(count, seed, start))
 
 
 def main() -> None:
@@ -52,8 +56,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--rows", type=int, default=600)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--start-time", default="2026-01-01T00:00:00Z",
+                        help="Timezone-aware ISO-8601 start; choose a later period for monitoring")
     args = parser.parse_args()
-    write_demo_csv(args.output, args.rows, args.seed)
+    start = datetime.fromisoformat(args.start_time.replace("Z", "+00:00"))
+    write_demo_csv(args.output, args.rows, args.seed, start)
     print(f"Wrote {args.rows} synthetic_demo rows to {args.output}")
 
 

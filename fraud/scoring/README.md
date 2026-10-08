@@ -13,6 +13,15 @@ offline training workflow:
 python3 -m fraud.scoring.demo_dataset --output /tmp/banking-demo-labeled.csv --seed 42
 python3 -m fraud.scoring.train_model --labeled-csv /tmp/banking-demo-labeled.csv \
   --output-dir /tmp/banking-demo-candidates --version demo-v1
+python3 -m fraud.scoring.demo_registry --candidates /tmp/banking-demo-candidates \
+  select --version demo-v1 --threshold 0.7
+python3 -m fraud.scoring.demo_dataset --output /tmp/banking-demo-later.csv \
+  --seed 99 --start-time 2026-02-01T00:00:00Z
+python3 -m fraud.scoring.demo_monitor --candidates /tmp/banking-demo-candidates \
+  --labeled-csv /tmp/banking-demo-later.csv
+python3 -m fraud.scoring.demo_registry --candidates /tmp/banking-demo-candidates \
+  select --version demo-v1 --threshold 0.8
+python3 -m fraud.scoring.demo_registry --candidates /tmp/banking-demo-candidates rollback
 ```
 
 The fixture carries `data_origin=synthetic_demo`; candidate metadata records
@@ -20,6 +29,13 @@ The fixture carries `data_origin=synthetic_demo`; candidate metadata records
 precision, recall, PR-AUC and calibration demonstrate the evaluation code, not
 real-world fraud-detection performance. Spark does not load the candidate or
 create live cases from it.
+The demo registry stores a checksum-verified candidate pointer, threshold and
+selection history in `demo_registry.json`. Its rollback restores the previous
+version/threshold pair. The monitor refuses data overlapping the training
+holdout, compares feature means to the training baseline and calculates metrics
+only when the later synthetic batch has labels. Neither command runs in
+`APP_MODE=production`. Use a persistent, ignored directory rather than `/tmp`
+if you want the demo artifacts to survive container recreation.
 
 `train_model.py` accepts an explicit CSV with `event_time`, `is_fraud`
 (confirmed 0/1 outcome), and the five feature columns listed in the script. It
