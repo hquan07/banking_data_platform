@@ -43,10 +43,11 @@ continues to show the Banking Data Platform topology.
   reported zero known vulnerabilities.
 - Backend dependency audit reported zero known vulnerabilities; backend
   readiness reported PostgreSQL, Kafka, Redis, Neo4j, ClickHouse and MinIO up.
-- Live integration tests: payment E2E passed. In the other live E2E selection,
-  6 passed and alert-lifecycle failed at normal login with HTTP 401: the
-  persisted admin account password differs from the current `.env` value.
-  Do not bypass authentication or reset the existing database just to pass it.
+- After the backend upgrade, 6 live E2E tests passed: payment, AML graph,
+  payment DLQ/retry, MinIO and Redis velocity. The alert-lifecycle E2E failed
+  at normal login with HTTP 401: the persisted admin account password differs
+  from the current `.env` value. Do not bypass authentication or reset the
+  existing database just to pass it.
 
 ## Remaining acceptance input and production-only work
 
