@@ -55,13 +55,13 @@ def test_replay_publishes_valid_rows_and_routes_invalid_rows_to_dlq(tmp_path):
 
     result = replay(producer, "ds1_creditcard", raw_dir, rate=0)
 
-    assert result == {
-        "dataset_id": "ds1_creditcard",
-        "start_row": 0,
-        "scanned": 2,
-        "published": 1,
-        "rejected": 1,
-    }
+    assert result["dataset_id"] == "ds1_creditcard"
+    assert result["start_row"] == 0
+    assert result["scanned"] == 2
+    assert result["published"] == 1
+    assert result["rejected"] == 1
+    assert result["elapsed_seconds"] >= 0
+    assert result["observed_rate_eps"] >= 0
     assert producer.messages[0][0] == "benchmark-events"
     assert producer.messages[0][1] == "ds1_creditcard:0"
     assert producer.messages[1][0] == "benchmark-events-dlq"

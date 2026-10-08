@@ -248,7 +248,9 @@ def run_benchmark(args: argparse.Namespace) -> dict:
     if producer.returncode:
         raise RuntimeError(f"Dataset replay failed ({producer.returncode}):\n{producer_output}")
     producer_summary = parse_producer_summary(producer_output)
-    observed_rate = args.events / producer_seconds
+    observed_rate = float(producer_summary.get(
+        "observed_rate_eps", args.events / producer_seconds,
+    ))
 
     drain_started = time.monotonic()
     drain_timed_out = False
@@ -305,9 +307,9 @@ def run_benchmark(args: argparse.Namespace) -> dict:
         },
         "producer": {
             **producer_summary,
-            "elapsed_seconds": round(producer_seconds, 3),
             "observed_rate_eps": round(observed_rate, 3),
             "rate_gate_eps": round(args.rate * args.minimum_rate_ratio, 3),
+            "orchestration_elapsed_seconds": round(producer_seconds, 3),
         },
         "kafka": {
             "initial_lag": initial_lag,

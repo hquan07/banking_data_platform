@@ -38,6 +38,7 @@ def replay(
             "rate, max_events and start_row must be non-negative; "
             "max_in_flight must be positive"
         )
+    replay_started = time.monotonic()
     published = rejected = scanned = 0
     next_send = time.monotonic()
     pending = deque()
@@ -74,12 +75,15 @@ def replay(
     while pending:
         pending.popleft().get(timeout=30)
     producer.flush(timeout=30)
+    elapsed_seconds = time.monotonic() - replay_started
     return {
         "dataset_id": dataset_id,
         "start_row": start_row,
         "scanned": scanned,
         "published": published,
         "rejected": rejected,
+        "elapsed_seconds": round(elapsed_seconds, 3),
+        "observed_rate_eps": round(scanned / elapsed_seconds, 3) if elapsed_seconds else 0,
     }
 
 
