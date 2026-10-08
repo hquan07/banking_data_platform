@@ -22,3 +22,22 @@ datasets with different features must use dataset-specific adapters and
 training schemas; do not synthesize missing account, device, location or
 velocity fields to make them fit this model. Keep ground-truth labels outside
 the streaming inference payload.
+
+## DS1 candidate
+
+`train_ds1_isolation.py` fits an Isolation Forest to DS1's anonymized `V1..V28`
+features. It uses `Time` only to create a non-overlapping relative-time
+holdout; the fraud label is used for holdout evaluation, never as a model
+feature. The anomaly threshold is derived from training scores and the explicit
+contamination setting.
+
+```bash
+python -m fraud.scoring.train_ds1_isolation \
+  --csv datasets/raw/creditcard/creditcard.csv \
+  --output-dir .runtime/model-candidates \
+  --version ds1-isolation-v1
+```
+
+The artifact remains `CANDIDATE_NOT_DEPLOYED`. Isolation Forest does not expose
+meaningful native per-feature importance, so this pipeline does not manufacture
+SHAP or “top feature” explanations. Serving requires a separate reviewed step.
