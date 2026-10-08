@@ -1,9 +1,16 @@
 .git
 .venv
+venv
 **/__pycache__
 **/*.pyc
 **/node_modules
 **/dist
 **/.vite
 .pytest_cache
+.env
+.env.*
+!.env.example
+datasets/raw
+datasets/profiles
+.runtime
 tmp
