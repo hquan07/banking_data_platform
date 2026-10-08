@@ -44,3 +44,20 @@ def status_payload(rows: list[tuple]) -> list[dict]:
             "status": "loaded" if counts["event_count"] else "not_loaded",
         })
     return result
+
+
+def balance_anomaly_payload(row: tuple | None) -> dict | None:
+    """Format PaySim balance-rule metrics from the latest evaluation per event."""
+    if row is None or not row[0]:
+        return None
+    return {
+        "total_events": row[0],
+        "evaluated_events": row[1],
+        "ground_truth_fraud": row[2],
+        "predicted_fraud": row[3],
+        "balance_mismatch": row[4],
+        "zero_drain": row[5],
+        "source_system_flagged": row[6],
+        "source_flag_true_positive": row[7],
+        "source_flag_false_positive": row[8],
+    }

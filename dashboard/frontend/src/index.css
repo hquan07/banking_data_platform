@@ -451,6 +451,37 @@ body {
   font-weight: 600;
 }
 
+.dataset-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dataset-metric-grid div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid #334155;
+  border-radius: 9px;
+  background: #111827;
+}
+
+.dataset-metric-grid span,
+.dataset-panel-note {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.dataset-metric-grid strong {
+  color: #f8fafc;
+  font-size: 22px;
+}
+
+.dataset-panel-note {
+  margin: 0;
+}
+
 .dataset-table-wrap {
   overflow-x: auto;
 }
@@ -496,6 +527,10 @@ body {
   .dataset-dashboard .col-span-6,
   .dataset-dashboard .col-span-8 {
     grid-column: span 12;
+  }
+
+  .dataset-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

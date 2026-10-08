@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.db import pg_conn
 from core.deps import get_current_user
-from services.dataset_status import status_payload
+from services.dataset_status import balance_anomaly_payload, status_payload
 
 
 router = APIRouter(prefix="/api/datasets", tags=["Datasets"])
@@ -111,6 +111,49 @@ def get_transaction_types(current_user: dict = Depends(get_current_user)):
         ]
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Transaction type analytics unavailable") from exc
+
+
+@router.get("/balance-anomalies")
+def get_balance_anomalies(current_user: dict = Depends(get_current_user)):
+    _database_required()
+    try:
+        with pg_conn.cursor() as cursor:
+            cursor.execute(
+                """
+                WITH latest_evaluation AS (
+                    SELECT DISTINCT ON (event_id)
+                           event_id, predicted_fraud, triggered_rules
+                    FROM benchmark_evaluations
+                    WHERE dataset_id = 'ds3_paysim'
+                    ORDER BY event_id, evaluated_at DESC, evaluation_id DESC
+                )
+                SELECT
+                    count(*) AS total_events,
+                    count(v.event_id) AS evaluated_events,
+                    count(*) FILTER (WHERE e.ground_truth_is_fraud),
+                    count(*) FILTER (WHERE v.predicted_fraud),
+                    count(*) FILTER (WHERE v.triggered_rules ? 'BALANCE_MISMATCH'),
+                    count(*) FILTER (WHERE v.triggered_rules ? 'ZERO_DRAIN'),
+                    count(*) FILTER (
+                        WHERE (e.payload->>'source_system_flag')::boolean
+                    ),
+                    count(*) FILTER (
+                        WHERE (e.payload->>'source_system_flag')::boolean
+                          AND e.ground_truth_is_fraud
+                    ),
+                    count(*) FILTER (
+                        WHERE (e.payload->>'source_system_flag')::boolean
+                          AND NOT e.ground_truth_is_fraud
+                    )
+                FROM benchmark_events e
+                LEFT JOIN latest_evaluation v ON v.event_id = e.event_id
+                WHERE e.dataset_id = 'ds3_paysim'
+                """
+            )
+            row = cursor.fetchone()
+        return balance_anomaly_payload(row)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Balance anomaly analytics unavailable") from exc
 
 
 @router.get("/velocity-summary")

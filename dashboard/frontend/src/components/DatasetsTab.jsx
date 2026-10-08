@@ -16,6 +16,7 @@ const ENDPOINTS = {
   performance: '/api/datasets/performance',
   rules: '/api/datasets/rule-hits',
   types: '/api/datasets/transaction-types',
+  balance: '/api/datasets/balance-anomalies',
   velocity: '/api/datasets/velocity-summary',
 };
 
@@ -30,7 +31,9 @@ function formatNumber(value, maximumFractionDigits = 0) {
 
 export default function DatasetsTab() {
   const { token } = useContext(AuthContext);
-  const [data, setData] = useState({ status: [], performance: [], rules: [], types: [], velocity: null });
+  const [data, setData] = useState({
+    status: [], performance: [], rules: [], types: [], balance: null, velocity: null,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -158,6 +161,38 @@ export default function DatasetsTab() {
             <div><dt>Velocity 4w trung bình</dt><dd>{formatNumber(data.velocity.velocity_4w_avg, 2)}</dd></div>
           </dl>
         ) : <Empty>Chưa có dữ liệu BAF.</Empty>}
+      </section>
+
+      <section className="panel col-span-12 dataset-chart-panel">
+        <h2 className="panel-title">PaySim — balance anomaly</h2>
+        {data.balance ? (
+          <>
+            <div className="dataset-metric-grid">
+              <div><span>Events</span><strong>{formatNumber(data.balance.total_events)}</strong></div>
+              <div><span>Đã evaluate</span><strong>{formatNumber(data.balance.evaluated_events)}</strong></div>
+              <div><span>Rule dự đoán fraud</span><strong>{formatNumber(data.balance.predicted_fraud)}</strong></div>
+              <div><span>Ground-truth fraud</span><strong>{formatNumber(data.balance.ground_truth_fraud)}</strong></div>
+            </div>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={[
+                { signal: 'Balance mismatch', count: data.balance.balance_mismatch },
+                { signal: 'Zero drain', count: data.balance.zero_drain },
+                { signal: 'Source flagged', count: data.balance.source_system_flagged },
+              ]} margin={{ top: 12, right: 16, left: 8, bottom: 12 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="signal" stroke="#94a3b8" />
+                <YAxis allowDecimals={false} stroke="#94a3b8" />
+                <Tooltip contentStyle={{ background: '#111827', border: '1px solid #334155' }} />
+                <Bar dataKey="count" name="Events" fill="#f59e0b" radius={[5, 5, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+            <p className="dataset-panel-note">
+              Source flag: {formatNumber(data.balance.source_flag_true_positive)} true positive,
+              {' '}{formatNumber(data.balance.source_flag_false_positive)} false positive.
+              Rule metrics dùng evaluation mới nhất của từng event.
+            </p>
+          </>
+        ) : <Empty>Chưa có dữ liệu PaySim để phân tích số dư.</Empty>}
       </section>
 
     </div>
