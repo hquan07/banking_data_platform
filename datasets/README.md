@@ -35,3 +35,17 @@ files are stored under `datasets/raw/` and remain untracked.
 Downloading a public benchmark does not make it production data. Preserve the
 dataset ID and source row identifier on every derived event so dashboard and
 evaluation results remain attributable to their source.
+
+## Profiling
+
+After downloading a source, generate a chunked profile before mapping it:
+
+```bash
+PYTHONPATH=. python datasets/profile_datasets.py ds1_creditcard
+```
+
+Use `all` only when all four sources are present. Profiles are local artifacts
+under `datasets/profiles/`; they contain file checksums, row counts, schema
+validation, null rates, inferred types, bounded cardinality and numeric ranges.
+The command exits non-zero when a file is absent or violates its expected
+minimum schema/row count.
