@@ -9,10 +9,13 @@
   persist run-scoped evidence. Payment and transfer events have explicit v1
   contracts and DLQs. Approved payment retries use `payment-events-retry`.
 - Graph transfer processing is idempotent and creates cases for 3–5 account
-  cycles. A real upstream transfer producer is still needed.
+  cycles. A reproducible synthetic transfer generator exercises that path;
+  a real upstream transfer producer is still needed for production.
 - Synthetic ML inference is disabled and its tracked model artifact removed.
-  Offline training accepts only labeled historical data and produces an
-  unapproved candidate with temporal holdout metrics. The fake weekly Airflow
+  Offline training on labeled synthetic data produces a demo-only candidate
+  with temporal holdout metrics. A checksum-verified offline demo registry,
+  threshold history/rollback, drift and delayed-label monitoring exercise the
+  workflow without approving or deploying the model. The fake weekly Airflow
   retraining/deployment DAG was removed.
 - Prometheus/Grafana now collect case, Spark batch, DQ, WebSocket and API
   metrics. The dashboard loads tabs on demand, validates incoming stream
@@ -21,6 +24,12 @@
   mounted on a persistent named volume. Frontend uses `npm ci`; direct Spark
   and backend Python dependencies are pinned. Stateful Compose services use
   the exact digests of the images running when this release was verified.
+- Dashboard charts explicitly identify simulated values, the Architecture Map
+  retains the Banking Data Platform diagram, and frontend lint/dependency
+  hygiene is in place. The backend uses patched authentication/form packages.
+
+See `docs/p1-demo-acceptance.md` for the verification snapshot, mock-data
+acceptance boundary and the remaining live test login gap.
 
 ## Data migration and rollback
 
@@ -44,9 +53,9 @@ volumes with `docker compose down -v`.
 ## Remaining promotion gates
 
 - A permissioned, labeled fraud dataset and a real-time point-in-time feature
-  pipeline are required before approving or deploying an ML model. Add a model
-  registry, threshold rollback, drift and delayed-label performance monitoring
-  only after that evaluation. Existing synthetic ML cases require analyst review.
+  pipeline are required before approving or deploying an ML model. The offline
+  synthetic registry/monitor is not a production model-serving system.
+  Existing synthetic ML cases require analyst review.
 - Integrate a real transfer-event producer; the graph pipeline currently has
   live E2E coverage with test events, not a production source.
 - Load testing, backup/restore rehearsal and a security review are still needed
