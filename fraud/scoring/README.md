@@ -2,6 +2,8 @@
 
 Live ML alerts are disabled. The old `fraud_model.pkl` was trained with synthetic
 labels and is **not approved for inference**; deterministic rules continue to run.
+The scheduled Airflow DAG that generated random training metrics and claimed
+deployment has been removed.
 Do not treat previous `ML_MODEL_FRAUD` cases as validated model findings.
 
 `train_model.py` accepts an explicit, trusted CSV with `event_time`, `is_fraud`

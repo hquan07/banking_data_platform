@@ -12,7 +12,8 @@
   cycles. A real upstream transfer producer is still needed.
 - Synthetic ML inference is disabled and its tracked model artifact removed.
   Offline training accepts only labeled historical data and produces an
-  unapproved candidate with temporal holdout metrics.
+  unapproved candidate with temporal holdout metrics. The fake weekly Airflow
+  retraining/deployment DAG was removed.
 - Prometheus/Grafana now collect case, Spark batch, DQ, WebSocket and API
   metrics. The dashboard loads tabs on demand and labels illustrative charts.
 - Superset connector installation moved into a pinned image, and metadata is
