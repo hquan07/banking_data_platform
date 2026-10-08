@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from batch.customer_pipeline import write_silver
-from batch.warehouse_pipeline import read_silver, write_clickhouse
+from batch.warehouse_pipeline import read_silver, write_clickhouse, write_postgres
 
 
 def test_silver_write_failure_is_not_swallowed():
@@ -30,3 +30,11 @@ def test_gold_write_failure_is_not_swallowed():
 
     with pytest.raises(OSError, match="ClickHouse unavailable"):
         write_clickhouse(frame, "jdbc:clickhouse://localhost:8123/banking_warehouse", {})
+
+
+def test_postgres_gold_write_failure_is_not_swallowed():
+    frame = MagicMock()
+    frame.write.jdbc.side_effect = OSError("PostgreSQL unavailable")
+
+    with pytest.raises(OSError, match="PostgreSQL unavailable"):
+        write_postgres(frame, "jdbc:postgresql://localhost:5433/banking_data_platform", {})

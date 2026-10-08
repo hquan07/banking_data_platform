@@ -20,7 +20,7 @@ def create_spark_session():
         .getOrCreate()
 
 def run_pipeline(spark):
-    from pyspark.sql.functions import col, current_timestamp, regexp_replace, concat, substring, lit
+    from pyspark.sql.functions import current_timestamp, regexp_replace, concat, substring, lit
 
     print("Starting Customer Batch Pipeline...")
     
@@ -50,6 +50,7 @@ def run_pipeline(spark):
             concat(lit("*******"), substring(customer_df["phone"], -4, 4)).alias("phone"),
             customer_df["address"],
             customer_df["country"],
+            customer_df["gender"],
             account_df["account_id"],
             account_df["account_type"],
             account_df["balance"],
@@ -66,25 +67,6 @@ def run_pipeline(spark):
     # quality checks can inspect stale data while this run still loads Gold.
     write_silver(silver_df, s3_path)
     print("Successfully written to Data Lake!")
-
-    # 4. LOAD to Data Warehouse (Postgres DWH)
-    print("Loading data into Data Warehouse (Gold Layer / Star Schema)...")
-    dim_customer_df = customer_df.select(
-        col("customer_id"),
-        concat(substring(col("first_name"), 1, 1), lit("***")).alias("first_name"),
-        concat(substring(col("last_name"), 1, 1), lit("***")).alias("last_name"),
-        col("gender"),
-        col("country"),
-        lit(None).cast("string").alias("customer_type"),
-        regexp_replace(col("email"), "^(.*)@(.*)$", "***@$2").alias("email"),
-        concat(lit("*******"), substring(col("phone"), -4, 4)).alias("phone"),
-        col("address"),
-        lit(None).cast("timestamp").alias("effective_start_date"),
-        lit(None).cast("timestamp").alias("effective_end_date"),
-        lit(True).alias("is_current")
-    )
-    dim_customer_df.write.jdbc(url=db_url, table="data_warehouse.dim_customer", mode="append", properties=db_properties)
-    print("Successfully loaded into DWH!")
 
 if __name__ == "__main__":
     spark = create_spark_session()

@@ -13,6 +13,15 @@ def write_clickhouse(dim_customer_df, url, properties):
         properties=properties,
     )
 
+
+def write_postgres(dim_customer_df, url, properties):
+    dim_customer_df.write.jdbc(
+        url=url,
+        table="data_warehouse.dim_customer",
+        mode="append",
+        properties=properties,
+    )
+
 def create_spark_session():
     from pyspark.sql import SparkSession
 
@@ -68,6 +77,30 @@ def run_pipeline(spark):
     # Fail the task on sink errors instead of reporting a successful run.
     write_clickhouse(dim_customer_df, clickhouse_url, clickhouse_properties)
     print("Successfully loaded into ClickHouse!")
+
+    # Gold writes run only after the Silver quality task succeeds in Airflow.
+    postgres_url = (
+        f"jdbc:postgresql://{os.environ.get('POSTGRES_HOST', 'localhost')}:"
+        f"{os.environ.get('POSTGRES_PORT', '5433')}/"
+        f"{os.environ.get('POSTGRES_DB', 'banking_data_platform')}"
+    )
+    postgres_properties = {
+        "user": os.environ.get("POSTGRES_USER", ""),
+        "password": os.environ.get("POSTGRES_PASSWORD", ""),
+        "driver": "org.postgresql.Driver",
+    }
+    postgres_customer_df = silver_df.select(
+        col("customer_id"), col("first_name"), col("last_name"), col("gender"),
+        col("country"), col("email"), col("phone"), col("address"), col("city"),
+    ).dropDuplicates(["customer_id"])
+    from pyspark.sql.functions import lit
+
+    postgres_customer_df = postgres_customer_df.withColumn("customer_type", lit(None).cast("string")) \
+        .withColumn("effective_start_date", lit(None).cast("timestamp")) \
+        .withColumn("effective_end_date", lit(None).cast("timestamp")) \
+        .withColumn("is_current", lit(True))
+    write_postgres(postgres_customer_df, postgres_url, postgres_properties)
+    print("Successfully loaded into PostgreSQL DWH!")
 
 if __name__ == "__main__":
     spark = create_spark_session()
