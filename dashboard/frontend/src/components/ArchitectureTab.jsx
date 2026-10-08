@@ -16,7 +16,7 @@ const paths = [
   {
     title: 'Chuyển tiền & AML graph',
     nodes: [
-      ['Transfer events', 'Nguồn sự kiện cần tích hợp từ hệ thống chuyển tiền'],
+      ['Transfer demo generator', 'Sinh transfer-events mô phỏng; chưa có upstream thật'],
       ['Graph processor', 'Consumer idempotent, replay từ Kafka'],
       ['Neo4j', 'Quan hệ tài khoản, vòng chuyển tiền 3–5 nút'],
       ['Dashboard backend', 'Lưu alert thành case có audit trail'],

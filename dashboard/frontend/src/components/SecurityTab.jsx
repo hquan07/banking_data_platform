@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from './AuthContext';
 import { PieChart, Pie, Cell, ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, ReferenceArea, Legend } from 'recharts';
-import ForceGraph2D from 'react-force-graph-2d';
-import { ShieldAlert, ChevronDown, ChevronUp, Upload, MessageSquare, UserCheck } from 'lucide-react';
+import { ChevronDown, ChevronUp, Upload, MessageSquare, UserCheck } from 'lucide-react';
 import KYCProfile from './KYCProfile';
 
 const COLORS = ['#ef4444', '#f59e0b', '#3b82f6'];
 
-export default function SecurityTab({ alerts, graphData, scatterData, riskyAccountsData, donutData }) {
-  const { token, user } = useContext(AuthContext);
+export default function SecurityTab({ scatterData, riskyAccountsData, donutData }) {
+  const { token } = useContext(AuthContext);
   const [pgAlerts, setPgAlerts] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedAlert, setExpandedAlert] = useState(null);

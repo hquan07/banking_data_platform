@@ -24,7 +24,7 @@ const statusLabels = {
   unhealthy: 'Không phản hồi hoặc probe thất bại',
   degraded: 'API phản hồi nhưng chưa sẵn sàng',
   documented: 'Chưa có health probe trên sơ đồ',
-  planned: 'Nguồn chưa tích hợp',
+  planned: 'Upstream thật chưa tích hợp; demo dùng generator',
 };
 
 function ArchitectureNode({ data, selected }) {
@@ -79,7 +79,7 @@ const node = (id, x, y, label, sublabel, description, icon, color, planned = fal
 // This is the deployed banking topology, not the NewsPulse services in the visual reference.
 const initialNodes = [
   node('payment-producer', 0, 0, 'Payment producer', 'Payment events v1', 'Sinh payment-events với event_id ổn định.', 'zap', '#3b82f6'),
-  node('transfer-source', 300, 0, 'Transfer source', 'Chưa tích hợp', 'Nguồn chuyển tiền thực cần phát transfer-events v1.', 'network', '#f59e0b', true),
+  node('transfer-source', 300, 0, 'Transfer demo generator', 'Synthetic scenarios', 'CLI tạo transfer-events v1 cho vòng AML 3/4/5 tài khoản; chưa có upstream thật.', 'network', '#f59e0b', true),
   node('user', 900, 0, 'Dashboard user', 'Web client', 'Người dùng truy cập giao diện và case management.', 'user', '#3b82f6'),
   node('retry', 0, 145, 'Payment retry worker', 'Approved retry', 'Phát lại payment-events-retry đã được duyệt.', 'retry', '#3b82f6'),
   node('kafka', 300, 145, 'Kafka broker', 'Event streaming + DLQ', 'Truyền payment, transfer, fraud và AML events; giữ retry/DLQ.', 'zap', '#ef4444'),

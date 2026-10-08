@@ -114,22 +114,6 @@ function MainApp() {
     { name: 'Large Amount', value: 25, color: '#3b82f6' },
   ];
 
-  const graphData = {
-    nodes: [
-      { id: 'ACC_1', group: 1 }, { id: 'ACC_2', group: 1 }, { id: 'ACC_3', group: 1 },
-      { id: 'ACC_4', group: 2 }, { id: 'ACC_5', group: 2 }, { id: 'ACC_6', group: 2 },
-      { id: 'MERCHANT_X', group: 3 }
-    ],
-    links: [
-      { source: 'ACC_1', target: 'ACC_2', value: 1 },
-      { source: 'ACC_2', target: 'ACC_3', value: 1 },
-      { source: 'ACC_3', target: 'ACC_1', value: 1 },
-      { source: 'ACC_4', target: 'MERCHANT_X', value: 1 },
-      { source: 'ACC_5', target: 'MERCHANT_X', value: 1 },
-      { source: 'ACC_6', target: 'MERCHANT_X', value: 1 }
-    ]
-  };
-
   const scatterData = React.useMemo(() => Array.from({length: 40}, (_, i) => {
     const isAnomaly = i % 11 === 0;
     const amount = isAnomaly ? 6500 + i * 120 : 100 + (i * 137) % 900;
@@ -283,7 +267,7 @@ function MainApp() {
         {/* Tab Content */}
         <Suspense fallback={<div role="status">Đang tải nội dung...</div>}>
         {activeTab === 'overview' && <OverviewTab data={chartData} mapData={mapData} />}
-        {activeTab === 'security' && <SecurityTab alerts={alerts} graphData={graphData} scatterData={scatterData} riskyAccountsData={riskyAccountsData} donutData={donutData} />}
+        {activeTab === 'security' && <SecurityTab scatterData={scatterData} riskyAccountsData={riskyAccountsData} donutData={donutData} />}
         {activeTab === 'analytics' && <AnalyticsTab sankeyData={sankeyData} funnelData={funnelData} />}
         {activeTab === 'history' && <HistoryTab />}
         {activeTab === 'users' && <UserManagementTab />}
