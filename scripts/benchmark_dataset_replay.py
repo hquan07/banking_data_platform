@@ -286,6 +286,7 @@ def run_benchmark(args: argparse.Namespace) -> dict:
         producer_summary.get("published") == args.events,
         producer_summary.get("rejected") == 0,
         observed_rate >= args.rate * args.minimum_rate_ratio,
+        all(value <= args.max_peak_lag for value in peak_lag.values()),
         count_delta["events"] == args.events,
         count_delta["evaluations"] == args.events,
         dlq_delta == 0,
@@ -302,6 +303,7 @@ def run_benchmark(args: argparse.Namespace) -> dict:
             "events": args.events,
             "target_rate_eps": args.rate,
             "minimum_rate_ratio": args.minimum_rate_ratio,
+            "max_peak_lag": args.max_peak_lag,
             "poll_interval_seconds": args.poll_interval,
             "drain_timeout_seconds": args.drain_timeout,
         },
@@ -339,6 +341,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--events", type=int, default=15_000)
     parser.add_argument("--rate", type=float, default=50)
     parser.add_argument("--minimum-rate-ratio", type=float, default=0.95)
+    parser.add_argument("--max-peak-lag", type=int, default=100)
     parser.add_argument("--poll-interval", type=float, default=5)
     parser.add_argument("--drain-timeout", type=float, default=300)
     parser.add_argument("--consumer-group", action="append", default=list(DEFAULT_GROUPS))
@@ -354,6 +357,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("poll interval, drain timeout and API repetitions must be positive")
     if not 0 < args.minimum_rate_ratio <= 1:
         parser.error("minimum-rate-ratio must be greater than zero and at most one")
+    if args.max_peak_lag < 0:
+        parser.error("max-peak-lag must be non-negative")
     return args
 
 
