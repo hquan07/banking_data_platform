@@ -1,0 +1,28 @@
+groups:
+  - name: banking-platform
+    rules:
+      - alert: BankingBackendDown
+        expr: up{job="fastapi_backend"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "Dashboard backend metrics unavailable"}
+      - alert: KafkaExporterDown
+        expr: up{job="kafka"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "Kafka exporter unavailable"}
+      - alert: KafkaConsumerLagHigh
+        expr: max by (consumergroup) (kafka_consumergroup_lag) > 1000
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Kafka consumer lag exceeded 1000 records"}
+      - alert: CustomerDataQualityFailed
+        expr: dq_last_run_present == 1 and dq_last_run_success == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "Latest customer Silver DQ run failed"}
+      - alert: BankingApiErrorRateHigh
+        expr: sum(rate(http_requests_total{status="5xx"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "API 5xx rate exceeds 5 percent"}

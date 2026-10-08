@@ -99,12 +99,18 @@ def run_consumer():
                 payload = {"raw_value": message.value.decode("utf-8", errors="replace"),
                            "validation_error": str(exc), "source": source}
                 producer.send("transfer-events-dlq", value=json.dumps(payload).encode()).get(timeout=20)
+                print(json.dumps({"event": "transfer_rejected", "source": source,
+                                  "reason": str(exc)}), flush=True)
             else:
-                for alert in graph.record_transaction(event, source):
+                alerts = graph.record_transaction(event, source)
+                for alert in alerts:
                     producer.send(
                         "aml-events", key=alert["account_id"].encode(),
                         value=json.dumps(alert).encode(),
                     ).get(timeout=20)
+                print(json.dumps({"event": "transfer_processed", "event_id": event["event_id"],
+                                  "trace_id": event["trace_id"], "source": source,
+                                  "alert_count": len(alerts)}), flush=True)
             consumer.commit({TopicPartition(message.topic, message.partition):
                              OffsetAndMetadata(message.offset + 1, "")})
     finally:

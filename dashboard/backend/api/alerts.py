@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -20,6 +21,11 @@ router = APIRouter(prefix="/api", tags=["Alerts"])
 
 
 from pydantic import Field
+from prometheus_client import Histogram
+
+DB_QUERY_SECONDS = Histogram(
+    "case_database_query_seconds", "PostgreSQL query latency for case operations", ("operation",)
+)
 class AlertStatusUpdate(BaseModel):
     status: str = Field(..., pattern="^(PENDING|INVESTIGATING|RESOLVED|IGNORED)$")
     version: int = Field(..., ge=1)
@@ -40,6 +46,7 @@ def get_alerts(
         raise HTTPException(status_code=422, detail="created_from must precede created_to")
     offset = (page - 1) * limit
     if pg_conn:
+        started = time.monotonic()
         try:
             with pg_conn.cursor() as cur:
                 clauses, params = [], []
@@ -62,7 +69,7 @@ def get_alerts(
                 total = cur.fetchone()[0]
                 cur.execute(
                     "SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at, "
-                    "xai_explanation, notes, evidence_file_url, assignee_id, version, payment_id, risk_level "
+                    "xai_explanation, notes, evidence_file_url, assignee_id, version, payment_id, risk_level, trace_id "
                     "FROM alerts" + where_sql + " ORDER BY created_at DESC, alert_id DESC LIMIT %s OFFSET %s",
                     (*params, limit, offset),
                 )
@@ -84,12 +91,15 @@ def get_alerts(
                         "version": row[11],
                         "payment_id": row[12],
                         "risk_level": row[13],
+                        "trace_id": row[14],
                     })
                 return {"total": total, "page": page, "limit": limit, "data": data}
         except Exception as e:
             print(f"Postgres query error: {e}")
             if not demo_mode():
                 raise HTTPException(status_code=503, detail="Alerts database unavailable") from e
+        finally:
+            DB_QUERY_SECONDS.labels("list").observe(time.monotonic() - started)
 
     if not demo_mode():
         raise HTTPException(status_code=503, detail="Alerts database unavailable")
@@ -104,6 +114,7 @@ def get_alerts(
 @router.post("/alerts/{alert_id}/status")
 def update_alert_status(alert_id: int, update: AlertStatusUpdate, current_user: dict = Depends(get_current_user)):
     if pg_conn:
+        started = time.monotonic()
         try:
             with pg_conn.cursor() as cur:
                 cur.execute(
@@ -167,6 +178,8 @@ def update_alert_status(alert_id: int, update: AlertStatusUpdate, current_user: 
         except Exception as e:
             print(f"Postgres update error: {e}")
             raise HTTPException(status_code=503, detail="Alerts database unavailable") from e
+        finally:
+            DB_QUERY_SECONDS.labels("update").observe(time.monotonic() - started)
     raise HTTPException(status_code=503, detail="Alerts database unavailable")
 
 

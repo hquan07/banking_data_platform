@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
     if pg_conn:
         try:
             sql_dir = os.path.join(os.path.dirname(__file__), "sql")
-            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql", "p1_dq_results.sql"):
+            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql", "p1_dq_results.sql", "p1_trace_context.sql"):
                 migration_path = os.path.join(sql_dir, migration_name)
                 if not os.path.exists(migration_path):
                     continue
@@ -145,6 +145,10 @@ DQ_LAST_SUCCESS = Gauge("dq_last_run_success", "Whether the latest customer Silv
 DQ_RUN_PRESENT = Gauge("dq_last_run_present", "Whether a customer Silver DQ result exists")
 DQ_LAST_INVALID = Gauge("dq_last_run_invalid_records", "Invalid records in the latest customer Silver DQ run")
 DQ_LAST_DUPLICATE_RATE = Gauge("dq_last_run_duplicate_rate", "Duplicate account rate in latest customer Silver DQ run")
+ALERT_CASES = Gauge("alert_cases", "Alert cases by rule, status and severity", ("rule", "status", "risk_level"))
+SPARK_BATCH_ROWS = Gauge("spark_last_batch_rows", "Rows in latest Spark batch", ("job",))
+SPARK_BATCH_DURATION = Gauge("spark_last_batch_duration_seconds", "Latest Spark batch duration", ("job",))
+SPARK_BATCH_COMPLETED = Gauge("spark_last_batch_completed_timestamp_seconds", "Latest Spark batch completion time", ("job",))
 
 
 @app.middleware("http")
@@ -164,8 +168,28 @@ async def refresh_dq_metrics(request: Request, call_next):
                 DQ_LAST_DUPLICATE_RATE.set(row[2])
             else:
                 DQ_RUN_PRESENT.set(0)
+            with pg_conn.cursor() as cur:
+                cur.execute(
+                    "SELECT rule_name, status, risk_level, count(*) FROM alerts "
+                    "GROUP BY rule_name, status, risk_level"
+                )
+                case_rows = cur.fetchall()
+            ALERT_CASES.clear()
+            for rule, status, risk_level, count in case_rows:
+                ALERT_CASES.labels(rule, status, risk_level).set(count)
         except Exception:
             logger.exception("Could not refresh DQ metrics")
+        if redis_client is not None:
+            try:
+                for job in ("payment_processor", "fraud_velocity"):
+                    values = redis_client.hgetall(f"spark:batch:{job}")
+                    if values:
+                        SPARK_BATCH_DURATION.labels(job).set(float(values["duration_seconds"]))
+                        SPARK_BATCH_COMPLETED.labels(job).set(float(values["completed_at"]))
+                        if "rows" in values:
+                            SPARK_BATCH_ROWS.labels(job).set(float(values["rows"]))
+            except Exception:
+                logger.exception("Could not refresh Spark batch metrics")
     return await call_next(request)
 
 # =============================================

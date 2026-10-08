@@ -90,7 +90,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(kafka_topic_partition_current_offset[1m])) by (topic)",
+          "expr": "clamp_min(sum(delta(kafka_topic_partition_current_offset[1m])) by (topic) / 60, 0)",
           "hide": false,
           "legendFormat": "{{topic}}",
           "refId": "A"
@@ -184,7 +184,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(http_requests_total{status=~'5..'}[1m])) / sum(rate(http_requests_total[1m]))",
+          "expr": "sum(rate(http_requests_total{status='5xx'}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 0.001)",
           "refId": "A"
         }
       ],
@@ -228,6 +228,48 @@
         "x": 0,
         "y": 16
       }
+    },
+    {
+      "title": "Alert Cases by Rule and Status",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(alert_cases) by (rule, status, risk_level)", "legendFormat": "{{rule}} / {{status}} / {{risk_level}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+    },
+    {
+      "title": "Customer Silver DQ Invalid Records",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "dq_last_run_invalid_records * dq_last_run_present", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+    },
+    {
+      "title": "WebSocket Broadcast Failures",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(rate(websocket_broadcast_failures_total[5m]))", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32}
+    },
+    {
+      "title": "Payment Data Freshness p95",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(data_freshness_seconds_bucket[5m])) by (le))", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32}
+    },
+    {
+      "title": "Spark Batch Duration",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "spark_last_batch_duration_seconds", "legendFormat": "{{job}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 40}
+    },
+    {
+      "title": "Case Database p95 Latency",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(case_database_query_seconds_bucket[5m])) by (operation, le))", "legendFormat": "{{operation}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40}
     }
   ],
   "refresh": "5s",

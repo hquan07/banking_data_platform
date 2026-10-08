@@ -407,6 +407,10 @@ services:
       - spark://spark-master:7077
       - --conf
       - spark.cores.max=1
+      - --conf
+      - spark.driver.host=payment-processor
+      - --conf
+      - spark.driver.bindAddress=0.0.0.0
       - --packages
       - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
       - /workspace/streaming/payment_processing.py
@@ -414,6 +418,7 @@ services:
       - SPARK_MODE=client
       - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
       - SPARK_MAX_OFFSETS_PER_TRIGGER=1000
+      - REDIS_HOST=banking_redis
       - POSTGRES_HOST=banking_postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DB=${POSTGRES_DB}
@@ -444,8 +449,10 @@ services:
       clickhouse:
         condition: service_healthy
     networks:
-      - backend_network
-      - data_network
+      backend_network:
+        aliases:
+          - payment-processor
+      data_network: {}
 
   dashboard_frontend:
     build:
@@ -489,6 +496,10 @@ services:
       - spark://spark-master:7077
       - --conf
       - spark.cores.max=1
+      - --conf
+      - spark.driver.host=fraud-engine
+      - --conf
+      - spark.driver.bindAddress=0.0.0.0
       - --packages
       - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
       - /workspace/streaming/fraud_detection.py
@@ -523,8 +534,10 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - backend_network
-      - data_network
+      backend_network:
+        aliases:
+          - fraud-engine
+      data_network: {}
 
 volumes:
   postgres_data:

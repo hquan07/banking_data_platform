@@ -1,4 +1,6 @@
 import os
+import json
+import time
 from datetime import timezone
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, struct, to_json
@@ -108,6 +110,9 @@ def process_stream(spark):
         import psycopg2
         from psycopg2.extras import execute_values
 
+        started = time.monotonic()
+        processed_rows = 0
+
         payment_df = batch_df.select(*PAYMENT_COLUMNS[:-1], col("event_time").alias("timestamp"))
         insert_sql = """
             INSERT INTO core_banking.payment_event
@@ -130,6 +135,7 @@ def process_stream(spark):
                     rows = []
                     for row in payment_df.toLocalIterator():
                         rows.append(payment_values(row))
+                        processed_rows += 1
                         if len(rows) >= 500:
                             execute_values(cursor, insert_sql, rows, page_size=500)
                             rows.clear()
@@ -171,6 +177,21 @@ def process_stream(spark):
                 ch.disconnect()
         finally:
             read_conn.close()
+        duration = time.monotonic() - started
+        print(json.dumps({"event": "spark_batch_completed", "job": "payment_processor",
+                          "batch_id": batch_id, "rows": processed_rows,
+                          "duration_seconds": round(duration, 3)}))
+        try:
+            import redis
+
+            redis.Redis(host=os.environ.get("REDIS_HOST", "banking_redis"), socket_timeout=2).hset(
+                "spark:batch:payment_processor",
+                mapping={"batch_id": batch_id, "rows": processed_rows,
+                         "duration_seconds": duration, "completed_at": time.time()},
+            )
+        except Exception as exc:
+            print(json.dumps({"event": "spark_metrics_unavailable", "job": "payment_processor",
+                              "error": type(exc).__name__}))
             
     db_query = valid_df \
         .writeStream \

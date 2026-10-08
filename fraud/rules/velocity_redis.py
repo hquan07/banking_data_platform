@@ -1,4 +1,6 @@
 import os
+import json
+import time
 
 VELOCITY_SCRIPT = """
 -- KEYS: event dedup marker, account sorted set; ARGV: event ID, UTC epoch ms.
@@ -27,6 +29,7 @@ return redis.call('ZCARD', KEYS[2])
 
 def process_velocity_with_redis(df, epoch_id):
     """Count unique events in an account's five-minute event-time window."""
+    started = time.monotonic()
 
     def process_partition(rows):
         import redis
@@ -52,3 +55,17 @@ def process_velocity_with_redis(df, epoch_id):
     from pyspark.sql.functions import col, unix_millis
 
     df.select("event_id", "account_id", unix_millis(col("event_time")).alias("event_ms")).foreachPartition(process_partition)
+    duration = time.monotonic() - started
+    print(json.dumps({"event": "spark_batch_completed", "job": "fraud_velocity",
+                      "batch_id": epoch_id, "duration_seconds": round(duration, 3)}))
+    try:
+        import redis
+
+        redis.Redis(host=os.environ.get("REDIS_HOST", "banking_redis"), socket_timeout=2).hset(
+            "spark:batch:fraud_velocity",
+            mapping={"batch_id": epoch_id, "duration_seconds": duration,
+                     "completed_at": time.time()},
+        )
+    except Exception as exc:
+        print(json.dumps({"event": "spark_metrics_unavailable", "job": "fraud_velocity",
+                          "error": type(exc).__name__}))

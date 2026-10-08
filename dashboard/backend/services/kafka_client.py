@@ -8,7 +8,7 @@ import random
 import time
 
 from fastapi import WebSocket
-from prometheus_client import Histogram
+from prometheus_client import Counter, Histogram
 from datetime import datetime, timezone
 from core.db import pg_conn, redis_client
 from services.kafka_payload import decode_message
@@ -36,6 +36,7 @@ class ConnectionManager:
             try:
                 await connection.send_json(message)
             except Exception as e:
+                WEBSOCKET_BROADCAST_FAILURES.inc()
                 print(f"Error sending message: {e}")
                 self.disconnect(connection)
 
@@ -49,6 +50,9 @@ KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP_SERVER", "localhost:9092")
 DATA_FRESHNESS = Histogram(
     "data_freshness_seconds", 
     "Time from event generation to backend consumption"
+)
+WEBSOCKET_BROADCAST_FAILURES = Counter(
+    "websocket_broadcast_failures_total", "Failed WebSocket sends"
 )
 
 # =============================================
@@ -148,14 +152,14 @@ def persist_alert(data: dict) -> bool:
         cur.execute(
             """
             INSERT INTO alerts
-                (event_id, payment_id, account_id, rule_name, amount,
+                (event_id, trace_id, payment_id, account_id, rule_name, amount,
                  risk_score, risk_level, decision, xai_explanation)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (event_id, rule_name) WHERE event_id IS NOT NULL DO NOTHING
             RETURNING alert_id
             """,
             (
-                event_id, data.get("payment_id"), account_id, rule, amount,
+                event_id, data.get("trace_id"), data.get("payment_id"), account_id, rule, amount,
                 risk_score, data.get("risk_level", "HIGH" if risk_score >= 85 else "MEDIUM"),
                 data.get("decision", "REVIEW"), xai,
             ),
