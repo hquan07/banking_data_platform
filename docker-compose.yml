@@ -331,7 +331,10 @@ services:
       - data_network
 
   superset:
-    image: apache/superset:latest
+    build:
+      context: .
+      dockerfile: docker/superset/Dockerfile
+    image: banking-superset:p1
     container_name: banking_superset
     ports:
       - "8088:8088"
@@ -340,9 +343,10 @@ services:
       - SUPERSET_ADMIN_USER=${SUPERSET_ADMIN_USER}
       - SUPERSET_ADMIN_PASSWORD=${SUPERSET_ADMIN_PASSWORD}
     user: "root"
+    volumes:
+      - superset_home:/app/superset_home
     command: >
       /bin/sh -c "
-      pip install clickhouse-sqlalchemy psycopg2-binary &&
       superset db upgrade &&
       superset fab create-admin --username $${SUPERSET_ADMIN_USER} --firstname Admin --lastname User --email admin@superset.com --password $${SUPERSET_ADMIN_PASSWORD} &&
       superset init &&
@@ -483,6 +487,20 @@ services:
       - backend_network
       - data_network
 
+  payment_retry_worker:
+    build:
+      context: .
+      dockerfile: docker/ingestion/Dockerfile
+    restart: on-failure
+    command: ["python", "kafka/retry/payment_retry_worker.py"]
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
+    depends_on:
+      kafka_topics_init:
+        condition: service_completed_successfully
+    networks:
+      - data_network
+
   fraud_engine:
     build:
       context: .
@@ -547,6 +565,7 @@ volumes:
   neo4j_data:
   redis_data:
   spark_checkpoints:
+  superset_home:
 
 networks:
   frontend_network:

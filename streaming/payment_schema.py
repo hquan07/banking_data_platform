@@ -54,5 +54,7 @@ def parse_payment_stream(kafka_df):
         .when(F.col("payment_method").isNull() | ~F.col("payment_method").isin("CARD", "BANK_TRANSFER", "QR"), "invalid_payment_method")
         .when(F.col("channel").isNull() | ~F.col("channel").isin("POS", "ONLINE", "ATM"), "invalid_channel")
         .when(F.col("status").isNull() | ~F.col("status").isin("CREATED", "PENDING", "SUCCESS", "FAILED"), "invalid_status")
-        .when(F.col("event_time").isNull(), "invalid_timestamp"),
+        .when(F.col("event_time").isNull(), "invalid_timestamp")
+        .when(F.col("event_time") < F.expr("current_timestamp() - INTERVAL 7 DAYS"), "event_too_late")
+        .when(F.col("event_time") > F.expr("current_timestamp() + INTERVAL 5 MINUTES"), "event_in_future"),
     )

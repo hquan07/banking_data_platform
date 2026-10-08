@@ -4,6 +4,7 @@ import json
 import os
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -21,6 +22,15 @@ def test_malformed_and_unsupported_payment_events_reach_dlq():
         f"not-json-{suffix}": "unsupported_schema_version",
         json.dumps({"schema_version": 2, "event_id": f"wrong-version-{suffix}"}): "unsupported_schema_version",
     }
+    base_event = {
+        "schema_version": 1, "event_id": f"late-{suffix}", "trace_id": f"late-{suffix[:12]}",
+        "payment_id": f"LATE_{suffix[:16]}", "customer_id": "C_LATE", "account_id": "A_LATE",
+        "merchant_id": "M_LATE", "amount": 10, "currency": "USD",
+        "payment_method": "CARD", "channel": "ONLINE", "status": "CREATED",
+    }
+    payloads[json.dumps({**base_event, "timestamp": (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()})] = "event_too_late"
+    payloads[json.dumps({**base_event, "event_id": f"future-{suffix}",
+                         "timestamp": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()})] = "event_in_future"
     consumer = KafkaConsumer(
         "payment-events-dlq",
         bootstrap_servers="localhost:9094",
