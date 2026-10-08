@@ -7,14 +7,32 @@ export default function AnalyticsTab() {
   const [graphError, setGraphError] = useState('');
   const graphContainerRef = useRef(null);
   const [graphWidth, setGraphWidth] = useState(800);
+  const [graphSource, setGraphSource] = useState('');
 
   useEffect(() => {
-    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/graph/circular')
-      .then(async res => { if (!res.ok) throw new Error('Không tải được AML graph'); return res.json(); })
-      .then(data => {
-        if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.links)) throw new Error('Định dạng AML graph không hợp lệ');
-        setGraphData(data);
-      })
+    const baseUrl = window._env_?.API_URL || 'http://localhost:8000';
+    const loadGraph = async () => {
+      const benchmarkResponse = await fetch(baseUrl + '/api/graph/benchmark');
+      if (!benchmarkResponse.ok) throw new Error('Không tải được AML graph');
+      const benchmark = await benchmarkResponse.json();
+      if (!benchmark || !Array.isArray(benchmark.nodes) || !Array.isArray(benchmark.links)) {
+        throw new Error('Định dạng AML graph không hợp lệ');
+      }
+      if (benchmark.nodes.length > 0) {
+        setGraphSource('PaySim — synthetic simulation');
+        return benchmark;
+      }
+      const liveResponse = await fetch(baseUrl + '/api/graph/circular');
+      if (!liveResponse.ok) throw new Error('Không tải được AML graph');
+      const live = await liveResponse.json();
+      if (!live || !Array.isArray(live.nodes) || !Array.isArray(live.links)) {
+        throw new Error('Định dạng AML graph không hợp lệ');
+      }
+      setGraphSource(live.nodes.length ? 'Transfer events' : '');
+      return live;
+    };
+    loadGraph()
+      .then(setGraphData)
       .catch(err => setGraphError(err.message))
       .finally(() => setGraphLoading(false));
   }, []);
@@ -31,6 +49,7 @@ export default function AnalyticsTab() {
     <div className="grid">
       <div className="panel col-span-12" style={{height: '450px'}}>
         <h2 className="panel-title">AML Network (Neo4j)</h2>
+        {graphSource && <div className="dataset-provenance">Nguồn: {graphSource}</div>}
         <div ref={graphContainerRef} style={{width: '100%', height: '380px', overflow: 'hidden'}}>
           {graphData.nodes.length > 0 ? (
             <ForceGraph2D

@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
-import { Activity, ShieldAlert, Zap, Server, LayoutDashboard, BarChart3, History, Settings, Users, Network } from 'lucide-react';
+import { Activity, ShieldAlert, Zap, Server, LayoutDashboard, BarChart3, History, Settings, Users, Network, Database } from 'lucide-react';
 const OverviewTab = lazy(() => import('./components/OverviewTab'));
 const SecurityTab = lazy(() => import('./components/SecurityTab'));
 const AnalyticsTab = lazy(() => import('./components/AnalyticsTab'));
@@ -7,6 +7,7 @@ const HistoryTab = lazy(() => import('./components/HistoryTab'));
 const RulesManagementTab = lazy(() => import('./components/RulesManagementTab'));
 const UserManagementTab = lazy(() => import('./components/UserManagementTab'));
 const ArchitectureTab = lazy(() => import('./components/ArchitectureTab'));
+const DatasetsTab = lazy(() => import('./components/DatasetsTab'));
 import Login from './components/Login';
 import { parseStreamMessage } from './streamContract';
 import { AuthProvider, AuthContext } from './components/AuthContext';
@@ -100,6 +101,10 @@ function MainApp() {
             <BarChart3 size={20} />
             Analytics
           </button>
+          <button className={`nav-item ${activeTab === 'datasets' ? 'active' : ''}`} onClick={() => setActiveTab('datasets')}>
+            <Database size={20} />
+            Datasets
+          </button>
           <button className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
             <History size={20} />
             History
@@ -181,6 +186,7 @@ function MainApp() {
         {activeTab === 'overview' && <OverviewTab data={chartData} />}
         {activeTab === 'security' && <SecurityTab />}
         {activeTab === 'analytics' && <AnalyticsTab />}
+        {activeTab === 'datasets' && <DatasetsTab />}
         {activeTab === 'history' && <HistoryTab />}
         {activeTab === 'users' && <UserManagementTab />}
         {activeTab === 'rules' && <RulesManagementTab />}
