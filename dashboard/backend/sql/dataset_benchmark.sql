@@ -44,3 +44,13 @@ UPDATE alerts SET entity_id = account_id, entity_type = 'account'
 WHERE entity_id IS NULL AND account_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ix_alerts_entity ON alerts (entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS ix_alerts_dataset ON alerts (dataset_id, created_at DESC);
+
+INSERT INTO rules (name, description, threshold, window_seconds, max_count)
+VALUES (
+    'TRANSFER_CASHOUT_CHAIN',
+    'PaySim benchmark: transfer followed by a similar cash-out within 24 relative hours',
+    0.80,
+    86400,
+    1
+)
+ON CONFLICT (name) DO NOTHING;

@@ -11,6 +11,13 @@ No transfer event source is currently connected. The graph remains empty until
 a dataset replay adapter or an upstream transfer publisher sends events that
 meet the v1 contract.
 
+PaySim replay uses a separate `BenchmarkAccount` label and
+`BENCHMARK_TRANSACTION` relationship. All five source transaction types are
+retained with relative hour steps; these nodes never merge into the platform's
+`Account` namespace. The benchmark graph flags a TRANSFER followed by a similar
+CASH_OUT from the recipient within 24 relative hours. Ground-truth labels are
+stored for evaluation but are not used by that query.
+
 Neo4j account edges are merged by source event ID and carry amount, currency,
 UTC event time, trace ID, Kafka topic/partition/offset. Customer, account and
 merchant node IDs have uniqueness constraints. Cycles of 3–5 distinct accounts
