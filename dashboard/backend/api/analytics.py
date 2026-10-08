@@ -1,12 +1,9 @@
 """
 Analytics (ClickHouse) and KYC 360° router.
 """
-import datetime
-import random
 from fastapi import APIRouter, Depends, HTTPException
 from core.db import pg_conn, ch_client, graph_driver
 from core.deps import get_current_user
-from core.runtime import demo_mode
 
 router = APIRouter(prefix="/api", tags=["Analytics"])
 
@@ -19,8 +16,7 @@ def get_history_analytics():
                 SELECT 
                     toDate(event_time) AS date,
                     count() AS total_tx,
-                    sum(amount) AS total_amount,
-                    0 AS total_fraud
+                    sum(amount) AS total_amount
                 FROM payment_events FINAL
                 GROUP BY date
                 ORDER BY date DESC
@@ -32,42 +28,27 @@ def get_history_analytics():
                 with pg_conn.cursor() as cur:
                     cur.execute("SELECT created_at::date, count(*) FROM alerts GROUP BY created_at::date")
                     alert_counts = {str(day): count for day, count in cur.fetchall()}
-            data = []
-            for row in reversed(result):
-                data.append({
+            return [
+                {
                     "date": str(row[0]),
                     "total_tx": row[1],
                     "total_amount": row[2],
-                    "total_fraud": alert_counts.get(str(row[0]), 0),
-                })
-            return data
+                    "total_alerts": alert_counts.get(str(row[0]), 0),
+                }
+                for row in reversed(result)
+            ]
         except Exception as e:
             print(f"ClickHouse query error: {e}")
-            if not demo_mode():
-                raise HTTPException(status_code=503, detail="Analytics database unavailable") from e
-
-    if not demo_mode():
-        raise HTTPException(status_code=503, detail="Analytics database unavailable")
-    # Demo-only sample data
-    data = []
-    for i in range(14, -1, -1):
-        date = datetime.date.today() - datetime.timedelta(days=i)
-        data.append({
-            "date": str(date),
-            "total_tx": 1000 + (i * 10) % 500,
-            "total_amount": 500000 + (i * 5000) % 200000,
-            "total_fraud": 5 + i % 10,
-        })
-    return data
+            raise HTTPException(status_code=503, detail="Analytics database unavailable") from e
+    raise HTTPException(status_code=503, detail="Analytics database unavailable")
 
 
 @router.get("/accounts/{account_id}/kyc")
 def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_user)):
-    if not demo_mode() and (pg_conn is None or graph_driver is None or ch_client is None):
+    if pg_conn is None or graph_driver is None or ch_client is None:
         raise HTTPException(status_code=503, detail="KYC dependencies unavailable")
     profile = {
         "account_id": account_id,
-        "trust_score": None,
         "total_alerts": 0,
         "resolved_alerts": 0,
         "recent_transactions": [],
@@ -75,7 +56,7 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
         "network_graph": {"nodes": [], "links": []},
     }
 
-    # 1. Postgres: Alert history and trust score
+    # 1. Postgres: case history
     if pg_conn:
         try:
             with pg_conn.cursor() as cur:
@@ -85,18 +66,9 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
                 cur.execute("SELECT count(*) FROM alerts WHERE account_id = %s AND status = 'RESOLVED'", (account_id,))
                 profile["resolved_alerts"] = cur.fetchone()[0]
 
-                if profile["total_alerts"] == 0:
-                    profile["trust_score"] = 95
-                elif profile["total_alerts"] < 5:
-                    profile["trust_score"] = 70
-                elif profile["total_alerts"] < 15:
-                    profile["trust_score"] = 45
-                else:
-                    profile["trust_score"] = 20
         except Exception as e:
             print(f"KYC Postgres error: {e}")
-            if not demo_mode():
-                raise HTTPException(status_code=503, detail="KYC database unavailable") from e
+            raise HTTPException(status_code=503, detail="KYC database unavailable") from e
 
     # 2. Neo4j: Network graph for this account
     if graph_driver:
@@ -115,10 +87,10 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
                 links = []
                 for rec in records:
                     nodes_set.add(rec["dst"])
-                    links.append({"source": rec["src"], "target": rec["dst"], "value": rec.get("amt", 100)})
+                    links.append({"source": rec["src"], "target": rec["dst"], "value": rec["amt"]})
                     if rec["hop2"]:
                         nodes_set.add(rec["hop2"])
-                        links.append({"source": rec["dst"], "target": rec["hop2"], "value": 50})
+                        links.append({"source": rec["dst"], "target": rec["hop2"], "value": rec["amt"]})
 
                 profile["network_graph"] = {
                     "nodes": [{"id": n, "name": n, "group": 1 if n == account_id else 2} for n in nodes_set],
@@ -126,16 +98,7 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
                 }
         except Exception as e:
             print(f"KYC Neo4j error: {e}")
-            if not demo_mode():
-                raise HTTPException(status_code=503, detail="Graph database unavailable") from e
-
-    # Demo-only graph data
-    if demo_mode() and not profile["network_graph"]["nodes"]:
-        mock_peers = [f"ACC_{random.randint(1,100)}" for _ in range(4)]
-        profile["network_graph"] = {
-            "nodes": [{"id": account_id, "name": account_id, "group": 1}] + [{"id": p, "name": p, "group": 2} for p in mock_peers],
-            "links": [{"source": account_id, "target": p, "value": random.randint(500, 8000)} for p in mock_peers],
-        }
+            raise HTTPException(status_code=503, detail="Graph database unavailable") from e
 
     # 3. Real recent transactions and devices from ClickHouse
     if ch_client:
@@ -166,25 +129,11 @@ def get_kyc_profile(account_id: str, current_user: dict = Depends(get_current_us
             device_result = ch_client.execute(device_query, {"account_id": account_id})
             if device_result:
                 profile["devices"] = [
-                    {"name": row[0], "last_seen": str(row[1]), "ip": "Unknown"}
+                    {"name": row[0], "last_seen": str(row[1])}
                     for row in device_result
                 ]
         except Exception as e:
             print(f"KYC ClickHouse error: {e}")
-            if not demo_mode():
-                raise HTTPException(status_code=503, detail="Analytics database unavailable") from e
-
-    if demo_mode() and not profile["recent_transactions"]:
-        profile["recent_transactions"] = [
-            {"time": str(datetime.datetime.now() - datetime.timedelta(minutes=i * 5)), "amount": round(random.uniform(50, 5000), 2), "type": random.choice(["TRANSFER", "PAYMENT", "DEPOSIT"])}
-            for i in range(3)
-        ]
-    if demo_mode() and not profile["devices"]:
-        profile["devices"] = [
-            {"name": "Unknown Device", "last_seen": "N/A", "ip": "N/A"}
-        ]
-
-    if demo_mode() and profile["trust_score"] is None:
-        profile["trust_score"] = 75
+            raise HTTPException(status_code=503, detail="Analytics database unavailable") from e
 
     return profile

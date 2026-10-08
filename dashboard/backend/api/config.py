@@ -7,15 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from core.db import pg_conn, redis_client
 from core.deps import get_current_user
-from core.runtime import demo_mode
-from services.kafka_client import current_tps
-import services.kafka_client as kafka_svc
 
 router = APIRouter(prefix="/api", tags=["Config"])
-
-
-class TPSConfig(BaseModel):
-    tps: int = Field(ge=0, le=1000)
 
 
 class RuleUpdate(BaseModel):
@@ -24,18 +17,6 @@ class RuleUpdate(BaseModel):
     max_count: Optional[int] = Field(None, gt=0)
     is_active: Optional[bool] = None
     description: Optional[str] = Field(None, max_length=500)
-
-
-@router.post("/config/tps")
-async def update_tps(config: TPSConfig, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] not in {"ADMIN", "OPERATOR"}:
-        raise HTTPException(status_code=403, detail="Only operators can change TPS")
-    kafka_svc.current_tps = config.tps
-    if redis_client:
-        redis_client.set("mock_tps", config.tps)
-    elif not demo_mode():
-        raise HTTPException(status_code=503, detail="Redis unavailable")
-    return {"message": f"TPS updated to {config.tps}"}
 
 
 @router.get("/rules")
@@ -71,7 +52,7 @@ def update_rule(rule_id: int, update: RuleUpdate, current_user: dict = Depends(g
 
     if not pg_conn:
         raise HTTPException(status_code=503, detail="Database not connected")
-    if redis_client is None and not demo_mode():
+    if redis_client is None:
         raise HTTPException(status_code=503, detail="Redis unavailable")
 
     try:

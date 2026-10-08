@@ -17,15 +17,11 @@ def load_runtime(environment):
 
 
 class RuntimeModeTest(unittest.TestCase):
-    def test_mock_requires_demo_mode(self):
-        with self.assertRaisesRegex(RuntimeError, "APP_MODE=demo"):
-            load_runtime({"APP_MODE": "integration", "ENABLE_MOCK_DATA": "true"})
-
-    def test_demo_allows_explicit_mock(self):
-        module = load_runtime({"APP_MODE": "demo", "ENABLE_MOCK_DATA": "true"})
-        self.assertTrue(module.demo_mode())
+    def test_demo_mode_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "APP_MODE must be integration or production"):
+            load_runtime({"APP_MODE": "demo"})
 
     def test_integration_requires_real_dependency_configuration(self):
-        module = load_runtime({"APP_MODE": "integration", "ENABLE_MOCK_DATA": "false"})
+        module = load_runtime({"APP_MODE": "integration"})
         with patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(RuntimeError, "POSTGRES_USER"):
             module.validate_runtime_config()

@@ -6,7 +6,7 @@ const paths = [
   {
     title: 'Thanh toán & phân tích gian lận',
     nodes: [
-      ['Payment producer', 'Sinh sự kiện payment-events v1'],
+      ['Dataset source', 'Chưa cấu hình nguồn phát payment-events'],
       ['Kafka', 'payment-events, fraud-events, AML và DLQ'],
       ['Spark payment processor', 'Kiểm tra schema, ghi giao dịch'],
       ['PostgreSQL + ClickHouse', 'Sổ giao dịch và phân tích lịch sử'],
@@ -16,7 +16,7 @@ const paths = [
   {
     title: 'Chuyển tiền & AML graph',
     nodes: [
-      ['Transfer demo generator', 'Sinh transfer-events mô phỏng; chưa có upstream thật'],
+      ['Transfer source', 'Chưa cấu hình nguồn phát transfer-events'],
       ['Graph processor', 'Consumer idempotent, replay từ Kafka'],
       ['Neo4j', 'Quan hệ tài khoản, vòng chuyển tiền 3–5 nút'],
       ['Dashboard backend', 'Lưu alert thành case có audit trail'],

@@ -2,22 +2,22 @@
 
 A real-time banking data platform featuring a comprehensive Fraud Detection Engine, Anti-Money Laundering (AML) analysis, and a Security Dashboard tailored for investigators.
 
-**Demo/PoC only:** transactions, transfer scenarios and fraud labels are
-synthetic. Dashboard charts that are illustrative are labeled as such. ML
-candidate metrics verify the offline workflow, not model quality on real
-banking data; synthetic models never score live transactions. See
-`docs/p1-demo-acceptance.md` for the P1 demo acceptance boundary.
+**Data source status:** no dataset replay source is connected at present.
+Runtime mock generators, canned API responses and static sample charts were
+removed; dashboards show empty states until events or records arrive. See
+`docs/p1-demo-acceptance.md` for the current source boundary and the
+database-volume cleanup note.
 
 This project is built on a **Big Data / Event-Driven** architecture, utilizing real-time data streaming and multiple specialized databases to achieve high performance.
 
 ## ✨ Key Features
 
-1. **🚀 Real-time Fraud Engine**: Simulates and processes thousands of transactions per second through Apache Kafka and Spark Structured Streaming.
+1. **🚀 Real-time Fraud Engine**: Processes payment events supplied to Apache Kafka through Spark Structured Streaming.
 2. **🧠 XAI (Explainable AI)**: Automatically evaluates Risk Scores and provides transparent, human-readable explanations for flagged transactions (e.g., "Detected circular money transfer loop").
 3. **⚙️ Dynamic Rule Management**: Administrators can add, modify alert thresholds, or toggle fraud rules directly from the UI without restarting the system (powered by Redis Pub/Sub).
 4. **🌐 KYC 360° View**: A comprehensive customer profile. Integrates Neo4j to visualize the transaction network graph, helping investigators identify complex money laundering rings.
 5. **🕵️ Case Investigation**: A Case Management system that allows security investigators to assign tasks, leave investigation notes, and securely upload evidence files via MinIO (S3-compatible).
-6. **📊 Analytics & Insights**: Advanced charts including Sankey diagrams (money flow), Scatter Plots (anomaly detection), and transaction conversion funnels.
+6. **📊 Analytics & Insights**: Dashboard analytics are backed by the connected data stores; empty states appear until source data is available.
 7. **🔒 Enterprise Security**: Implements Network Segmentation (3 isolated tiers), Data Masking for PII (Silver/Gold layers), and Database RBAC.
 
 ## 🏗 System Architecture
@@ -27,7 +27,7 @@ The platform follows a robust event-driven microservices architecture, secured b
 ```mermaid
 graph TD
     %% Define Nodes
-    Gen["Data Generator (Python)"] -->|Produces Events| Kafka[("Apache Kafka")]
+    Source["External / Dataset Source (not connected)"] -->|Events when configured| Kafka[("Apache Kafka")]
     Kafka -->|Consumes Events| Spark["Apache Spark (Rule Engine)"]
     
     %% Databases
@@ -87,11 +87,9 @@ Clone the repository and run the following command at the project root directory
 
 Create `.env` from `.env.example` and fill every credential before starting.
 `APP_MODE=integration` is the default: PostgreSQL, Kafka, Redis, Neo4j,
-ClickHouse and MinIO must be reachable, and API errors are reported instead of
-showing sample data. `APP_MODE=demo` permits sample API responses when an
-optional analytics dependency is unavailable. Set `ENABLE_MOCK_DATA=true`
-only in demo mode to broadcast sample events. PostgreSQL and dashboard
-credentials are required in both modes for authentication and alert storage.
+ClickHouse and MinIO must be reachable. API errors are reported instead of
+showing sample data. PostgreSQL and dashboard credentials are required for
+authentication and alert storage.
 
 ```bash
 docker compose up -d
@@ -149,7 +147,7 @@ banking_data_platform/
 
 1. **Cannot connect to MinIO / Upload fails**: Ensure ports `9000` (API) and `9001` (console) are not occupied. The frontend uploads through presigned URLs on the API port `9000`.
 2. **No real-time data visible**: Check Kafka logs (`docker logs banking_kafka`) and verify if the Spark Streaming Job is running.
-3. **Demo mode**: Set `APP_MODE=demo` explicitly. Integration mode fails startup or returns `503` when required services are unavailable. Check `/api/health/live` and `/api/health/ready` separately.
+3. **No events visible**: No payment or transfer source is connected by default. Check `/api/health/live` and `/api/health/ready`; charts remain empty until an event source is configured.
 
 ---
 *This project is designed as a Proof of Concept (PoC) for a real-time banking data processing platform utilizing Big Data technologies.*

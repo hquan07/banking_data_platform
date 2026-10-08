@@ -16,37 +16,12 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState('overview');
   const [alerts, setAlerts] = useState([]);
   const [tps, setTps] = useState(0);
-  const [targetTps, setTargetTps] = useState(2);
   const [totalValue, setTotalValue] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const { token, user, logout } = React.useContext(AuthContext);
   
   // Real-time chart data
-  const [chartData, setChartData] = useState(() => {
-    return Array.from({ length: 20 }, (_, i) => ({
-      time: new Date(Date.now() - (20 - i) * 1000).toLocaleTimeString([], { hour12: false }),
-      amount: 0
-    }));
-  });
-
-  const [mapData, setMapData] = useState([]);
-  
-  const [sankeyData] = useState({
-    nodes: [{ name: 'Bank A' }, { name: 'Bank B' }, { name: 'Crypto Ex' }, { name: 'Offshore' }],
-    links: [
-      { source: 0, target: 1, value: 50000 },
-      { source: 1, target: 2, value: 35000 },
-      { source: 1, target: 3, value: 15000 },
-      { source: 2, target: 3, value: 20000 }
-    ]
-  });
-
-  const [funnelData] = useState([
-    { name: 'Total TX', value: 10000, fill: '#3b82f6' },
-    { name: 'DQ Passed', value: 9800, fill: '#10b981' },
-    { name: 'Fraud Checked', value: 9500, fill: '#f59e0b' },
-    { name: 'Cleared', value: 9400, fill: '#ef4444' }
-  ]);
+  const [chartData, setChartData] = useState([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -74,15 +49,6 @@ function MainApp() {
           return newData;
         });
 
-        // Update Heatmap
-        if (message.data.lat && message.data.lng) {
-          setMapData(prev => {
-            const newMap = [...prev, { lat: message.data.lat, lng: message.data.lng }];
-            if (newMap.length > 50) newMap.shift();
-            return newMap;
-          });
-        }
-        
       } else if (message.topic === "fraud-events" || message.topic === "aml-events") {
         setAlerts(prev => {
           const newAlerts = [message.data, ...prev];
@@ -107,32 +73,6 @@ function MainApp() {
       clearInterval(interval);
     };
   }, [token]);
-
-  const donutData = [
-    { name: 'Velocity (Redis)', value: 45, color: '#ef4444' },
-    { name: 'Structuring (AML)', value: 30, color: '#f59e0b' },
-    { name: 'Large Amount', value: 25, color: '#3b82f6' },
-  ];
-
-  const scatterData = React.useMemo(() => Array.from({length: 40}, (_, i) => {
-    const isAnomaly = i % 11 === 0;
-    const amount = isAnomaly ? 6500 + i * 120 : 100 + (i * 137) % 900;
-    return {
-      x: Date.now() - (40 - i) * 60000,
-      y: amount,
-      z: isAnomaly ? 400 : 50,
-      isAnomaly,
-      reason: isAnomaly ? (amount > 10000 ? 'Struct/Smurf' : 'Large Transfer') : 'Normal'
-    }
-  }), []);
-
-  const riskyAccountsData = [
-    { name: 'ACC_92', score: 98 },
-    { name: 'ACC_11', score: 92 },
-    { name: 'ACC_44', score: 87 },
-    { name: 'ACC_05', score: 81 },
-    { name: 'ACC_73', score: 76 }
-  ];
 
   if (!token) {
     return <Login />;
@@ -203,39 +143,11 @@ function MainApp() {
           </div>
         </header>
 
-        <div role="note" style={{ margin: '12px 20px 0', padding: '10px 14px', borderRadius: 8, border: '1px solid #f59e0b66', background: '#f59e0b18', color: '#fcd34d', fontSize: 13 }}>
-          DEMO DATA — Giao dịch và nhãn fraud là dữ liệu mô phỏng. Các biểu đồ minh họa không thể hiện hiệu quả phát hiện gian lận trên dữ liệu thật.
-        </div>
-
         {/* Dynamic Tab Content */}
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '2rem', padding: '10px 20px'}}>
-          {/* TPS Control Slider */}
-          {['ADMIN', 'OPERATOR'].includes(user?.role) && <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '0.5rem 1rem', borderRadius: '8px'}}>
-            <span style={{fontSize: '0.875rem', color: 'var(--text-secondary)'}}>Mock TPS ({targetTps}):</span>
-            <input 
-              type="range" 
-              min="0" 
-              max="100" 
-              value={targetTps}
-              onChange={(e) => {
-                const val = parseInt(e.target.value, 10);
-                setTargetTps(val);
-                fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/config/tps', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + token,
-                  },
-                  body: JSON.stringify({tps: val})
-                }).catch(err => console.error("Error setting TPS:", err));
-              }}
-              style={{cursor: 'pointer', accentColor: 'var(--accent-color)'}}
-            />
-          </div>}
-
           <div className="status-badge" style={{borderColor: isConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}}>
             <span className="dot" style={{backgroundColor: isConnected ? '#10b981' : '#ef4444'}}></span>
-            {isConnected ? 'DEMO STREAM (WebSocket)' : 'DEMO STREAM (Disconnected)'}
+            {isConnected ? 'Live stream' : 'Live stream disconnected'}
           </div>
         </div>
         <main className="dashboard-container">
@@ -266,9 +178,9 @@ function MainApp() {
 
         {/* Tab Content */}
         <Suspense fallback={<div role="status">Đang tải nội dung...</div>}>
-        {activeTab === 'overview' && <OverviewTab data={chartData} mapData={mapData} />}
-        {activeTab === 'security' && <SecurityTab scatterData={scatterData} riskyAccountsData={riskyAccountsData} donutData={donutData} />}
-        {activeTab === 'analytics' && <AnalyticsTab sankeyData={sankeyData} funnelData={funnelData} />}
+        {activeTab === 'overview' && <OverviewTab data={chartData} />}
+        {activeTab === 'security' && <SecurityTab />}
+        {activeTab === 'analytics' && <AnalyticsTab />}
         {activeTab === 'history' && <HistoryTab />}
         {activeTab === 'users' && <UserManagementTab />}
         {activeTab === 'rules' && <RulesManagementTab />}

@@ -35,7 +35,7 @@ def start_fraud_engine(spark):
     watermarked_df = parsed_df.withWatermark("event_time", "10 minutes")
 
     # No ML scoring until a real labeled dataset, time-split evaluation and
-    # versioned model artifact have been approved. The legacy synthetic model
+    # versioned model artifact have been approved. The legacy model
     # is deliberately never loaded or used for live case creation.
     from pyspark.sql.functions import lit
 

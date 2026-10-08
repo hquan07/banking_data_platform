@@ -15,7 +15,7 @@ export default function HistoryTab() {
         const formattedData = data.map(item => ({
           ...item,
           total_tx: Number(item.total_tx),
-          total_fraud: Number(item.total_fraud),
+          total_alerts: Number(item.total_alerts),
           total_amount: Number(item.total_amount)
         }));
         setHistoryData(formattedData);
@@ -49,13 +49,13 @@ export default function HistoryTab() {
             />
             <Legend />
             <Bar yAxisId="left" dataKey="total_tx" name="Total Transactions" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-            <Bar yAxisId="right" dataKey="total_fraud" name="Alerts created (all statuses)" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            <Bar yAxisId="right" dataKey="total_alerts" name="Alerts created (all statuses)" fill="#ef4444" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       <div className="panel col-span-12" style={{height: '400px'}}>
-        <h2 className="panel-title">Total Transaction Value (USD) - ClickHouse</h2>
+        <h2 className="panel-title">Total Transaction Value - ClickHouse</h2>
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={historyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />

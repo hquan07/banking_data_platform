@@ -14,7 +14,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from core.db import pg_conn, get_s3_client, EVIDENCE_BUCKET
 from core.deps import get_current_user
-from core.runtime import demo_mode
 from services.alert_lifecycle import transition_allowed
 
 router = APIRouter(prefix="/api", tags=["Alerts"])
@@ -101,19 +100,11 @@ def get_alerts(
                 return {"total": total, "page": page, "limit": limit, "data": data}
         except Exception as e:
             print(f"Postgres query error: {e}")
-            if not demo_mode():
-                raise HTTPException(status_code=503, detail="Alerts database unavailable") from e
+            raise HTTPException(status_code=503, detail="Alerts database unavailable") from e
         finally:
             DB_QUERY_SECONDS.labels("list").observe(time.monotonic() - started)
 
-    if not demo_mode():
-        raise HTTPException(status_code=503, detail="Alerts database unavailable")
-    # Demo-only sample data
-    data = [
-        {"alert_id": 1, "account_id": "ACC_44", "rule_name": "CIRCULAR_TRANSFER", "amount": 12000.0, "risk_score": 98, "status": "PENDING", "created_at": "2023-10-27 10:00:00", "xai_explanation": None, "notes": None, "evidence_file_url": None, "assignee_id": None},
-        {"alert_id": 2, "account_id": "ACC_11", "rule_name": "HIGH_VELOCITY", "amount": 4500.0, "risk_score": 85, "status": "PENDING", "created_at": "2023-10-27 10:05:00", "xai_explanation": None, "notes": None, "evidence_file_url": None, "assignee_id": None},
-    ]
-    return {"total": len(data), "page": page, "limit": limit, "data": data}
+    raise HTTPException(status_code=503, detail="Alerts database unavailable")
 
 
 @router.post("/alerts/{alert_id}/status")

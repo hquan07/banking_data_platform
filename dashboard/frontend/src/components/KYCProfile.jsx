@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { AuthContext } from './AuthContext';
 import ForceGraph2D from 'react-force-graph-2d';
-import { X, Shield, Smartphone, Globe, TrendingUp, AlertTriangle } from 'lucide-react';
+import { X, Smartphone, Globe, TrendingUp, AlertTriangle } from 'lucide-react';
 
 export default function KYCProfile({ accountId, onClose }) {
   const { token } = useContext(AuthContext);
@@ -27,12 +27,6 @@ export default function KYCProfile({ accountId, onClose }) {
   }, [accountId, token]);
 
   if (!accountId) return null;
-
-  const trustColor = (score) => {
-    if (score >= 70) return '#10b981';
-    if (score >= 40) return '#f59e0b';
-    return '#ef4444';
-  };
 
   return (
     <div style={{
@@ -70,17 +64,7 @@ export default function KYCProfile({ accountId, onClose }) {
         ) : profile ? (
           <>
             {/* Top metrics row */}
-            <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem'}}>
-              {/* Trust Score */}
-              <div style={{background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.05)'}}>
-                <div style={{display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8', fontSize: '13px', marginBottom: '8px'}}>
-                  <Shield size={16} /> Điểm Uy Tín
-                </div>
-                <div style={{fontSize: '2rem', fontWeight: 'bold', color: trustColor(profile.trust_score)}}>
-                  {profile.trust_score}
-                  <span style={{fontSize: '0.9rem', color: '#94a3b8'}}>/100</span>
-                </div>
-              </div>
+            <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem'}}>
               {/* Total Alerts */}
               <div style={{background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.05)'}}>
                 <div style={{display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8', fontSize: '13px', marginBottom: '8px'}}>
@@ -147,7 +131,6 @@ export default function KYCProfile({ accountId, onClose }) {
                     <div key={i} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < profile.devices.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none'}}>
                       <div>
                         <div style={{color: '#fff', fontSize: '13px', fontWeight: '500'}}>{dev.name}</div>
-                        <div style={{color: '#64748b', fontSize: '12px'}}>IP: {dev.ip}</div>
                       </div>
                       <span style={{color: '#94a3b8', fontSize: '12px'}}>{dev.last_seen}</span>
                     </div>

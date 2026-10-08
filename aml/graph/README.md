@@ -7,17 +7,9 @@ must supply `event_id`, `trace_id`, `from_account_id`, `to_account_id`, positive
 `amount`, uppercase three-letter `currency`, and a timezone-aware `timestamp`.
 The contract is enforced in `shared/transfer_contract.py`.
 
-For a repeatable mock-data demo, `kafka/producers/demo_transfer_scenarios.py`
-generates 3-, 4-, and 5-account cycles plus a low-amount negative control.
-Dry-run JSONL output is the default; `--publish` sends to the local Kafka broker.
-Use a fresh `--run-id` for each run. Publishing is refused in `APP_MODE=production`.
-
-```bash
-PYTHONPATH=. python3 kafka/producers/demo_transfer_scenarios.py --run-id walkthrough-1
-PYTHONPATH=. python3 kafka/producers/demo_transfer_scenarios.py --run-id walkthrough-1 --publish
-```
-
-These fixtures are synthetic, not an integrated banking transfer source.
+No transfer event source is currently connected. The graph remains empty until
+a dataset replay adapter or an upstream transfer publisher sends events that
+meet the v1 contract.
 
 Neo4j account edges are merged by source event ID and carry amount, currency,
 UTC event time, trace ID, Kafka topic/partition/offset. Customer, account and

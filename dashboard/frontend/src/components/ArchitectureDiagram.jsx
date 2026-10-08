@@ -24,7 +24,7 @@ const statusLabels = {
   unhealthy: 'Không phản hồi hoặc probe thất bại',
   degraded: 'API phản hồi nhưng chưa sẵn sàng',
   documented: 'Chưa có health probe trên sơ đồ',
-  planned: 'Upstream thật chưa tích hợp; demo dùng generator',
+  planned: 'Dataset source chưa được cấu hình',
 };
 
 function ArchitectureNode({ data, selected }) {
@@ -78,15 +78,15 @@ const node = (id, x, y, label, sublabel, description, icon, color, planned = fal
 
 // This is the deployed banking topology, not the NewsPulse services in the visual reference.
 const initialNodes = [
-  node('payment-producer', 0, 0, 'Payment producer', 'Payment events v1', 'Sinh payment-events với event_id ổn định.', 'zap', '#3b82f6'),
-  node('transfer-source', 300, 0, 'Transfer demo generator', 'Synthetic scenarios', 'CLI tạo transfer-events v1 cho vòng AML 3/4/5 tài khoản; chưa có upstream thật.', 'network', '#f59e0b', true),
+  node('payment-producer', 0, 0, 'Dataset source', 'Chưa cấu hình', 'Chưa có dataset replay source được kết nối.', 'database', '#f59e0b', true),
+  node('transfer-source', 300, 0, 'Transfer source', 'Chưa cấu hình', 'Chưa có nguồn transfer-events được kết nối.', 'network', '#f59e0b', true),
   node('user', 900, 0, 'Dashboard user', 'Web client', 'Người dùng truy cập giao diện và case management.', 'user', '#3b82f6'),
   node('retry', 0, 145, 'Payment retry worker', 'Approved retry', 'Phát lại payment-events-retry đã được duyệt.', 'retry', '#3b82f6'),
   node('kafka', 300, 145, 'Kafka broker', 'Event streaming + DLQ', 'Truyền payment, transfer, fraud và AML events; giữ retry/DLQ.', 'zap', '#ef4444'),
   node('frontend', 900, 145, 'React dashboard', 'Web + WebSocket', 'Giao diện phân tích, alert và Architecture Map.', 'monitor', '#3b82f6'),
   node('airflow', 0, 290, 'Airflow + DQ', 'Silver orchestration', 'Chạy Silver data quality và lưu run-scoped evidence.', 'server', '#a78bfa'),
   node('spark-payment', 300, 290, 'Spark payment', 'Stream processor', 'Validate schema/event-time và ghi payment ledger.', 'activity', '#f59e0b'),
-  node('spark-fraud', 600, 290, 'Spark fraud', 'Rule-based engine', 'Phát hiện fraud bằng rule; ML synthetic đã tắt.', 'shield', '#f59e0b'),
+  node('spark-fraud', 600, 290, 'Spark fraud', 'Rule-based engine', 'Phát hiện fraud bằng rule; chưa có nguồn dataset được kết nối.', 'shield', '#f59e0b'),
   node('backend', 900, 290, 'FastAPI backend', 'Auth + case API', 'Xử lý auth, case lifecycle, analytics và evidence.', 'server', '#3b82f6'),
   node('minio', 0, 435, 'MinIO', 'Silver + evidence', 'Lưu Silver parquet, quarantine và case evidence.', 'archive', '#10b981'),
   node('graph-processor', 300, 435, 'Graph processor', 'AML cycle detection', 'Consumer idempotent; phát hiện chu trình 3–5 tài khoản.', 'graph', '#f59e0b'),

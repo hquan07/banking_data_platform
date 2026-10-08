@@ -15,8 +15,8 @@ from prometheus_client import Gauge
 from core.db import pg_conn, graph_driver, ch_client, redis_client, get_s3_client
 from core.security import get_password_hash
 from core.deps import resolve_user_token
-from core.runtime import APP_MODE, ENABLE_MOCK_DATA, validate_runtime_config
-from services.kafka_client import manager, consume_kafka, simulate_events, kafka_ready
+from core.runtime import APP_MODE, validate_runtime_config
+from services.kafka_client import manager, consume_kafka, kafka_ready
 
 # API Routers
 from api.auth import router as auth_router
@@ -52,16 +52,15 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("PostgreSQL is required for authentication and alerts")
     with pg_conn.cursor() as cur:
         cur.execute("SELECT 1")
-    if APP_MODE != "demo":
-        if redis_client is None or not redis_client.ping():
-            raise RuntimeError("Redis is required outside demo mode")
-        if graph_driver is None:
-            raise RuntimeError("Neo4j is required outside demo mode")
-        graph_driver.verify_connectivity()
-        if ch_client is None or ch_client.execute("EXISTS TABLE payment_events") != [(1,)]:
-            raise RuntimeError("ClickHouse is required outside demo mode")
-        if get_s3_client() is None:
-            raise RuntimeError("MinIO is required outside demo mode")
+    if redis_client is None or not redis_client.ping():
+        raise RuntimeError("Redis is required")
+    if graph_driver is None:
+        raise RuntimeError("Neo4j is required")
+    graph_driver.verify_connectivity()
+    if ch_client is None or ch_client.execute("EXISTS TABLE payment_events") != [(1,)]:
+        raise RuntimeError("ClickHouse is required")
+    if get_s3_client() is None:
+        raise RuntimeError("MinIO is required")
 
     # --- Startup ---
     # Run idempotent application migrations. This also repairs databases
@@ -99,18 +98,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             raise RuntimeError(f"Default user initialization failed: {e}") from e
 
-    # Start the real consumer in every mode. The simulator is opt-in.
-    if APP_MODE != "demo":
-        background_tasks.append(asyncio.create_task(consume_kafka()))
-        try:
-            await asyncio.wait_for(kafka_ready.wait(), timeout=30)
-        except asyncio.TimeoutError as exc:
-            for task in background_tasks:
-                task.cancel()
-            await asyncio.gather(*background_tasks, return_exceptions=True)
-            raise RuntimeError("Kafka consumer did not become ready") from exc
-    if ENABLE_MOCK_DATA:
-        background_tasks.append(asyncio.create_task(simulate_events()))
+    background_tasks.append(asyncio.create_task(consume_kafka()))
+    try:
+        await asyncio.wait_for(kafka_ready.wait(), timeout=30)
+    except asyncio.TimeoutError as exc:
+        for task in background_tasks:
+            task.cancel()
+        await asyncio.gather(*background_tasks, return_exceptions=True)
+        raise RuntimeError("Kafka consumer did not become ready") from exc
 
     yield
 
@@ -228,7 +223,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "healthy" if kafka_ready.is_set() or APP_MODE == "demo" else "degraded", "mode": APP_MODE, "clients_connected": len(manager.active_connections)}
+    return {"status": "healthy" if kafka_ready.is_set() else "degraded", "mode": APP_MODE, "clients_connected": len(manager.active_connections)}
 
 
 @app.get("/api/health/live")
@@ -255,15 +250,14 @@ def readiness_check():
             cur.execute("SELECT 1")
 
     dependencies = {"postgres": check(pg_conn, postgres_probe)}
-    if APP_MODE != "demo":
-        s3_client = get_s3_client()
-        dependencies.update({
-            "kafka": kafka_ready.is_set(),
-            "redis": check(redis_client, redis_client.ping if redis_client else None),
-            "neo4j": check(graph_driver, graph_driver.verify_connectivity if graph_driver else None),
-            "clickhouse": check(ch_client, lambda: ch_client.execute("EXISTS TABLE payment_events") == [(1,)]),
-            "minio": check(s3_client, lambda: s3_client.head_bucket(Bucket="evidence")),
-        })
+    s3_client = get_s3_client()
+    dependencies.update({
+        "kafka": kafka_ready.is_set(),
+        "redis": check(redis_client, redis_client.ping if redis_client else None),
+        "neo4j": check(graph_driver, graph_driver.verify_connectivity if graph_driver else None),
+        "clickhouse": check(ch_client, lambda: ch_client.execute("EXISTS TABLE payment_events") == [(1,)]),
+        "minio": check(s3_client, lambda: s3_client.head_bucket(Bucket="evidence")),
+    })
     if not all(dependencies.values()):
         raise HTTPException(status_code=503, detail={"status": "not_ready", **dependencies})
     return {"status": "ready", "mode": APP_MODE, **dependencies}

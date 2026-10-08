@@ -3,7 +3,6 @@ Neo4j graph network router.
 """
 from fastapi import APIRouter, HTTPException
 from core.db import graph_driver
-from core.runtime import demo_mode
 
 router = APIRouter(prefix="/api/graph", tags=["Graph"])
 
@@ -39,27 +38,6 @@ def get_circular_graph():
                 return {"nodes": [], "links": []}
         except Exception as e:
             print(f"Neo4j query error: {e}")
-            if not demo_mode():
-                raise HTTPException(status_code=503, detail="Graph database unavailable") from e
+            raise HTTPException(status_code=503, detail="Graph database unavailable") from e
 
-    if not demo_mode():
-        raise HTTPException(status_code=503, detail="Graph database unavailable")
-    # Demo-only sample graph
-    return {
-        "nodes": [
-            {"id": "ACC_92", "name": "ACC_92", "group": 1},
-            {"id": "ACC_11", "name": "ACC_11", "group": 1},
-            {"id": "ACC_44", "name": "ACC_44", "group": 2},
-            {"id": "ACC_05", "name": "ACC_05", "group": 2},
-            {"id": "ACC_73", "name": "ACC_73", "group": 3},
-            {"id": "Crypto_Ex", "name": "Crypto Ex", "group": 4},
-        ],
-        "links": [
-            {"source": "ACC_92", "target": "ACC_11", "value": 5000},
-            {"source": "ACC_11", "target": "ACC_44", "value": 4500},
-            {"source": "ACC_44", "target": "ACC_92", "value": 4000},
-            {"source": "ACC_05", "target": "ACC_73", "value": 8000},
-            {"source": "ACC_73", "target": "ACC_05", "value": 7500},
-            {"source": "ACC_44", "target": "Crypto_Ex", "value": 12000},
-        ],
-    }
+    raise HTTPException(status_code=503, detail="Graph database unavailable")

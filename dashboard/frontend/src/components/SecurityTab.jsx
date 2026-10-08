@@ -1,12 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from './AuthContext';
-import { PieChart, Pie, Cell, ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, ReferenceArea, Legend } from 'recharts';
 import { ChevronDown, ChevronUp, Upload, MessageSquare, UserCheck } from 'lucide-react';
 import KYCProfile from './KYCProfile';
 
-const COLORS = ['#ef4444', '#f59e0b', '#3b82f6'];
-
-export default function SecurityTab({ scatterData, riskyAccountsData, donutData }) {
+export default function SecurityTab() {
   const { token } = useContext(AuthContext);
   const [pgAlerts, setPgAlerts] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -465,97 +462,6 @@ export default function SecurityTab({ scatterData, riskyAccountsData, donutData 
         )}
       </div>
 
-      {/* Fraud Distribution */}
-      <div className="panel col-span-6">
-        <h2 className="panel-title">Fraud Distribution (dữ liệu minh họa)</h2>
-        <ResponsiveContainer width="100%" height={250}>
-          <PieChart>
-            <Pie data={donutData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-              {donutData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <RechartsTooltip 
-              contentStyle={{backgroundColor: '#141a28', border: 'none', borderRadius: '8px'}} 
-              itemStyle={{color: '#fff'}} 
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Top Risky Accounts */}
-      <div className="panel col-span-6">
-        <h2 className="panel-title">Top Risky Accounts (dữ liệu minh họa)</h2>
-        <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={riskyAccountsData} layout="vertical" margin={{top: 5, right: 30, left: 20, bottom: 5}}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" horizontal={false} />
-            <XAxis type="number" stroke="rgba(255,255,255,0.5)" />
-            <YAxis dataKey="name" type="category" stroke="rgba(255,255,255,0.5)" width={80} />
-            <RechartsTooltip 
-              contentStyle={{backgroundColor: '#141a28', border: 'none', borderRadius: '8px'}} 
-              itemStyle={{color: '#fff'}} 
-              cursor={{fill: 'rgba(255,255,255,0.05)'}}
-            />
-            <Bar dataKey="score" fill="#ef4444" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Anomaly Scatter Plot */}
-      <div className="panel col-span-12" style={{height: '350px'}}>
-        <h2 className="panel-title">Anomaly Detection (dữ liệu minh họa)</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-            <XAxis dataKey="x" type="number" name="Time" stroke="rgba(255,255,255,0.5)" domain={['dataMin', 'dataMax']} tickFormatter={(unixTime) => new Date(unixTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} />
-            <YAxis dataKey="y" type="number" name="Amount ($)" stroke="rgba(255,255,255,0.5)" tickFormatter={(val) => `$${val}`} />
-            <ZAxis dataKey="z" type="number" range={[50, 400]} />
-            
-            <ReferenceArea y1={5000} fill="rgba(239, 68, 68, 0.05)" strokeOpacity={0.3} ifOverflow="hidden" />
-            
-            <RechartsTooltip 
-              cursor={{ strokeDasharray: '3 3' }} 
-              contentStyle={{backgroundColor: '#141a28', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px'}} 
-              itemStyle={{color: '#fff'}}
-              content={({ active, payload }) => {
-                if (active && payload && payload.length) {
-                  const data = payload[0].payload;
-                  return (
-                    <div style={{ background: '#141a28', padding: '12px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}>
-                      <p style={{ margin: '0 0 8px 0', color: '#94a3b8', fontSize: '12px' }}>{new Date(data.x).toLocaleTimeString()}</p>
-                      <p style={{ margin: '0 0 4px 0', color: data.isAnomaly ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
-                        Amount: ${data.y.toFixed(2)}
-                      </p>
-                      <p style={{ margin: '0', color: '#fff', fontSize: '13px' }}>
-                        Status: <span style={{color: data.isAnomaly ? '#ef4444' : '#94a3b8'}}>{data.reason}</span>
-                      </p>
-                    </div>
-                  );
-                }
-                return null;
-              }}
-            />
-            <Legend verticalAlign="top" height={36} content={() => (
-              <div style={{display: 'flex', justifyContent: 'center', gap: '20px', color: '#94a3b8', fontSize: '14px', marginBottom: '10px'}}>
-                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                  <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6'}}></div> Normal Transaction
-                </div>
-                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                  <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#ef4444'}}></div> High Risk / Anomaly
-                </div>
-                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                  <div style={{width: '24px', height: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px dashed rgba(239, 68, 68, 0.3)'}}></div> Anomaly Threshold (&gt;$5,000)
-                </div>
-              </div>
-            )} />
-            <Scatter name="Transactions" data={scatterData} fill="#3b82f6">
-              {scatterData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.isAnomaly ? '#ef4444' : '#3b82f6'} opacity={0.8} />
-              ))}
-            </Scatter>
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
     </div>
   );
 }

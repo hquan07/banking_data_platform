@@ -194,7 +194,6 @@ services:
       - CLICKHOUSE_DB=${CLICKHOUSE_DB}
       - CLICKHOUSE_USER=${CLICKHOUSE_USER}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
-      - ENABLE_MOCK_DATA=false
       - APP_MODE=${APP_MODE:-integration}
       - DQ_DATA_PATH=s3://banking-lake/silver/customers/
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
@@ -367,7 +366,6 @@ services:
       - "8000:8000"
     environment:
       - APP_MODE=${APP_MODE:-integration}
-      - ENABLE_MOCK_DATA=${ENABLE_MOCK_DATA:-false}
       - POSTGRES_HOST=banking_postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DB=${POSTGRES_DB}
@@ -470,22 +468,6 @@ services:
     networks:
       - frontend_network
       - backend_network
-
-  payment_producer:
-    build:
-      context: .
-      dockerfile: docker/ingestion/Dockerfile
-    container_name: banking_payment_producer
-    restart: on-failure
-    command: ["python", "kafka/producers/payment_producer.py"]
-    environment:
-      - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
-    depends_on:
-      kafka_topics_init:
-        condition: service_completed_successfully
-    networks:
-      - backend_network
-      - data_network
 
   payment_retry_worker:
     build:

@@ -65,10 +65,10 @@ def train_candidate(input_path: Path, output_dir: Path, version: str, threshold:
     dataset_bytes = input_path.read_bytes()
     dataset_hash = hashlib.sha256(dataset_bytes).hexdigest()
     frame = pd.read_csv(input_path)
-    origins = set(frame["data_origin"].dropna().unique()) if "data_origin" in frame else {"unverified"}
-    if len(origins) != 1 or not origins <= {"synthetic_demo", "unverified"}:
-        raise ValueError("data_origin must be uniformly synthetic_demo or omitted")
-    data_origin = origins.pop()
+    origins = set(frame["data_origin"].dropna().astype(str).unique()) if "data_origin" in frame else set()
+    if len(origins) > 1:
+        raise ValueError("Training input must contain one data_origin")
+    data_origin = next(iter(origins), "unverified")
     train, holdout = prepare_data(frame)
     model = RandomForestClassifier(
         n_estimators=100, max_depth=10, class_weight="balanced", random_state=42
@@ -104,10 +104,9 @@ def train_candidate(input_path: Path, output_dir: Path, version: str, threshold:
         },
         "status": "CANDIDATE_NOT_DEPLOYED",
         "data_origin": data_origin,
-        "evaluation_scope": "pipeline_test_only" if data_origin == "synthetic_demo" else "unverified_labels",
+        "evaluation_scope": "offline_dataset_holdout",
         "production_eligible": False,
-        "interpretation": "Synthetic metrics validate the demo workflow, not real fraud performance"
-        if data_origin == "synthetic_demo" else "Labels and serving features require review",
+        "interpretation": "Offline benchmark only; source labels and serving feature equivalence require review",
     }
     version_dir = output_dir / version
     version_dir.mkdir(parents=True, exist_ok=False)

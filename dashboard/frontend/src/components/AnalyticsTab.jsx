@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sankey, Tooltip, ResponsiveContainer, FunnelChart, Funnel, LabelList } from 'recharts';
 import ForceGraph2D from 'react-force-graph-2d';
 
-export default function AnalyticsTab({ sankeyData, funnelData }) {
+export default function AnalyticsTab() {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [graphLoading, setGraphLoading] = useState(true);
   const [graphError, setGraphError] = useState('');
@@ -21,56 +20,18 @@ export default function AnalyticsTab({ sankeyData, funnelData }) {
   }, []);
 
   useEffect(() => {
-    if (graphContainerRef.current) {
-      setGraphWidth(graphContainerRef.current.offsetWidth);
-      const handleResize = () => setGraphWidth(graphContainerRef.current.offsetWidth);
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }
-  }, [graphContainerRef.current]);
+    if (!graphContainerRef.current) return undefined;
+    const updateWidth = () => setGraphWidth(graphContainerRef.current?.offsetWidth || 0);
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
   return (
     <div className="grid">
-      <div className="panel col-span-6" style={{height: '400px'}}>
-        <h2 className="panel-title">Money Flow Analysis (dữ liệu minh họa tĩnh)</h2>
-        <ResponsiveContainer width="100%" height={350}>
-          <Sankey
-            data={JSON.parse(JSON.stringify(sankeyData))}
-            nodePadding={50}
-            margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-            link={{ stroke: '#77c878', strokeWidth: '10' }}
-            node={{ stroke: '#141a28', strokeWidth: '2' }}
-          >
-            <Tooltip 
-              contentStyle={{backgroundColor: '#141a28', border: 'none', borderRadius: '8px'}} 
-              itemStyle={{color: '#fff'}} 
-            />
-          </Sankey>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="panel col-span-6" style={{height: '400px'}}>
-        <h2 className="panel-title">Transaction Pipeline Funnel (dữ liệu minh họa tĩnh)</h2>
-        <ResponsiveContainer width="100%" height={350}>
-          <FunnelChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-            <Tooltip 
-              contentStyle={{backgroundColor: '#141a28', border: 'none', borderRadius: '8px'}} 
-              itemStyle={{color: '#fff'}} 
-            />
-            <Funnel
-              dataKey="value"
-              data={funnelData}
-              isAnimationActive={false}
-            >
-              <LabelList position="right" fill="#fff" stroke="none" dataKey="name" />
-            </Funnel>
-          </FunnelChart>
-        </ResponsiveContainer>
-      </div>
-      
       <div className="panel col-span-12" style={{height: '450px'}}>
-        <h2 className="panel-title">AML Network (Neo4j Graph Visualization)</h2>
-        <div ref={graphContainerRef} style={{ width: '100%', height: '380px', overflow: 'hidden' }}>
+        <h2 className="panel-title">AML Network (Neo4j)</h2>
+        <div ref={graphContainerRef} style={{width: '100%', height: '380px', overflow: 'hidden'}}>
           {graphData.nodes.length > 0 ? (
             <ForceGraph2D
               width={graphWidth}
@@ -85,7 +46,7 @@ export default function AnalyticsTab({ sankeyData, funnelData }) {
             />
           ) : (
             <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#94a3b8'}}>
-              {graphError ? <span role="alert">{graphError}</span> : graphLoading ? 'Đang tải AML graph...' : 'Chưa có quan hệ AML để hiển thị.'}
+              {graphError ? <span role="alert">{graphError}</span> : graphLoading ? 'Đang tải AML graph...' : 'Chưa có quan hệ AML trong nguồn dữ liệu.'}
             </div>
           )}
         </div>

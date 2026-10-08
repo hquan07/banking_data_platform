@@ -11,7 +11,7 @@
 flowchart TD
 
 subgraph group_ingestion_streaming["Ingestion & Streaming"]
-  node_payment_producer["Payment Producer"]
+  node_dataset_source["Dataset / Payment Source<br/>(not connected)"]
   node_kafka["Apache Kafka"]
   node_payment_processing["Payment Processing"]
 end
@@ -51,7 +51,7 @@ end
 
 node_investigator(("Investigator"))
 
-node_payment_producer -->|"produces events"| node_kafka
+node_dataset_source -.->|"source to be configured"| node_kafka
 node_kafka -->|"delivers events"| node_payment_processing
 node_payment_processing -->|"dispatches payments"| node_fraud_detection
 node_fraud_detection -->|"evaluates rules"| node_fraud_rules
@@ -88,7 +88,6 @@ node_airflow -->|"runs warehouse"| node_warehouse_batch
 node_warehouse_batch -->|"reads silver data"| node_minio
 node_warehouse_batch -->|"loads warehouse"| node_clickhouse
 
-click node_payment_producer "https://github.com/hquan07/banking_data_platform/blob/main/kafka/producers/payment_producer.py"
 click node_payment_processing "https://github.com/hquan07/banking_data_platform/blob/main/streaming/payment_processing.py"
 click node_fraud_detection "https://github.com/hquan07/banking_data_platform/blob/main/streaming/fraud_detection.py"
 click node_fraud_rules "https://github.com/hquan07/banking_data_platform/blob/main/fraud/rules/large_amount.py"
@@ -113,7 +112,7 @@ classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
 classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
 classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
 
-class node_payment_producer,node_kafka,node_payment_processing toneBlue
+class node_dataset_source,node_kafka,node_payment_processing toneBlue
 class node_fraud_detection,node_fraud_rules,node_risk_scorer,node_aml_rules,node_graph_pipeline toneAmber
 class node_postgres,node_clickhouse,node_neo4j,node_redis,node_minio toneMint
 class node_backend,node_kafka_client,node_auth_api,node_alerts_api,node_analytics_api,node_graph_api,node_config_api,node_frontend toneRose
@@ -126,7 +125,7 @@ class node_customer_batch,node_warehouse_batch,node_airflow,node_investigator to
 
 | Group | Components | Technology |
 |-------|-----------|------------|
-| **Ingestion & Streaming** | Payment Producer → Kafka → Payment Processing | Python, Kafka |
+| **Ingestion & Streaming** | Dataset source (not connected) → Kafka → Payment Processing | Kafka, Spark |
 | **Detection & AML** | Fraud Detection, Rules Engine, Risk Scorer, AML Graph Pipeline | Python, Spark |
 | **Data Platform** | PostgreSQL, ClickHouse, Neo4j, Redis, MinIO | Docker containers |
 | **Dashboard & Operations** | FastAPI Backend (8 API modules) + React Frontend | Python, React |
