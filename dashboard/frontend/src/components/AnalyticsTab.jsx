@@ -4,16 +4,20 @@ import ForceGraph2D from 'react-force-graph-2d';
 
 export default function AnalyticsTab({ sankeyData, funnelData }) {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
+  const [graphLoading, setGraphLoading] = useState(true);
+  const [graphError, setGraphError] = useState('');
   const graphContainerRef = useRef(null);
   const [graphWidth, setGraphWidth] = useState(800);
 
   useEffect(() => {
     fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/graph/circular')
-      .then(res => res.json())
+      .then(async res => { if (!res.ok) throw new Error('Không tải được AML graph'); return res.json(); })
       .then(data => {
-        if (data && data.nodes) setGraphData(data);
+        if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.links)) throw new Error('Định dạng AML graph không hợp lệ');
+        setGraphData(data);
       })
-      .catch(err => console.error("Failed to fetch graph data", err));
+      .catch(err => setGraphError(err.message))
+      .finally(() => setGraphLoading(false));
   }, []);
 
   useEffect(() => {
@@ -81,7 +85,7 @@ export default function AnalyticsTab({ sankeyData, funnelData }) {
             />
           ) : (
             <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#94a3b8'}}>
-              Loading Neo4j graph data...
+              {graphError ? <span role="alert">{graphError}</span> : graphLoading ? 'Đang tải AML graph...' : 'Chưa có quan hệ AML để hiển thị.'}
             </div>
           )}
         </div>

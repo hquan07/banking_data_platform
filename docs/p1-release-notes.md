@@ -15,7 +15,8 @@
   unapproved candidate with temporal holdout metrics. The fake weekly Airflow
   retraining/deployment DAG was removed.
 - Prometheus/Grafana now collect case, Spark batch, DQ, WebSocket and API
-  metrics. The dashboard loads tabs on demand and labels illustrative charts.
+  metrics. The dashboard loads tabs on demand, validates incoming stream
+  messages, shows loading/error/empty states, and labels illustrative charts.
 - Superset connector installation moved into a pinned image, and metadata is
   mounted on a persistent named volume. Frontend uses `npm ci`; direct Spark
   and backend Python dependencies are pinned. Stateful Compose services use

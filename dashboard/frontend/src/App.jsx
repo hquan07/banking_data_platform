@@ -8,6 +8,7 @@ const RulesManagementTab = lazy(() => import('./components/RulesManagementTab'))
 const UserManagementTab = lazy(() => import('./components/UserManagementTab'));
 const ArchitectureTab = lazy(() => import('./components/ArchitectureTab'));
 import Login from './components/Login';
+import { parseStreamMessage } from './streamContract';
 import { AuthProvider, AuthContext } from './components/AuthContext';
 import './index.css';
 
@@ -58,7 +59,8 @@ function MainApp() {
     };
 
     ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
+      const message = parseStreamMessage(event.data);
+      if (!message) return;
       if (message.topic === "payment-events") {
         setTps(prev => prev + 1);
         setTotalValue(prev => prev + message.data.amount);

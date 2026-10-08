@@ -4,11 +4,13 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 export default function HistoryTab() {
   const [historyData, setHistoryData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/analytics/history')
-      .then(res => res.json())
+      .then(async res => { if (!res.ok) throw new Error('Không tải được dữ liệu lịch sử'); return res.json(); })
       .then(data => {
+        if (!Array.isArray(data)) throw new Error('Định dạng dữ liệu lịch sử không hợp lệ');
         // Map date to string if needed, format the data
         const formattedData = data.map(item => ({
           ...item,
@@ -20,7 +22,7 @@ export default function HistoryTab() {
         setLoading(false);
       })
       .catch(err => {
-        console.error("Failed to fetch history data", err);
+        setError(err.message);
         setLoading(false);
       });
   }, []);
@@ -28,6 +30,8 @@ export default function HistoryTab() {
   if (loading) {
     return <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px', color: '#94a3b8'}}>Loading ClickHouse Historical Data...</div>;
   }
+  if (error) return <div role="alert" style={{color: '#ef4444'}}>{error}</div>;
+  if (historyData.length === 0) return <div role="status" style={{color: '#94a3b8'}}>Chưa có giao dịch lịch sử.</div>;
 
   return (
     <div className="grid">
