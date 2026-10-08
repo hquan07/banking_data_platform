@@ -30,3 +30,5 @@ ensure_topic fraud-events 2592000000
 ensure_topic aml-events 2592000000
 ensure_topic transfer-events 604800000
 ensure_topic transfer-events-dlq 2592000000
+ensure_topic benchmark-events 604800000
+ensure_topic benchmark-events-dlq 2592000000

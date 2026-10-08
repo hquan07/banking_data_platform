@@ -64,6 +64,26 @@ services:
     networks:
       - data_network
 
+  dataset_replay:
+    profiles: ["dataset-replay"]
+    build:
+      context: .
+      dockerfile: docker/ingestion/Dockerfile
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
+      - DATASET_ID=${DATASET_ID:-ds3_paysim}
+      - DATASET_REPLAY_RATE=${DATASET_REPLAY_RATE:-50}
+      - DATASET_MAX_EVENTS=${DATASET_MAX_EVENTS:-0}
+      - DATASET_START_ROW=${DATASET_START_ROW:-0}
+    command: ["python", "kafka/producers/dataset_replay.py"]
+    volumes:
+      - ./datasets/raw:/workspace/datasets/raw:ro
+    depends_on:
+      kafka_topics_init:
+        condition: service_completed_successfully
+    networks:
+      - data_network
+
   debezium:
     image: quay.io/debezium/connect:2.4
     container_name: banking_debezium

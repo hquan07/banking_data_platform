@@ -5,7 +5,7 @@ this volume when restarting or recreating containers. The broker is a single
 node, so every topic has replication factor 1; this is durable across container
 recreation but **not** highly available.
 
-`kafka_topics_init` creates or verifies seven three-partition topics and applies
+`kafka_topics_init` creates or verifies nine three-partition topics and applies
 their retention policy on every Compose startup:
 
 | Topic | Retention | Key |
@@ -17,6 +17,8 @@ their retention policy on every Compose startup:
 | `aml-events` | 30 days | account ID |
 | `transfer-events` | 7 days | source account ID |
 | `transfer-events-dlq` | 30 days | none (source partition/offset in payload) |
+| `benchmark-events` | 7 days | stable dataset event ID |
+| `benchmark-events-dlq` | 30 days | stable dataset source row ID |
 
 The initializer refuses an existing topic with a different partition count or
 replication factor. Increasing partitions for a keyed topic can change key
@@ -35,6 +37,20 @@ Both Spark consumers cap each Kafka microbatch at 1,000 offsets by default via
 the cap is per streaming query, not a total across the two applications.
 Compose caps each Spark driver container at 2 GiB and the worker at 3 GiB;
 adjust these together with Spark executor settings after measuring workload.
+
+Public datasets are replayed only through the opt-in `dataset-replay` Compose
+profile. The replay publishes canonical `benchmark-events` and never generates
+extra rows. For example, after downloading and profiling DS3:
+
+```bash
+DATASET_ID=ds3_paysim DATASET_MAX_EVENTS=1000 \
+  docker compose --profile dataset-replay run --rm dataset_replay
+```
+
+`DATASET_REPLAY_RATE=0` disables pacing; the default is 50 events per second.
+`DATASET_START_ROW` resumes from a deterministic source row. Stable event IDs
+make downstream idempotency possible, but operators must still avoid comparing
+metrics from overlapping replay runs unless the run boundary is recorded.
 
 The Redis velocity counter uses each event's UTC timestamp in a five-minute
 sliding sorted set. Retries of an event ID are ignored for seven days; an event
