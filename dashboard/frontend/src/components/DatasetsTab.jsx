@@ -19,6 +19,7 @@ const ENDPOINTS = {
   balance: '/api/datasets/balance-anomalies',
   velocity: '/api/datasets/velocity-summary',
   account: '/api/datasets/account-risk',
+  models: '/api/datasets/model-candidates',
 };
 
 function Empty({ children }) {
@@ -33,7 +34,8 @@ function formatNumber(value, maximumFractionDigits = 0) {
 export default function DatasetsTab() {
   const { token } = useContext(AuthContext);
   const [data, setData] = useState({
-    status: [], performance: [], rules: [], types: [], balance: null, velocity: null, account: null,
+    status: [], performance: [], rules: [], types: [], balance: null, velocity: null,
+    account: null, models: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -99,6 +101,37 @@ export default function DatasetsTab() {
             );
           })}
         </div>
+      </section>
+
+      <section className="panel col-span-12">
+        <h2 className="panel-title">DS1 — offline model candidate</h2>
+        {data.models.length ? data.models.map(candidate => (
+          <article className="model-candidate" key={candidate.version}>
+            <div className="model-candidate-heading">
+              <div>
+                <strong>{candidate.version}</strong>
+                <span>{candidate.algorithm} · {candidate.feature_schema.length} features</span>
+              </div>
+              <span className={`model-decision ${candidate.production_eligible ? 'eligible' : 'rejected'}`}>
+                {candidate.decision}
+              </span>
+            </div>
+            <div className="dataset-metric-grid">
+              <div><span>Train rows</span><strong>{formatNumber(candidate.train_rows)}</strong></div>
+              <div><span>Holdout rows</span><strong>{formatNumber(candidate.holdout_rows)}</strong></div>
+              <div><span>PR-AUC</span><strong>{formatNumber(candidate.metrics.pr_auc, 4)}</strong></div>
+              <div><span>Precision</span><strong>{formatNumber(candidate.metrics.precision * 100, 2)}%</strong></div>
+              <div><span>Recall</span><strong>{formatNumber(candidate.metrics.recall * 100, 2)}%</strong></div>
+              <div><span>False-positive rate</span><strong>{formatNumber(candidate.metrics.false_positive_rate * 100, 3)}%</strong></div>
+              <div><span>TP / FP</span><strong>{candidate.metrics.true_positive} / {candidate.metrics.false_positive}</strong></div>
+              <div><span>FN / TN</span><strong>{candidate.metrics.false_negative} / {candidate.metrics.true_negative}</strong></div>
+            </div>
+            <p className="dataset-panel-note">
+              {candidate.explanation_status}. Model binary không được load bởi streaming engine;
+              checksum model: <code>{candidate.model_sha256.slice(0, 12)}…</code>
+            </p>
+          </article>
+        )) : <Empty>Chưa có model candidate đã được audit.</Empty>}
       </section>
 
       <section className="panel col-span-6">

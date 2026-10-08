@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.db import pg_conn
 from core.deps import get_current_user
-from services.dataset_status import account_risk_payload, balance_anomaly_payload, status_payload
+from services.dataset_status import (
+    account_risk_payload,
+    balance_anomaly_payload,
+    model_candidate_payload,
+    status_payload,
+)
 
 
 router = APIRouter(prefix="/api/datasets", tags=["Datasets"])
@@ -234,3 +239,24 @@ def get_account_risk(current_user: dict = Depends(get_current_user)):
         return account_risk_payload(summary, source_rows, device_rows)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Account risk analytics unavailable") from exc
+
+
+@router.get("/model-candidates")
+def get_model_candidates(current_user: dict = Depends(get_current_user)):
+    _database_required()
+    try:
+        with pg_conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT version, dataset_id, algorithm, feature_schema,
+                       train_rows, holdout_rows, dataset_sha256, model_sha256,
+                       metrics, evaluation_scope, decision,
+                       production_eligible, explanation_status, recorded_at
+                FROM benchmark_model_candidates
+                ORDER BY recorded_at DESC, version
+                """
+            )
+            rows = cursor.fetchall()
+        return model_candidate_payload(rows)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Model candidate registry unavailable") from exc

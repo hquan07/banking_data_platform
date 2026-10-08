@@ -94,3 +94,26 @@ def account_risk_payload(
         "by_source": [segment(row, "source") for row in source_rows],
         "by_device_os": [segment(row, "device_os") for row in device_rows],
     }
+
+
+def model_candidate_payload(rows: list[tuple]) -> list[dict]:
+    """Expose audited model metadata without loading or serving its binary."""
+    return [
+        {
+            "version": row[0],
+            "dataset_id": row[1],
+            "algorithm": row[2],
+            "feature_schema": row[3],
+            "train_rows": row[4],
+            "holdout_rows": row[5],
+            "dataset_sha256": row[6],
+            "model_sha256": row[7],
+            "metrics": row[8],
+            "evaluation_scope": row[9],
+            "decision": row[10],
+            "production_eligible": row[11],
+            "explanation_status": row[12],
+            "recorded_at": row[13].isoformat() if row[13] else None,
+        }
+        for row in rows
+    ]

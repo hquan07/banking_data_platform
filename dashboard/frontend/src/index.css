@@ -482,6 +482,47 @@ body {
   margin: 0;
 }
 
+.model-candidate {
+  display: grid;
+  gap: 16px;
+}
+
+.model-candidate-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.model-candidate-heading div {
+  display: grid;
+  gap: 4px;
+}
+
+.model-candidate-heading div span {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.model-decision {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.model-decision.rejected {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.model-decision.eligible {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
 .dataset-split-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
