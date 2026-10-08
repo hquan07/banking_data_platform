@@ -3,7 +3,6 @@
 | Dataset | Acquisition | Profile | Canary | Current gate |
 | --- | --- | --- | --- | --- |
 | DS1 Credit Card | Complete | Valid | Offline model evaluated | Candidate rejected for low precision/recall |
-| DS2 IEEE-CIS | Blocked | Not run | Not run | Kaggle competition authentication and rules acceptance |
 | DS3 PaySim | Complete | Valid | 1,000 events passed | Full replay is an operator workload decision |
 | DS4 BAF Base | Complete | Valid | 1,000 events passed | Alert thresholds require source-specific calibration |
 

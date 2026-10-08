@@ -4,7 +4,6 @@ from datasets.schema_mapping import (
     DS1_FEATURES,
     DS4_FEATURES,
     map_ds1,
-    map_ds2,
     map_ds3,
     map_ds4,
 )
@@ -21,25 +20,6 @@ def test_ds1_preserves_features_without_fabricating_identity():
     assert "account_id" not in event["payload"]
     assert "currency" not in event["payload"]
     assert event["ground_truth"]["is_fraud"] is True
-
-
-def test_ds2_keeps_anonymized_codes_and_optional_identity_raw():
-    event = map_ds2({
-        "TransactionID": 1001,
-        "TransactionDT": 120,
-        "TransactionAmt": 31.2,
-        "ProductCD": "W",
-        "addr1": 315,
-        "addr2": 87,
-        "isFraud": 0,
-        "C1": 4,
-        "V1": 0.25,
-    }, {"DeviceType": "desktop", "id_12": "Found"})
-
-    assert event["payload"]["address_codes"] == {"addr1": 315, "addr2": 87}
-    assert event["payload"]["identity"]["id_12"] == "Found"
-    assert "latitude" not in event["payload"]
-    assert "is_proxy" not in event["payload"]
 
 
 def test_ds3_preserves_all_transaction_types_and_synthetic_provenance():

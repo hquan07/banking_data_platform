@@ -5,7 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 raw_dir="${script_dir}/raw"
 
 usage() {
-  echo "Usage: $0 {ds1|ds2|ds3|ds4|all}" >&2
+  echo "Usage: $0 {ds1|ds3|ds4|all}" >&2
   exit 2
 }
 
@@ -26,16 +26,6 @@ download_ds1() {
     -f creditcard.csv -p "${raw_dir}/creditcard"
   unzip -o "${raw_dir}/creditcard/creditcard.csv.zip" -d "${raw_dir}/creditcard"
   rm "${raw_dir}/creditcard/creditcard.csv.zip"
-}
-
-download_ds2() {
-  mkdir -p "${raw_dir}/ieee-cis"
-  for file in train_transaction.csv train_identity.csv; do
-    kaggle competitions download -c ieee-fraud-detection \
-      -f "${file}" -p "${raw_dir}/ieee-cis"
-    unzip -o "${raw_dir}/ieee-cis/${file}.zip" -d "${raw_dir}/ieee-cis"
-    rm "${raw_dir}/ieee-cis/${file}.zip"
-  done
 }
 
 download_ds3() {
@@ -59,12 +49,10 @@ download_ds4() {
 require_tools
 case "${1:-}" in
   ds1) download_ds1 ;;
-  ds2) download_ds2 ;;
   ds3) download_ds3 ;;
   ds4) download_ds4 ;;
   all)
     download_ds1
-    download_ds2
     download_ds3
     download_ds4
     ;;

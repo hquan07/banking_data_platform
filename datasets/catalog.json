@@ -14,21 +14,6 @@
       "entity_limitations": "No customer, account, card, merchant, channel, currency or location identifiers are provided"
     },
     {
-      "id": "ds2_ieee_cis",
-      "name": "IEEE-CIS Fraud Detection",
-      "domain": "card-not-present ecommerce fraud",
-      "provenance_type": "anonymized competition data",
-      "source": "ieee-fraud-detection",
-      "source_url": "https://www.kaggle.com/competitions/ieee-fraud-detection/data",
-      "access": "Kaggle competition rules must be accepted before download",
-      "expected_files": [
-        "ieee-cis/train_transaction.csv",
-        "ieee-cis/train_identity.csv"
-      ],
-      "time_semantics": "TransactionDT is a relative timedelta from an undisclosed reference, not a wall-clock timestamp",
-      "entity_limitations": "Address and card fields are anonymized codes and must not be presented as decoded geography or identity"
-    },
-    {
       "id": "ds3_paysim",
       "name": "PaySim Synthetic Financial Dataset",
       "domain": "mobile money transaction simulation",

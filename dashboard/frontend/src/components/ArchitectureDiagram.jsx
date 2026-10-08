@@ -78,7 +78,7 @@ const node = (id, x, y, label, sublabel, description, icon, color, planned = fal
 
 // This is the deployed banking topology, not the NewsPulse services in the visual reference.
 const initialNodes = [
-  node('payment-producer', 0, 0, 'Dataset catalog + replay', 'Opt-in benchmark source', 'Profile và replay DS1–DS4 vào benchmark-events; DS2 hiện chờ Kaggle access.', 'database', '#10b981'),
+  node('payment-producer', 0, 0, 'Dataset catalog + replay', 'Opt-in benchmark source', 'Profile và replay DS1, DS3, DS4 vào benchmark-events.', 'database', '#10b981'),
   node('transfer-source', 300, 0, 'Live event sources', 'Chưa cấu hình', 'Chưa có nguồn payment-events hoặc transfer-events bên ngoài được kết nối.', 'network', '#f59e0b', true),
   node('user', 900, 0, 'Dashboard user', 'Web client', 'Người dùng truy cập giao diện và case management.', 'user', '#3b82f6'),
   node('retry', 0, 145, 'Payment retry worker', 'Approved retry', 'Phát lại payment-events-retry đã được duyệt.', 'retry', '#3b82f6'),

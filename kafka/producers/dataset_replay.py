@@ -36,7 +36,7 @@ def replay(
     published = rejected = scanned = 0
     next_send = time.monotonic()
 
-    for row_number, row, identity in iter_source_rows(dataset_id, raw_dir):
+    for row_number, row in iter_source_rows(dataset_id, raw_dir):
         if row_number < start_row:
             continue
         if max_events and scanned >= max_events:
@@ -44,7 +44,7 @@ def replay(
         scanned += 1
         source_key = f"{dataset_id}:{row_number}"
         try:
-            event = map_source_row(dataset_id, row_number, row, identity)
+            event = map_source_row(dataset_id, row_number, row)
             _send_json(producer, "benchmark-events", event["event_id"], event)
             published += 1
         except (KeyError, TypeError, ValueError) as exc:

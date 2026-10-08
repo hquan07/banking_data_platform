@@ -7,7 +7,6 @@ import { AuthContext } from './AuthContext';
 
 const SOURCE_LABELS = {
   anonymized_real: 'Giao dịch ẩn danh',
-  anonymized_competition: 'Competition data ẩn danh',
   synthetic_simulation: 'Mô phỏng synthetic',
   privacy_preserving_synthetic: 'Synthetic bảo vệ riêng tư',
 };
@@ -17,7 +16,6 @@ const ENDPOINTS = {
   performance: '/api/datasets/performance',
   rules: '/api/datasets/rule-hits',
   types: '/api/datasets/transaction-types',
-  devices: '/api/datasets/device-analytics',
   velocity: '/api/datasets/velocity-summary',
 };
 
@@ -32,7 +30,7 @@ function formatNumber(value, maximumFractionDigits = 0) {
 
 export default function DatasetsTab() {
   const { token } = useContext(AuthContext);
-  const [data, setData] = useState({ status: [], performance: [], rules: [], types: [], devices: [], velocity: null });
+  const [data, setData] = useState({ status: [], performance: [], rules: [], types: [], velocity: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -75,7 +73,7 @@ export default function DatasetsTab() {
             <h2 className="panel-title">Dataset Monitor</h2>
             <p>Theo dõi dữ liệu đã replay; các dataset độc lập không được ghép thành một khách hàng chung.</p>
           </div>
-          <div className="dataset-loaded-count"><Database size={18} /> {loadedCount}/4 nguồn đã nạp</div>
+          <div className="dataset-loaded-count"><Database size={18} /> {loadedCount}/3 nguồn đã nạp</div>
         </div>
         <div className="dataset-status-grid">
           {data.status.map(item => {
@@ -162,21 +160,6 @@ export default function DatasetsTab() {
         ) : <Empty>Chưa có dữ liệu BAF.</Empty>}
       </section>
 
-      <section className="panel col-span-12">
-        <h2 className="panel-title">IEEE-CIS — device coverage</h2>
-        {data.devices.length ? (
-          <div className="dataset-table-wrap">
-            <table className="dataset-table">
-              <thead><tr><th>Device type</th><th>Events</th><th>Ground-truth fraud</th></tr></thead>
-              <tbody>{data.devices.map(row => (
-                <tr key={row.device_type}>
-                  <td>{row.device_type}</td><td>{formatNumber(row.count)}</td><td>{formatNumber(row.fraud_count)}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        ) : <Empty>Chưa có dữ liệu IEEE-CIS.</Empty>}
-      </section>
     </div>
   );
 }

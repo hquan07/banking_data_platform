@@ -3,14 +3,13 @@
 Kafka topic (introduced by the replay phase): `benchmark-events`. Kafka key:
 `event_id`.
 
-The contract represents four independent public benchmarks without pretending
+The contract represents three independent public benchmarks without pretending
 that they share customers, accounts, currencies or calendar timelines.
 
 Required envelope fields:
 
 - `schema_version`: integer `1`
-- `dataset_id`: one of `ds1_creditcard`, `ds2_ieee_cis`, `ds3_paysim`,
-  `ds4_baf`
+- `dataset_id`: one of `ds1_creditcard`, `ds3_paysim`, `ds4_baf`
 - `event_id`, `trace_id`, `source_row_id`: stable, nonempty identifiers
 - `event_type`: source-specific canonical type
 - `event_time`: relative value/unit with a null origin
@@ -20,8 +19,7 @@ Required envelope fields:
 
 No mapper may fabricate a customer, account, card, currency, location or
 wall-clock timestamp that the source does not provide. In particular, DS1 PCA
-features must not be hashed into pseudo-identities, and IEEE-CIS address codes
-must not be rendered as geographic coordinates.
+features must not be hashed into pseudo-identities.
 
 Ground truth is carried so offline evaluation and dashboard confusion matrices
 can be reproduced. Scoring consumers must remove the `ground_truth` object

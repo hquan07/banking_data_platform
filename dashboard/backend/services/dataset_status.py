@@ -6,11 +6,6 @@ DATASETS = {
         "source_kind": "anonymized_real",
         "domain": "card_transaction",
     },
-    "ds2_ieee_cis": {
-        "name": "IEEE-CIS Fraud Detection",
-        "source_kind": "anonymized_competition",
-        "domain": "ecommerce_transaction",
-    },
     "ds3_paysim": {
         "name": "PaySim",
         "source_kind": "synthetic_simulation",

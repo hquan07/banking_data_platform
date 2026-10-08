@@ -9,13 +9,11 @@ from typing import Any
 SCHEMA_VERSION = 1
 DATASET_IDS = frozenset({
     "ds1_creditcard",
-    "ds2_ieee_cis",
     "ds3_paysim",
     "ds4_baf",
 })
 EVENT_TYPES = frozenset({
     "card_transaction",
-    "ecommerce_transaction",
     "mobile_money_transaction",
     "account_application",
 })
@@ -59,7 +57,6 @@ def normalize_benchmark_event(event: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("invalid_provenance")
     if provenance.get("source_kind") not in {
         "anonymized_real",
-        "anonymized_competition",
         "synthetic_simulation",
         "privacy_preserving_synthetic",
     }:

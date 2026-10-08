@@ -9,10 +9,6 @@ from shared.benchmark_contract import normalize_benchmark_event
 
 
 DS1_FEATURES = tuple(f"V{i}" for i in range(1, 29))
-DS2_COUNT_FEATURES = tuple(f"C{i}" for i in range(1, 15))
-DS2_DELTA_FEATURES = tuple(f"D{i}" for i in range(1, 16))
-DS2_MATCH_FEATURES = tuple(f"M{i}" for i in range(1, 10))
-DS2_VESTA_FEATURES = tuple(f"V{i}" for i in range(1, 340))
 DS4_FEATURES = (
     "income", "name_email_similarity", "prev_address_months_count",
     "current_address_months_count", "customer_age", "days_since_request",
@@ -100,43 +96,6 @@ def map_ds1(row: Mapping[str, Any], row_number: int) -> dict[str, Any]:
         is_fraud=_label(row.get("Class")),
         source_file="creditcard/creditcard.csv",
         source_kind="anonymized_real",
-    )
-
-
-def map_ds2(
-    transaction: Mapping[str, Any],
-    identity: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    transaction_id = transaction.get("TransactionID")
-    if _missing(transaction_id):
-        raise ValueError("invalid_TransactionID")
-    identity = identity or {}
-    payload = {
-        "amount": _required_number(transaction, "TransactionAmt"),
-        "product_code": _plain(transaction.get("ProductCD")),
-        "card_codes": _feature_group(transaction, tuple(f"card{i}" for i in range(1, 7))),
-        "address_codes": _feature_group(transaction, ("addr1", "addr2")),
-        "email_domains": _feature_group(transaction, ("P_emaildomain", "R_emaildomain")),
-        "count_features": _feature_group(transaction, DS2_COUNT_FEATURES),
-        "time_delta_features": _feature_group(transaction, DS2_DELTA_FEATURES),
-        "match_features": _feature_group(transaction, DS2_MATCH_FEATURES),
-        "vesta_features": _feature_group(transaction, DS2_VESTA_FEATURES),
-        "identity": _feature_group(identity, (
-            "DeviceType", "DeviceInfo", "id_12", "id_15", "id_16",
-            "id_28", "id_29", "id_30", "id_31", "id_33",
-        )),
-        "identity_available": bool(identity),
-    }
-    return _event(
-        dataset_id="ds2_ieee_cis",
-        source_row_id=transaction_id,
-        event_type="ecommerce_transaction",
-        time_value=_required_number(transaction, "TransactionDT"),
-        time_unit="seconds",
-        payload=payload,
-        is_fraud=_label(transaction.get("isFraud")),
-        source_file="ieee-cis/train_transaction.csv+train_identity.csv",
-        source_kind="anonymized_competition",
     )
 
 

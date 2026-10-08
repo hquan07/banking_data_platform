@@ -9,8 +9,8 @@ or replay a dataset automatically.
 `catalog.json` is the source-of-truth for provenance, access restrictions,
 expected files, time semantics and entity limitations. In particular:
 
-- DS1 and IEEE-CIS are anonymized transaction benchmarks. Their hidden fields
-  must not be decoded or presented as real identities or coordinates.
+- DS1 is an anonymized transaction benchmark. Its hidden fields must not be
+  decoded or presented as real identities.
 - PaySim is a transaction simulator, despite being derived from aggregate
   patterns from a real mobile-money service.
 - BAF is a privacy-preserving synthetic benchmark for account-opening fraud;
@@ -22,8 +22,7 @@ account or timeline and must not be entity-joined into a single banking ledger.
 ## Acquisition
 
 1. Install and authenticate the Kaggle CLI.
-2. Accept the IEEE-CIS competition rules on Kaggle before downloading DS2.
-3. Run one explicit download, for example:
+2. Run one explicit download, for example:
 
    ```bash
    ./datasets/download.sh ds3
@@ -44,7 +43,7 @@ After downloading a source, generate a chunked profile before mapping it:
 PYTHONPATH=. python datasets/profile_datasets.py ds1_creditcard
 ```
 
-Use `all` only when all four sources are present. Profiles are local artifacts
+Use `all` only when all three sources are present. Profiles are local artifacts
 under `datasets/profiles/`; they contain file checksums, row counts, schema
 validation, null rates, inferred types, bounded cardinality and numeric ranges.
 The command exits non-zero when a file is absent or violates its expected

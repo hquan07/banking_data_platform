@@ -48,9 +48,8 @@ def test_baf_high_raw_values_are_not_scored_before_calibration():
     }}) == []
 
 
-def test_ds1_and_ds2_are_not_scored_without_calibrated_model():
+def test_ds1_is_not_scored_without_calibrated_model():
     assert evaluate_benchmark_payload("ds1_creditcard", {"amount": 999_999}) == []
-    assert evaluate_benchmark_payload("ds2_ieee_cis", {"identity": {"id_12": "Found"}}) == []
 
 
 def test_ground_truth_cannot_change_rules_or_alert_identity():

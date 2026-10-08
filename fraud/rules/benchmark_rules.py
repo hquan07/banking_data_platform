@@ -83,6 +83,6 @@ def evaluate_benchmark_payload(dataset_id: str, payload: dict[str, Any]) -> list
         return evaluate_paysim(payload)
     if dataset_id == "ds4_baf":
         return evaluate_baf(payload)
-    # DS1/DS2 require a trained, versioned model or calibrated profile
+    # DS1 requires a trained, versioned model or calibrated profile
     # thresholds. They are persisted but deliberately not guessed here.
     return []

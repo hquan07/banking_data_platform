@@ -10,23 +10,6 @@
       ]
     }
   },
-  "ds2_ieee_cis": {
-    "ieee-cis/train_transaction.csv": {
-      "minimum_rows": 590540,
-      "required_columns": [
-        "TransactionID", "isFraud", "TransactionDT", "TransactionAmt",
-        "ProductCD", "card1", "card2", "card3", "card4", "card5",
-        "card6", "addr1", "addr2", "P_emaildomain", "R_emaildomain"
-      ]
-    },
-    "ieee-cis/train_identity.csv": {
-      "minimum_rows": 144233,
-      "required_columns": [
-        "TransactionID", "DeviceType", "DeviceInfo", "id_12", "id_15",
-        "id_16", "id_28", "id_29", "id_30", "id_31", "id_33"
-      ]
-    }
-  },
   "ds3_paysim": {
     "paysim/PS_20174392719_1491204439457_log.csv": {
       "minimum_rows": 6362620,

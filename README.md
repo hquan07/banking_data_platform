@@ -4,8 +4,8 @@ A real-time banking data platform featuring a comprehensive Fraud Detection Engi
 
 **Data source status:** the opt-in benchmark replay is available. DS1, DS3 and
 DS4 have valid local profiles; 1,000-event DS3 and DS4 canaries have passed.
-DS2 remains blocked on Kaggle competition access. Runtime mock generators,
-canned API responses and static sample charts remain removed. See
+Runtime mock generators, canned API responses and static sample charts remain
+removed. See
 `docs/dataset-runs/README.md` for the current evidence and gates.
 
 This project is built on a **Big Data / Event-Driven** architecture, utilizing real-time data streaming and multiple specialized databases to achieve high performance.

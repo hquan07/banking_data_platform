@@ -113,30 +113,6 @@ def get_transaction_types(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=503, detail="Transaction type analytics unavailable") from exc
 
 
-@router.get("/device-analytics")
-def get_device_analytics(current_user: dict = Depends(get_current_user)):
-    _database_required()
-    try:
-        with pg_conn.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT COALESCE(payload #>> '{identity,DeviceType}', 'unknown') AS device_type,
-                       count(*), count(*) FILTER (WHERE ground_truth_is_fraud)
-                FROM benchmark_events
-                WHERE dataset_id = 'ds2_ieee_cis'
-                GROUP BY device_type
-                ORDER BY count(*) DESC
-                """
-            )
-            rows = cursor.fetchall()
-        return [
-            {"device_type": row[0], "count": row[1], "fraud_count": row[2]}
-            for row in rows
-        ]
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Device analytics unavailable") from exc
-
-
 @router.get("/velocity-summary")
 def get_velocity_summary(current_user: dict = Depends(get_current_user)):
     _database_required()
