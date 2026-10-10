@@ -131,6 +131,20 @@ Once all containers transition to the *Running* state, you can access the follow
 * **Grafana**: [http://localhost:3000](http://localhost:3000)
 * **Prometheus**: [http://localhost:9090](http://localhost:9090)
 
+### 4. Verify a PostgreSQL Backup
+
+With the stack running, create a custom-format archive and rehearse its restore
+inside an isolated temporary database:
+
+```bash
+./scripts/backup/backup_db.sh
+```
+
+The command fails if the archive cannot be restored or any application table
+has a different row count. It never replaces the active database. Local dumps
+and JSON reports are written under `.runtime/backups`; see
+`docs/p1-postgres-recovery-rehearsal.md` for the operating boundary.
+
 ## 📁 Directory Structure
 
 ```text

@@ -27,10 +27,13 @@
   the DLQ did not grow, and all measured API responses stayed below two seconds.
 - The live Compose integration suite passed all eight payment, retry/DLQ,
   alert lifecycle, RBAC, Redis, Neo4j and MinIO end-to-end paths.
+- The PostgreSQL backup command now validates a custom archive by restoring it
+  into an isolated temporary database and reconciling every application table.
 
 See `docs/p1-demo-acceptance.md` for the current data-source status and the
 database-volume cleanup boundary. See `docs/p1-e2e-acceptance.md` for the live
-integration evidence and its scope.
+integration evidence and `docs/p1-postgres-recovery-rehearsal.md` for the
+recovery workflow and evidence.
 
 ## Data migration and rollback
 
@@ -55,6 +58,7 @@ removing mock-data generation because their provenance may be mixed.
   are required before approving or deploying an ML model.
 - Connect authorized live payment/transfer sources before interpreting the
   platform as a live banking system. Benchmark results remain source-scoped.
-- The scoped local benchmark is complete. Longer soak testing, backup/restore
-  rehearsal and a security review are still needed before claiming production
-  readiness. CI/CD remains out of scope.
+- The scoped local benchmark and PostgreSQL recovery rehearsal are complete.
+  Longer soak testing, recovery coverage for the other stateful services and a
+  security review are still needed before claiming production readiness.
+  CI/CD remains out of scope.
