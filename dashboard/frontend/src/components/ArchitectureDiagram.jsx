@@ -17,24 +17,27 @@ const icons = {
 
 const statusColors = {
   healthy: '#22c55e', unhealthy: '#ef4444', documented: '#64748b', planned: '#f59e0b',
+  inactive: '#f59e0b', ondemand: '#60a5fa',
 };
 
 const statusLabels = {
   healthy: 'Sẵn sàng theo API readiness',
   unhealthy: 'Không phản hồi hoặc probe thất bại',
   documented: 'Chưa có health probe trên sơ đồ',
-  planned: 'Nguồn live chưa được cấu hình',
+  planned: 'Chưa tích hợp',
+  inactive: 'Container có mặt nhưng data flow chưa cấu hình',
+  ondemand: 'Chỉ chạy khi operator chủ động kích hoạt',
 };
 
 function ArchitectureNode({ data, selected }) {
   const Icon = icons[data.icon] || Server;
-  const status = data.health || (data.planned ? 'planned' : 'documented');
+  const status = data.health || data.status || 'documented';
   const color = status === 'unhealthy' ? statusColors.unhealthy : data.color;
 
   return <div style={{
     width: 208, padding: '12px 14px', position: 'relative', cursor: 'pointer',
     borderRadius: 12, color: '#f8fafc', background: 'rgba(30, 41, 59, 0.96)',
-    border: `2px ${data.planned ? 'dashed' : 'solid'} ${color}`,
+    border: `2px ${['planned', 'inactive', 'ondemand'].includes(status) ? 'dashed' : 'solid'} ${color}`,
     boxShadow: selected ? `0 0 0 3px ${color}55, 0 12px 28px #0008` : '0 5px 16px #0005',
   }}>
     <Handle type="target" position={Position.Top} style={{ background: '#94a3b8' }} />
@@ -66,15 +69,15 @@ function ArchitectureNode({ data, selected }) {
 }
 
 const nodeTypes = { architecture: ArchitectureNode };
-const node = (id, x, y, label, sublabel, description, icon, color, planned = false) => ({
+const node = (id, x, y, label, sublabel, description, icon, color, status = 'documented') => ({
   id, type: 'architecture', position: { x, y },
-  data: { label, sublabel, description, icon, color, planned, health: planned ? 'planned' : 'documented' },
+  data: { label, sublabel, description, icon, color, status },
 });
 
 const initialNodes = [
-  node('payment-producer', 0, 0, 'Dataset catalog + replay', 'Opt-in benchmark source', 'Profile và replay DS1, DS3, DS4 vào benchmark-events.', 'database', '#10b981'),
-  node('transfer-source', 300, 0, 'Live event sources', 'Chưa cấu hình', 'Chưa có nguồn payment-events hoặc transfer-events bên ngoài được kết nối.', 'network', '#f59e0b', true),
-  node('retry-submit', 600, 0, 'Approved retry submit', 'On-demand operator tool', 'Gửi envelope đã phê duyệt vào payment-events-retry; không phải producer chạy thường trực.', 'retry', '#64748b'),
+  node('payment-producer', 0, 0, 'Dataset catalog + replay', 'Opt-in benchmark source', 'Profile và replay DS1, DS3, DS4 vào benchmark-events.', 'database', '#10b981', 'ondemand'),
+  node('transfer-source', 300, 0, 'Live event sources', 'Chưa cấu hình', 'Chưa có nguồn payment-events hoặc transfer-events bên ngoài được kết nối.', 'network', '#f59e0b', 'planned'),
+  node('retry-submit', 600, 0, 'Approved retry submit', 'On-demand operator tool', 'Gửi envelope đã phê duyệt vào payment-events-retry; không phải producer chạy thường trực.', 'retry', '#64748b', 'ondemand'),
   node('user', 1200, 0, 'Dashboard user', 'Web client', 'Người dùng truy cập giao diện và case management.', 'user', '#3b82f6'),
   node('retry', 150, 150, 'Payment retry worker', 'Retry consumer + producer', 'Đọc payment-events-retry rồi phát lại payment-events hoặc chuyển payment-events-dlq.', 'retry', '#3b82f6'),
   node('kafka', 600, 150, 'Kafka broker', 'Event streaming + DLQ', 'Truyền payment, transfer, benchmark, fraud, AML, retry và DLQ events.', 'zap', '#ef4444'),
@@ -84,28 +87,36 @@ const initialNodes = [
   node('benchmark-processor', 600, 320, 'Benchmark processor', 'DS1 · DS3 · DS4 rules', 'Đọc benchmark-events, lưu provenance/evaluation và phát fraud-events.', 'shield', '#f59e0b'),
   node('live-graph-processor', 900, 320, 'Live graph processor', 'transfer-events', 'Ghi Account transfer graph và phát AML cycle alerts.', 'graph', '#f59e0b'),
   node('backend', 1200, 320, 'FastAPI backend', 'Auth + cases + stream gateway', 'Consume Kafka để broadcast WebSocket, persist alert và phục vụ analytics/evidence API.', 'server', '#3b82f6'),
-  node('airflow', 0, 490, 'Airflow + DQ', 'Silver orchestration', 'Chạy Silver data quality và lưu run-scoped evidence.', 'server', '#a78bfa'),
+  node('airflow', 0, 490, 'Airflow', 'Daily batch orchestration', 'Điều phối customer Silver, DQ fail-closed và warehouse Gold jobs.', 'server', '#a78bfa'),
+  node('batch-dq', 300, 490, 'Batch + DQ jobs', 'Silver → quality → Gold', 'Đọc core customer/account và Silver parquet; ghi quarantine, DQ result và Gold dimensions.', 'activity', '#a78bfa'),
+  node('spark-cluster', 600, 490, 'Spark master + worker', 'Execution runtime', 'Thực thi payment processor, fraud engine và các Spark batch jobs.', 'server', '#a78bfa'),
   node('benchmark-graph-processor', 900, 490, 'Benchmark graph processor', 'PaySim namespace', 'Ghi BenchmarkAccount graph và phát TRANSFER→CASH_OUT sequence alert.', 'graph', '#f59e0b'),
-  node('observability', 1200, 490, 'Prometheus + Grafana', 'Metrics + alerts', 'Giám sát metrics, SLO và alert vận hành.', 'bell', '#a78bfa'),
   node('postgres', 0, 660, 'PostgreSQL', 'Ledger + benchmark + cases', 'Lưu payment, benchmark events/evaluations, alert, audit và DQ runs.', 'database', '#10b981'),
   node('clickhouse', 300, 660, 'ClickHouse', 'OLAP analytics', 'Kho phân tích lịch sử giao dịch.', 'storage', '#10b981'),
   node('redis', 600, 660, 'Redis', 'Velocity + state', 'Lưu velocity window, rule updates và Spark batch metrics.', 'database', '#10b981'),
   node('neo4j', 900, 660, 'Neo4j', 'AML graph', 'Đồ thị Account live và BenchmarkAccount synthetic ở namespace riêng.', 'graph', '#10b981'),
   node('minio', 1200, 660, 'MinIO', 'Silver + evidence', 'Lưu Silver parquet, quarantine và case evidence.', 'archive', '#10b981'),
+  node('debezium', 0, 830, 'Debezium Connect', '0 connectors configured', 'Container đang chạy nhưng chưa có CDC connector trong runtime hiện tại.', 'network', '#f59e0b', 'inactive'),
+  node('kafka-exporter', 600, 830, 'Kafka Exporter', 'Broker + consumer lag metrics', 'Đọc Kafka metrics và expose cho Prometheus.', 'activity', '#a78bfa'),
+  node('prometheus', 900, 830, 'Prometheus', 'Metrics + alert rules', 'Scrape FastAPI và Kafka Exporter; đánh giá operational alerts.', 'bell', '#a78bfa'),
+  node('grafana', 1200, 830, 'Grafana', 'Operational dashboards', 'Đọc Prometheus qua PromQL để hiển thị platform metrics.', 'monitor', '#a78bfa'),
+  node('superset', 1200, 1000, 'Apache Superset', 'Datasource chưa provision', 'Container BI đang chạy nhưng repository chưa provision database connection/dashboard.', 'monitor', '#f59e0b', 'inactive'),
 ];
 
-const edge = (source, target, label, color, planned = false) => ({
+const edge = (source, target, label, color, state = 'configured') => ({
   id: `${source}-${target}`, source, target, label, type: 'smoothstep',
-  animated: !planned, style: { stroke: color, strokeWidth: 2, ...(planned ? { strokeDasharray: '6 5' } : {}) },
+  animated: false,
+  style: { stroke: color, strokeWidth: 2, ...(state !== 'configured' ? { strokeDasharray: '6 5' } : {}) },
   markerEnd: { type: MarkerType.ArrowClosed, color },
   labelStyle: { fill: '#f8fafc', fontWeight: 600, fontSize: 11 },
   labelBgStyle: { fill: '#1e293b', fillOpacity: 0.95 },
+  data: { state },
 });
 
 const edges = [
-  edge('payment-producer', 'kafka', 'benchmark-events', '#10b981'),
-  edge('transfer-source', 'kafka', 'payment + transfer', '#f59e0b', true),
-  edge('retry-submit', 'kafka', 'payment-events-retry', '#64748b'),
+  edge('payment-producer', 'kafka', 'benchmark-events', '#10b981', 'ondemand'),
+  edge('transfer-source', 'kafka', 'payment + transfer', '#f59e0b', 'planned'),
+  edge('retry-submit', 'kafka', 'payment-events-retry', '#64748b', 'ondemand'),
   edge('kafka', 'retry', 'payment-events-retry', '#ef4444'),
   edge('retry', 'kafka', 'payment / DLQ', '#ef4444'),
   edge('kafka', 'spark-payment', 'payment-events', '#ef4444'),
@@ -124,7 +135,15 @@ const edges = [
   edge('live-graph-processor', 'neo4j', 'Account graph', '#f59e0b'),
   edge('benchmark-graph-processor', 'neo4j', 'BenchmarkAccount graph', '#f59e0b'),
   edge('benchmark-graph-processor', 'kafka', 'aml-events', '#f59e0b'),
-  edge('airflow', 'minio', 'Silver + DQ', '#a78bfa'),
+  edge('airflow', 'batch-dq', 'orchestrates', '#a78bfa'),
+  edge('spark-cluster', 'spark-payment', 'Spark runtime', '#a78bfa'),
+  edge('spark-cluster', 'fraud-engine', 'Spark runtime', '#a78bfa'),
+  edge('spark-cluster', 'batch-dq', 'Spark runtime', '#a78bfa'),
+  edge('postgres', 'batch-dq', 'core customer + account', '#a78bfa'),
+  edge('batch-dq', 'minio', 'Silver + DQ artifacts', '#a78bfa'),
+  edge('minio', 'batch-dq', 'Silver input', '#a78bfa'),
+  edge('batch-dq', 'postgres', 'DQ result + Gold customer', '#a78bfa'),
+  edge('batch-dq', 'clickhouse', 'Gold customer', '#a78bfa'),
   edge('user', 'frontend', 'browser', '#3b82f6'),
   edge('frontend', 'backend', 'REST + WS', '#3b82f6'),
   edge('backend', 'postgres', 'cases', '#3b82f6'),
@@ -132,7 +151,14 @@ const edges = [
   edge('backend', 'neo4j', 'AML graph', '#3b82f6'),
   edge('backend', 'minio', 'evidence', '#3b82f6'),
   edge('backend', 'redis', 'rules + runtime state', '#3b82f6'),
-  edge('observability', 'backend', 'scrape', '#a78bfa'),
+  edge('postgres', 'debezium', 'CDC source', '#f59e0b', 'inactive'),
+  edge('debezium', 'kafka', 'connector chưa cấu hình', '#f59e0b', 'inactive'),
+  edge('kafka', 'kafka-exporter', 'broker + group metrics', '#a78bfa'),
+  edge('kafka-exporter', 'prometheus', '/metrics', '#a78bfa'),
+  edge('backend', 'prometheus', '/metrics', '#a78bfa'),
+  edge('prometheus', 'grafana', 'PromQL', '#a78bfa'),
+  edge('postgres', 'superset', 'BI datasource', '#f59e0b', 'inactive'),
+  edge('clickhouse', 'superset', 'BI datasource', '#f59e0b', 'inactive'),
 ];
 
 const probedNodes = {
@@ -157,9 +183,11 @@ export default function ArchitectureDiagram({ health = {}, lastChecked = null })
       <span><span style={{ color: statusColors.unhealthy }}>●</span> Probe thất bại</span>
       <span><span style={{ color: statusColors.documented }}>●</span> Chưa có probe</span>
       <span><span style={{ color: statusColors.planned }}>●</span> Chưa tích hợp</span>
+      <span><span style={{ color: statusColors.inactive }}>◆</span> Service có mặt, data flow chưa cấu hình</span>
+      <span><span style={{ color: statusColors.ondemand }}>◇</span> On-demand</span>
       {lastChecked && <span>Kiểm tra lúc {lastChecked.toLocaleTimeString('vi-VN')}</span>}
     </div>
-    <div style={{ height: 740, width: '100%', background: '#0b0f19', border: '1px solid #334155', borderRadius: 16, overflow: 'hidden' }}>
+    <div style={{ height: 900, width: '100%', background: '#0b0f19', border: '1px solid #334155', borderRadius: 16, overflow: 'hidden' }}>
       <ReactFlow
         colorMode="dark" nodes={visibleNodes} edges={edges} nodeTypes={nodeTypes}
         onNodesChange={onNodesChange} nodesConnectable={false}
