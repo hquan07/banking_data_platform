@@ -110,16 +110,23 @@ def parse_producer_summary(output: str) -> dict:
     raise ValueError("Dataset replay output contained no producer summary")
 
 
-def _run(command: list[str]) -> str:
-    result = subprocess.run(command, check=True, capture_output=True, text=True)
-    return result.stdout
+def _run(command: list[str], retries: int = 0, retry_delay: float = 1) -> str:
+    for attempt in range(retries + 1):
+        try:
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            return result.stdout
+        except subprocess.CalledProcessError:
+            if attempt == retries:
+                raise
+            time.sleep(retry_delay)
+    raise RuntimeError("unreachable command retry state")
 
 
 def consumer_lag(group: str) -> int:
     output = _run([
         "docker", "exec", "banking_kafka", "kafka-consumer-groups.sh",
         "--bootstrap-server", "localhost:9092", "--describe", "--group", group,
-    ])
+    ], retries=2, retry_delay=2)
     return parse_consumer_group_lag(output)
 
 
@@ -218,6 +225,21 @@ def sample_lags(groups: Iterable[str]) -> dict[str, int]:
     return {group: consumer_lag(group) for group in groups}
 
 
+def stop_producer(producer: subprocess.Popen, container_name: str) -> None:
+    """Stop only the one-off producer owned by this benchmark after an error."""
+    if producer.poll() is None:
+        producer.terminate()
+        try:
+            producer.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            producer.kill()
+            producer.wait(timeout=5)
+    subprocess.run(
+        ["docker", "stop", "--timeout", "10", container_name],
+        check=False, capture_output=True, text=True,
+    )
+
+
 def run_benchmark(args: argparse.Namespace) -> dict:
     groups = tuple(args.consumer_group)
     api_paths = tuple(args.api_path)
@@ -227,7 +249,8 @@ def run_benchmark(args: argparse.Namespace) -> dict:
     initial_lag = sample_lags(groups)
 
     command = [
-        "docker", "compose", "--profile", "dataset-replay", "run", "--rm",
+        "docker", "compose", "--profile", "dataset-replay", "run", "--rm", "--no-deps",
+        "--name", f"banking-dataset-benchmark-{os.getpid()}",
         "-e", f"DATASET_ID={args.dataset}",
         "-e", f"DATASET_START_ROW={args.start_row}",
         "-e", f"DATASET_MAX_EVENTS={args.events}",
@@ -238,12 +261,17 @@ def run_benchmark(args: argparse.Namespace) -> dict:
     producer = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
+    producer_container = f"banking-dataset-benchmark-{os.getpid()}"
     lag_samples: list[dict] = []
-    while producer.poll() is None:
-        elapsed = time.monotonic() - producer_started
-        lag_samples.append({"elapsed_seconds": round(elapsed, 3), **sample_lags(groups)})
-        time.sleep(args.poll_interval)
-    producer_output = producer.communicate()[0]
+    try:
+        while producer.poll() is None:
+            elapsed = time.monotonic() - producer_started
+            lag_samples.append({"elapsed_seconds": round(elapsed, 3), **sample_lags(groups)})
+            time.sleep(args.poll_interval)
+        producer_output = producer.communicate()[0]
+    except BaseException:
+        stop_producer(producer, producer_container)
+        raise
     producer_seconds = time.monotonic() - producer_started
     if producer.returncode:
         raise RuntimeError(f"Dataset replay failed ({producer.returncode}):\n{producer_output}")
