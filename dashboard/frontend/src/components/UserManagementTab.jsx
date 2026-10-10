@@ -1,210 +1,39 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell,
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-} from 'recharts';
-import { Users } from 'lucide-react';
-
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-const SEVERITY_COLORS = { high: '#ef4444', medium: '#f59e0b', low: '#3b82f6' };
+import React, { useContext, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Clock3, Users } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { AuthContext } from './AuthContext';
+import { Badge, formatNumber, formatPercent, MetricCard, PageHeader, Panel, StateMessage } from './ui';
 
 export default function UserManagementTab() {
-  const [usersStats, setUsersStats] = useState([]);
+  const { token } = useContext(AuthContext);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const res = await fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/admin/users-stats', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        if (!res.ok) {
-          throw new Error('Failed to fetch user stats. Are you an Admin?');
-        }
-        const data = await res.json();
-        setUsersStats(data);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchStats();
-  }, []);
+    const controller = new AbortController(); setLoading(true); setError('');
+    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/admin/users-stats', { headers:{ Authorization:`Bearer ${token}` }, signal:controller.signal })
+      .then(async response => { if (!response.ok) throw new Error((await response.json()).detail || `Không tải được KPI (${response.status})`); return response.json(); })
+      .then(data => setUsers(Array.isArray(data) ? data : []))
+      .catch(fetchError => { if (fetchError.name !== 'AbortError') setError(fetchError.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [token]);
 
-  if (loading) return <div style={{padding: '2rem', color: '#fff'}}>Loading user statistics...</div>;
-  if (error) return <div style={{padding: '2rem', color: '#ef4444'}}>Error: {error}</div>;
+  const totals = useMemo(() => users.reduce((acc, item) => ({ assigned:acc.assigned + item.total_assigned, resolved:acc.resolved + item.total_resolved, pending:acc.pending + item.pending, risk:acc.risk + Number(item.avg_risk || 0) }), { assigned:0, resolved:0, pending:0, risk:0 }), [users]);
+  const lifecycle = users.map(item => ({ name:item.username, Resolved:item.total_resolved, Open:item.pending }));
+  const severity = users.map(item => ({ name:item.username, High:item.severity.high, Medium:item.severity.medium, Low:item.severity.low }));
 
-  // Process data for charts
-  const performanceData = usersStats.map(u => ({
-    name: u.username,
-    Resolved: u.total_resolved,
-    Pending: u.pending
-  }));
-
-  const workloadData = usersStats.map(u => ({
-    name: u.username,
-    value: u.total_assigned
-  })).filter(d => d.value > 0);
-
-  const severityData = usersStats.map(u => ({
-    name: u.username,
-    High: u.severity.high,
-    Medium: u.severity.medium,
-    Low: u.severity.low
-  }));
-
-  // Find all unique rules for Radar chart
-  const allRules = new Set();
-  usersStats.forEach(u => {
-    Object.keys(u.rules || {}).forEach(r => allRules.add(r));
-  });
-  
-  const radarData = Array.from(allRules).map(rule => {
-    const dataPoint = { subject: rule };
-    usersStats.forEach(u => {
-      dataPoint[u.username] = u.rules[rule] || 0;
-    });
-    return dataPoint;
-  });
-
-  return (
-    <div style={{ padding: '20px', color: '#fff' }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '10px' }}>
-        <Users size={24} color="#8b5cf6" />
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Admin User Management & KPIs</h2>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-        
-        {/* 1. Performance Chart (Grouped Bar) */}
-        <div className="panel">
-          <h3>Investigator Performance (Resolved vs Pending)</h3>
-          <div style={{ height: '300px', marginTop: '20px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={performanceData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="name" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
-                <Legend />
-                <Bar dataKey="Resolved" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Pending" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* 2. Severity Breakdown (Stacked Bar) */}
-        <div className="panel">
-          <h3>Severity Workload Breakdown</h3>
-          <div style={{ height: '300px', marginTop: '20px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={severityData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="name" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
-                <Legend />
-                <Bar dataKey="High" stackId="a" fill={SEVERITY_COLORS.high} />
-                <Bar dataKey="Medium" stackId="a" fill={SEVERITY_COLORS.medium} />
-                <Bar dataKey="Low" stackId="a" fill={SEVERITY_COLORS.low} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* 3. Workload Distribution (Donut) */}
-        <div className="panel">
-          <h3>Workload Distribution (Total Assigned)</h3>
-          <div style={{ height: '300px', marginTop: '20px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={workloadData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={110}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({name, percent}) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                >
-                  {workloadData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* 4. Rule Expertise (Radar) */}
-        <div className="panel">
-          <h3>Rule Expertise & Specialization</h3>
-          <div style={{ height: '300px', marginTop: '20px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
-                <PolarGrid stroke="#334155" />
-                <PolarAngleAxis dataKey="subject" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <PolarRadiusAxis stroke="#334155" />
-                <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
-                <Legend />
-                {usersStats.map((u, index) => (
-                  <Radar key={u.username} name={u.username} dataKey={u.username} stroke={COLORS[index % COLORS.length]} fill={COLORS[index % COLORS.length]} fillOpacity={0.4} />
-                ))}
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* Data Table */}
-      <div className="panel" style={{ overflowX: 'auto' }}>
-        <h3>User Statistics Details</h3>
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8', textAlign: 'left' }}>
-              <th style={{ padding: '12px' }}>ID</th>
-              <th style={{ padding: '12px' }}>Username</th>
-              <th style={{ padding: '12px' }}>Role</th>
-              <th style={{ padding: '12px' }}>Total Assigned</th>
-              <th style={{ padding: '12px' }}>Resolved</th>
-              <th style={{ padding: '12px' }}>Pending</th>
-              <th style={{ padding: '12px' }}>Avg Risk Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {usersStats.map((u) => (
-              <tr key={u.id} style={{ borderBottom: '1px solid #1e293b' }}>
-                <td style={{ padding: '12px' }}>{u.id}</td>
-                <td style={{ padding: '12px', fontWeight: 'bold' }}>{u.username}</td>
-                <td style={{ padding: '12px' }}>
-                  <span style={{ 
-                    background: u.role === 'ADMIN' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(59, 130, 246, 0.2)', 
-                    color: u.role === 'ADMIN' ? '#c4b5fd' : '#93c5fd',
-                    padding: '4px 8px', borderRadius: '12px', fontSize: '0.75rem' 
-                  }}>
-                    {u.role}
-                  </span>
-                </td>
-                <td style={{ padding: '12px' }}>{u.total_assigned}</td>
-                <td style={{ padding: '12px', color: '#10b981' }}>{u.total_resolved}</td>
-                <td style={{ padding: '12px', color: '#f59e0b' }}>{u.pending}</td>
-                <td style={{ padding: '12px', color: u.avg_risk > 80 ? '#ef4444' : (u.avg_risk > 50 ? '#f59e0b' : '#10b981') }}>
-                  {u.avg_risk}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  return <div className="page-stack">
+    <PageHeader eyebrow="Team operations" title="Investigator KPIs" description="Workload và case outcomes theo assignee; benchmark chưa được giao analyst vẫn được giữ ngoài KPI cá nhân." />
+    <MetricCard icon={<Users size={17} />} label="Investigators" value={formatNumber(users.length)} detail="Bao gồm admin và analyst" tone="blue" />
+    <MetricCard icon={<AlertTriangle size={17} />} label="Assigned cases" value={formatNumber(totals.assigned)} detail={`${formatNumber(totals.pending)} đang mở`} tone="amber" />
+    <MetricCard icon={<CheckCircle2 size={17} />} label="Resolution rate" value={formatPercent(totals.assigned ? totals.resolved / totals.assigned : 0)} detail={`${formatNumber(totals.resolved)} case resolved`} tone="green" />
+    <MetricCard icon={<Clock3 size={17} />} label="Average risk" value={formatNumber(users.length ? totals.risk / users.length : 0, 1)} detail="Trung bình theo investigator" tone="violet" />
+    {loading ? <Panel className="col-span-12"><StateMessage type="loading">Đang tải investigator KPIs…</StateMessage></Panel> : error ? <Panel className="col-span-12"><StateMessage type="error">{error}</StateMessage></Panel> : <>
+      <Panel className="col-span-6" title="Case lifecycle by investigator" subtitle="Resolved so với pending/investigating"><ResponsiveContainer width="100%" height={300}><BarChart data={lifecycle}><CartesianGrid stroke="#20314b" vertical={false}/><XAxis dataKey="name" stroke="#70839e" fontSize={9}/><YAxis stroke="#70839e" fontSize={9} allowDecimals={false}/><Tooltip contentStyle={{ background:'#0d1829', border:'1px solid #263750', fontSize:10 }}/><Legend/><Bar dataKey="Resolved" fill="#35d399" radius={[4,4,0,0]}/><Bar dataKey="Open" fill="#f7b84b" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></Panel>
+      <Panel className="col-span-6" title="Severity workload" subtitle="Risk bands của case đã assign"><ResponsiveContainer width="100%" height={300}><BarChart data={severity}><CartesianGrid stroke="#20314b" vertical={false}/><XAxis dataKey="name" stroke="#70839e" fontSize={9}/><YAxis stroke="#70839e" fontSize={9} allowDecimals={false}/><Tooltip contentStyle={{ background:'#0d1829', border:'1px solid #263750', fontSize:10 }}/><Legend/><Bar dataKey="High" stackId="risk" fill="#fb7185"/><Bar dataKey="Medium" stackId="risk" fill="#f7b84b"/><Bar dataKey="Low" stackId="risk" fill="#4f8cff" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></Panel>
+      <Panel className="col-span-12" title="Investigator detail" subtitle="Account role và case ownership hiện tại"><div className="dataset-table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Assigned</th><th>Resolved</th><th>Open</th><th>Average risk</th><th>Rule coverage</th></tr></thead><tbody>{users.map(item => <tr key={item.id}><td><strong>{item.username}</strong><small> ID {item.id}</small></td><td><Badge tone={item.role === 'ADMIN' ? 'violet' : 'blue'}>{item.role}</Badge></td><td>{formatNumber(item.total_assigned)}</td><td>{formatNumber(item.total_resolved)}</td><td>{formatNumber(item.pending)}</td><td>{formatNumber(item.avg_risk, 1)}</td><td>{formatNumber(Object.keys(item.rules || {}).length)}</td></tr>)}</tbody></table></div>{!users.length && <StateMessage>Chưa có user trong hệ thống.</StateMessage>}</Panel>
+    </>}
+  </div>;
 }

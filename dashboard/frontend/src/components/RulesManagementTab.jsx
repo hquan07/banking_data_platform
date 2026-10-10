@@ -1,203 +1,52 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useCallback, useContext, useEffect, useState } from 'react';
+import { Gauge, Power, RefreshCw, Save, Settings2 } from 'lucide-react';
 import { AuthContext } from './AuthContext';
-import { ShieldAlert, ToggleLeft, ToggleRight, Save, RefreshCw } from 'lucide-react';
+import { Badge, formatNumber, MetricCard, PageHeader, Panel, StateMessage } from './ui';
 
 export default function RulesManagementTab() {
   const { token, user } = useContext(AuthContext);
   const [rules, setRules] = useState([]);
-  const [editingRule, setEditingRule] = useState(null);
-  const [editValues, setEditValues] = useState({});
+  const [editing, setEditing] = useState(null);
+  const [values, setValues] = useState({});
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const base = window._env_?.API_URL || 'http://localhost:8000';
 
-  useEffect(() => {
-    fetchRules();
-  }, []);
+  const fetchRules = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const response = await fetch(base + '/api/rules', { headers:{ Authorization:`Bearer ${token}` } });
+      if (!response.ok) throw new Error((await response.json()).detail || `Không tải được rules (${response.status})`);
+      const data = await response.json(); setRules(Array.isArray(data) ? data : []);
+    } catch (fetchError) { setError(fetchError.message); } finally { setLoading(false); }
+  }, [base, token]);
+  useEffect(() => { fetchRules(); }, [fetchRules]);
 
-  const fetchRules = () => {
-    if (!token) return;
-    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/rules', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) setRules(data);
-      })
-      .catch(console.error);
+  const editRule = rule => { setEditing(rule.rule_id); setValues({ threshold:rule.threshold, window_seconds:rule.window_seconds, max_count:rule.max_count, is_active:rule.is_active, description:rule.description || '' }); setMessage(''); };
+  const updateRule = async (ruleId, payload) => {
+    setSaving(true); setError(''); setMessage('');
+    try {
+      const response = await fetch(`${base}/api/rules/${ruleId}`, { method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body:JSON.stringify(payload) });
+      if (!response.ok) throw new Error((await response.json()).detail || `Không cập nhật được rule (${response.status})`);
+      const result = await response.json(); setMessage(result.message || 'Đã cập nhật rule'); setEditing(null); await fetchRules();
+    } catch (updateError) { setError(updateError.message); } finally { setSaving(false); }
   };
+  const active = rules.filter(rule => rule.is_active).length;
 
-  const handleEdit = (rule) => {
-    setEditingRule(rule.rule_id);
-    setEditValues({
-      threshold: rule.threshold,
-      window_seconds: rule.window_seconds,
-      max_count: rule.max_count,
-      is_active: rule.is_active,
-      description: rule.description || '',
-    });
-  };
-
-  const handleSave = (ruleId) => {
-    setSaving(true);
-    setMessage('');
-    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/rules/${ruleId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(editValues)
-    })
-      .then(res => res.json())
-      .then(data => {
-        setMessage(data.message || 'Saved!');
-        setEditingRule(null);
-        fetchRules();
-      })
-      .catch(err => setMessage('Error: ' + err.message))
-      .finally(() => setSaving(false));
-  };
-
-  const handleToggle = (rule) => {
-    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/rules/${rule.rule_id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ is_active: !rule.is_active })
-    })
-      .then(() => fetchRules())
-      .catch(console.error);
-  };
-
-  const isAdmin = user?.role === 'ADMIN';
-
-  return (
-    <div className="grid">
-      <div className="panel col-span-12">
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
-          <h2 className="panel-title" style={{margin: 0}}>
-            <ShieldAlert size={20} style={{marginRight: '8px', verticalAlign: 'middle'}} />
-            Rule Engine Management
-          </h2>
-          <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-            {message && <span style={{color: '#10b981', fontSize: '13px'}}>{message}</span>}
-            <button onClick={fetchRules} style={{background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px'}}>
-              <RefreshCw size={14} /> Refresh
-            </button>
-          </div>
-        </div>
-
-        {!isAdmin && (
-          <div style={{background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', padding: '12px 16px', marginBottom: '1rem', color: '#f59e0b', fontSize: '14px'}}>
-            ⚠️ Bạn đang đăng nhập với quyền ANALYST. Chỉ ADMIN mới có thể chỉnh sửa các luật.
-          </div>
-        )}
-
-        <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
-          {rules.map(rule => (
-            <div key={rule.rule_id} style={{
-              background: rule.is_active ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.01)',
-              border: `1px solid ${rule.is_active ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.05)'}`,
-              borderRadius: '12px',
-              padding: '1.25rem',
-              transition: 'all 0.3s ease',
-              opacity: rule.is_active ? 1 : 0.5,
-            }}>
-              {/* Rule Header */}
-              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
-                <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                  <span style={{
-                    fontSize: '1.1rem', fontWeight: 'bold', color: '#fff',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}>
-                    {rule.name.replace(/_/g, ' ')}
-                  </span>
-                  <span style={{
-                    padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600',
-                    background: rule.is_active ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.15)',
-                    color: rule.is_active ? '#10b981' : '#94a3b8',
-                  }}>
-                    {rule.is_active ? 'ACTIVE' : 'DISABLED'}
-                  </span>
-                </div>
-                {isAdmin && (
-                  <div style={{display: 'flex', gap: '8px'}}>
-                    <button onClick={() => handleToggle(rule)} style={{
-                      background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px',
-                      color: rule.is_active ? '#10b981' : '#94a3b8',
-                    }}>
-                      {rule.is_active ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-                    </button>
-                    {editingRule !== rule.rule_id ? (
-                      <button onClick={() => handleEdit(rule)} style={{
-                        background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)',
-                        padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px',
-                      }}>
-                        Edit
-                      </button>
-                    ) : (
-                      <button onClick={() => handleSave(rule.rule_id)} disabled={saving} style={{
-                        background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)',
-                        padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px',
-                        display: 'flex', alignItems: 'center', gap: '6px',
-                      }}>
-                        <Save size={14} /> {saving ? 'Saving...' : 'Save'}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Description */}
-              <p style={{color: '#94a3b8', fontSize: '13px', margin: '0 0 1rem 0'}}>{rule.description}</p>
-
-              {/* Parameters */}
-              <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem'}}>
-                {/* Threshold */}
-                <div style={{background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '12px 16px'}}>
-                  <div style={{color: '#94a3b8', fontSize: '12px', marginBottom: '6px'}}>Ngưỡng giá trị ($)</div>
-                  {editingRule === rule.rule_id ? (
-                    <input type="number" value={editValues.threshold} onChange={e => setEditValues({...editValues, threshold: parseFloat(e.target.value)})}
-                      style={{background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '6px', padding: '8px 12px', color: '#fff', fontSize: '1.1rem', width: '100%', fontWeight: 'bold'}}
-                    />
-                  ) : (
-                    <div style={{color: '#fff', fontSize: '1.25rem', fontWeight: 'bold'}}>${rule.threshold.toLocaleString()}</div>
-                  )}
-                </div>
-                {/* Window */}
-                <div style={{background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '12px 16px'}}>
-                  <div style={{color: '#94a3b8', fontSize: '12px', marginBottom: '6px'}}>Cửa sổ thời gian (giây)</div>
-                  {editingRule === rule.rule_id ? (
-                    <input type="number" value={editValues.window_seconds} onChange={e => setEditValues({...editValues, window_seconds: parseInt(e.target.value)})}
-                      style={{background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '6px', padding: '8px 12px', color: '#fff', fontSize: '1.1rem', width: '100%', fontWeight: 'bold'}}
-                    />
-                  ) : (
-                    <div style={{color: '#fff', fontSize: '1.25rem', fontWeight: 'bold'}}>{rule.window_seconds}s</div>
-                  )}
-                </div>
-                {/* Max Count */}
-                <div style={{background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '12px 16px'}}>
-                  <div style={{color: '#94a3b8', fontSize: '12px', marginBottom: '6px'}}>Số lần vi phạm tối đa</div>
-                  {editingRule === rule.rule_id ? (
-                    <input type="number" value={editValues.max_count} onChange={e => setEditValues({...editValues, max_count: parseInt(e.target.value)})}
-                      style={{background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '6px', padding: '8px 12px', color: '#fff', fontSize: '1.1rem', width: '100%', fontWeight: 'bold'}}
-                    />
-                  ) : (
-                    <div style={{color: '#fff', fontSize: '1.25rem', fontWeight: 'bold'}}>{rule.max_count}</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-          {rules.length === 0 && (
-            <div style={{textAlign: 'center', padding: '40px', color: '#64748b'}}>
-              Không có dữ liệu Rule. Hệ thống sẽ tự tạo rule mặc định khi khởi động.
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="page-stack">
+    <PageHeader eyebrow="Detection controls" title="Detection Rules" description="Cấu hình deterministic rules dùng cho stream processing; thay đổi được publish qua Redis." actions={<button className="secondary-button" onClick={fetchRules} disabled={loading}><RefreshCw size={14}/> Refresh</button>} />
+    <MetricCard icon={<Settings2 size={17}/>} label="Configured rules" value={formatNumber(rules.length)} detail="Rule registry in PostgreSQL" tone="blue" />
+    <MetricCard icon={<Power size={17}/>} label="Active" value={formatNumber(active)} detail={`${formatNumber(rules.length - active)} disabled`} tone="green" />
+    <MetricCard icon={<Gauge size={17}/>} label="Average threshold" value={formatNumber(rules.length ? rules.reduce((sum, rule) => sum + Number(rule.threshold || 0), 0) / rules.length : 0, 2)} detail="Không so sánh như model score" tone="amber" />
+    <MetricCard icon={<Save size={17}/>} label="Access" value={user?.role || '—'} detail="Chỉ ADMIN được chỉnh sửa" tone="violet" />
+    <Panel className="col-span-12" title="Rule registry" subtitle="Threshold, time window và violation count">
+      {message && <div className="inline-message success">{message}</div>}{error && <StateMessage type="error">{error}</StateMessage>}
+      {loading ? <StateMessage type="loading">Đang tải detection rules…</StateMessage> : <div className="rule-list">{rules.map(rule => {
+        const isEditing = editing === rule.rule_id;
+        return <article className={`rule-card ${rule.is_active ? '' : 'disabled'}`} key={rule.rule_id}><div className="rule-header"><div><strong>{rule.name.replaceAll('_', ' ')}</strong><Badge tone={rule.is_active ? 'green' : 'neutral'}>{rule.is_active ? 'ACTIVE' : 'DISABLED'}</Badge><p>{rule.description || 'Không có mô tả.'}</p></div>{user?.role === 'ADMIN' && <div className="case-actions"><button className="secondary-button" onClick={() => updateRule(rule.rule_id, { is_active:!rule.is_active })}>{rule.is_active ? 'Disable' : 'Enable'}</button>{isEditing ? <button className="primary-button" disabled={saving} onClick={() => updateRule(rule.rule_id, values)}><Save size={13}/>{saving ? 'Saving…' : 'Save'}</button> : <button className="secondary-button" onClick={() => editRule(rule)}>Edit</button>}</div>}</div><div className="rule-parameters"><label><span>Threshold</span>{isEditing ? <input type="number" min="0" value={values.threshold} onChange={event => setValues(previous => ({ ...previous, threshold:Number(event.target.value) }))}/> : <strong>{formatNumber(rule.threshold, 2)}</strong>}</label><label><span>Window seconds</span>{isEditing ? <input type="number" min="1" value={values.window_seconds} onChange={event => setValues(previous => ({ ...previous, window_seconds:Number(event.target.value) }))}/> : <strong>{formatNumber(rule.window_seconds)}s</strong>}</label><label><span>Max count</span>{isEditing ? <input type="number" min="1" value={values.max_count} onChange={event => setValues(previous => ({ ...previous, max_count:Number(event.target.value) }))}/> : <strong>{formatNumber(rule.max_count)}</strong>}</label></div></article>;
+      })}{!rules.length && <StateMessage>Chưa có detection rule.</StateMessage>}</div>}
+    </Panel>
+  </div>;
 }

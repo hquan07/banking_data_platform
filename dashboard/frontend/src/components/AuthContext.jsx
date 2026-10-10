@@ -1,12 +1,22 @@
-import React, { createContext, useState } from 'react';
+import React, { createContext, useEffect, useState } from 'react';
 
 export const AuthContext = createContext();
 
+function isTokenCurrent(token) {
+    if (!token) return false;
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return typeof payload.exp === 'number' && payload.exp * 1000 > Date.now();
+    } catch { return false; }
+}
+
 export const AuthProvider = ({ children }) => {
-    const [token, setToken] = useState(localStorage.getItem('token') || null);
+    const storedToken = localStorage.getItem('token');
+    const [token, setToken] = useState(isTokenCurrent(storedToken) ? storedToken : null);
     const [user, setUser] = useState(() => {
+        if (!isTokenCurrent(storedToken)) { localStorage.removeItem('token'); localStorage.removeItem('user'); return null; }
         const u = localStorage.getItem('user');
-        return u ? JSON.parse(u) : null;
+        try { return u ? JSON.parse(u) : null; } catch { return null; }
     });
 
     const login = (access_token, role, username) => {
@@ -23,6 +33,13 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
     };
+
+    useEffect(() => {
+        if (!token) return undefined;
+        const validate = () => { if (!isTokenCurrent(token)) logout(); };
+        const timer = window.setInterval(validate, 30000);
+        return () => window.clearInterval(timer);
+    }, [token]);
 
     return (
         <AuthContext.Provider value={{ token, user, login, logout }}>
