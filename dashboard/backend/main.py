@@ -273,6 +273,27 @@ def readiness_check():
         "clickhouse": check(ch_client, lambda: ch_client.execute("EXISTS TABLE payment_events") == [(1,)]),
         "minio": check(s3_client, lambda: s3_client.head_bucket(Bucket="evidence")),
     })
+    spark_runtime = {"status": "unavailable", "alive_workers": 0, "active_apps": []}
+    try:
+        spark_url = os.environ["SPARK_MASTER_STATUS_URL"]
+        with urlopen(spark_url, timeout=3) as response:
+            spark_payload = json.loads(response.read())
+        active_apps = sorted(
+            app.get("name") for app in spark_payload.get("activeapps", []) if app.get("name")
+        )
+        spark_runtime = {
+            "status": spark_payload.get("status", "unknown"),
+            "alive_workers": int(spark_payload.get("aliveworkers", 0)),
+            "active_apps": active_apps,
+        }
+        required_apps = {"PaymentStreamingProcessor", "FraudDetectionEngine"}
+        dependencies["spark"] = (
+            spark_runtime["status"] == "ALIVE"
+            and spark_runtime["alive_workers"] > 0
+            and required_apps.issubset(active_apps)
+        )
+    except Exception:
+        dependencies["spark"] = False
     live_source = {"status": "unavailable", "configured": True, "kafka": False, "last_event_at": None}
     try:
         source_url = os.environ["LIVE_INGESTION_URL"].rstrip("/")
@@ -282,5 +303,5 @@ def readiness_check():
     except Exception:
         dependencies["live_ingestion"] = False
     if not all(dependencies.values()):
-        raise HTTPException(status_code=503, detail={"status": "not_ready", **dependencies, "live_source": live_source})
-    return {"status": "ready", "mode": APP_MODE, **dependencies, "live_source": live_source}
+        raise HTTPException(status_code=503, detail={"status": "not_ready", **dependencies, "spark_runtime": spark_runtime, "live_source": live_source})
+    return {"status": "ready", "mode": APP_MODE, **dependencies, "spark_runtime": spark_runtime, "live_source": live_source}

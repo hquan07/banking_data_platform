@@ -153,6 +153,11 @@ services:
     container_name: banking_spark_master
     environment:
       - SPARK_MODE=master
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/spark-master/7077'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:7077:7077"
@@ -161,13 +166,13 @@ services:
       - spark_checkpoints:/checkpoints
     networks:
       - backend_network
-      - data_network
 
   spark-worker:
     build:
       context: .
       dockerfile: docker/spark/Dockerfile
     container_name: banking_spark_worker
+    restart: on-failure
     mem_limit: 3g
     environment:
       - SPARK_MODE=worker
@@ -176,6 +181,14 @@ services:
       - SPARK_WORKER_CORES=2
       - REDIS_HOST=banking_redis
       - REDIS_PORT=6379
+    healthcheck:
+      test: ["CMD-SHELL", "ps -ef | grep -q '[o]rg.apache.spark.deploy.worker.Worker'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      spark-master:
+        condition: service_healthy
     volumes:
       - .:/workspace:ro
       - spark_checkpoints:/checkpoints
@@ -486,6 +499,7 @@ services:
       - DASHBOARD_ANALYST_PASSWORD=${DASHBOARD_ANALYST_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVER=banking_kafka:9092
       - LIVE_INGESTION_URL=http://live_ingestion:8085
+      - SPARK_MASTER_STATUS_URL=http://spark-master:8080/json/
       - REDIS_HOST=banking_redis
       - REDIS_PORT=6379
       - SPARK_CHECKPOINT_DIR=/checkpoints/fraud-engine
@@ -552,9 +566,9 @@ services:
       checkpoint_init:
         condition: service_completed_successfully
       spark-master:
-        condition: service_started
+        condition: service_healthy
       spark-worker:
-        condition: service_started
+        condition: service_healthy
       kafka:
         condition: service_healthy
       kafka_topics_init:
@@ -635,9 +649,9 @@ services:
       checkpoint_init:
         condition: service_completed_successfully
       spark-master:
-        condition: service_started
+        condition: service_healthy
       spark-worker:
-        condition: service_started
+        condition: service_healthy
       kafka:
         condition: service_healthy
       kafka_topics_init:
