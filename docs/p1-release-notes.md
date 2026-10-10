@@ -25,9 +25,12 @@
 - The bounded PaySim benchmark sustained 50 events/second for five minutes.
   Kafka processor/graph peak lag remained at 53/6, both groups drained to zero,
   the DLQ did not grow, and all measured API responses stayed below two seconds.
+- The live Compose integration suite passed all eight payment, retry/DLQ,
+  alert lifecycle, RBAC, Redis, Neo4j and MinIO end-to-end paths.
 
 See `docs/p1-demo-acceptance.md` for the current data-source status and the
-database-volume cleanup boundary.
+database-volume cleanup boundary. See `docs/p1-e2e-acceptance.md` for the live
+integration evidence and its scope.
 
 ## Data migration and rollback
 
