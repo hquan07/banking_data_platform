@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { useDatasetContext } from './DatasetContext';
 
 export default function HistoryTab() {
+  const { datasetId, dataset } = useDatasetContext();
   const [historyData, setHistoryData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (datasetId !== 'live') {
+      setHistoryData([]);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
     fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/analytics/history')
       .then(async res => { if (!res.ok) throw new Error('Không tải được dữ liệu lịch sử'); return res.json(); })
       .then(data => {
@@ -25,7 +33,17 @@ export default function HistoryTab() {
         setError(err.message);
         setLoading(false);
       });
-  }, []);
+  }, [datasetId]);
+
+  if (datasetId !== 'live') {
+    return (
+      <div className="panel dataset-not-applicable" role="status">
+        <h2 className="panel-title">Lịch sử ClickHouse không áp dụng cho {dataset.label}</h2>
+        <p>Trang này dành cho payment events của nguồn Live và dùng event timestamp theo ngày.</p>
+        <p>Dataset benchmark cần trang historical analytics riêng theo {dataset.timeSemantics}.</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px', color: '#94a3b8'}}>Loading ClickHouse Historical Data...</div>;
