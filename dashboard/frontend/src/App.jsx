@@ -16,13 +16,20 @@ const HistoryTab = lazy(() => import('./components/HistoryTab'));
 const UserManagementTab = lazy(() => import('./components/UserManagementTab'));
 const RulesManagementTab = lazy(() => import('./components/RulesManagementTab'));
 const ArchitectureTab = lazy(() => import('./components/ArchitectureTab'));
+const WORKSPACE_TABS = ['overview', 'fraud', 'security', 'analytics', 'datasets', 'history'];
+const ADMIN_TABS = ['users', 'rules', 'architecture'];
+
+function readActiveTab() {
+  const stored = sessionStorage.getItem('sentinel-active-tab');
+  return [...WORKSPACE_TABS, ...ADMIN_TABS].includes(stored) ? stored : 'overview';
+}
 
 function NavButton({ id, active, onSelect, icon, children, badge }) {
   return <button className={`nav-item ${active === id ? 'active' : ''}`} onClick={() => onSelect(id)}>{icon}<span>{children}</span>{badge > 0 && <span className="badge">{badge}</span>}</button>;
 }
 
 function MainApp() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(readActiveTab);
   const [alerts, setAlerts] = useState([]);
   const [tps, setTps] = useState(0);
   const [totalValue, setTotalValue] = useState(0);
@@ -30,6 +37,11 @@ function MainApp() {
   const [isConnected, setIsConnected] = useState(false);
   const [chartData, setChartData] = useState([]);
   const { token, user, logout } = React.useContext(AuthContext);
+  const selectTab = tab => { setActiveTab(tab); sessionStorage.setItem('sentinel-active-tab', tab); };
+
+  useEffect(() => {
+    if (user?.role !== 'ADMIN' && ADMIN_TABS.includes(activeTab)) selectTab('overview');
+  }, [activeTab, user?.role]);
 
   useEffect(() => {
     let mounted = true;
@@ -60,17 +72,17 @@ function MainApp() {
       <div className="sidebar-logo"><span className="brand-mark"><ShieldAlert size={22} /></span><div><h1>Sentinel</h1><small>Banking Intelligence</small></div></div>
       <div className="nav-section-label">Workspace</div>
       <div className="nav-menu">
-        <NavButton id="overview" active={activeTab} onSelect={setActiveTab} icon={<LayoutDashboard size={19} />}>Command Center</NavButton>
-        <NavButton id="fraud" active={activeTab} onSelect={setActiveTab} icon={<BarChart3 size={19} />}>Fraud Monitor</NavButton>
-        <NavButton id="security" active={activeTab} onSelect={setActiveTab} icon={<Search size={19} />} badge={alerts.length}>Investigations</NavButton>
-        <NavButton id="analytics" active={activeTab} onSelect={setActiveTab} icon={<Network size={19} />}>AML Network</NavButton>
-        <NavButton id="datasets" active={activeTab} onSelect={setActiveTab} icon={<Database size={19} />}>Data Sources</NavButton>
-        <NavButton id="history" active={activeTab} onSelect={setActiveTab} icon={<History size={19} />}>Historical Analytics</NavButton>
+        <NavButton id="overview" active={activeTab} onSelect={selectTab} icon={<LayoutDashboard size={19} />}>Command Center</NavButton>
+        <NavButton id="fraud" active={activeTab} onSelect={selectTab} icon={<BarChart3 size={19} />}>Fraud Monitor</NavButton>
+        <NavButton id="security" active={activeTab} onSelect={selectTab} icon={<Search size={19} />} badge={alerts.length}>Investigations</NavButton>
+        <NavButton id="analytics" active={activeTab} onSelect={selectTab} icon={<Network size={19} />}>AML Network</NavButton>
+        <NavButton id="datasets" active={activeTab} onSelect={selectTab} icon={<Database size={19} />}>Data Sources</NavButton>
+        <NavButton id="history" active={activeTab} onSelect={selectTab} icon={<History size={19} />}>Historical Analytics</NavButton>
       </div>
       {user?.role === 'ADMIN' && <><div className="nav-section-label nav-admin-label">Administration</div><div className="nav-menu">
-        <NavButton id="users" active={activeTab} onSelect={setActiveTab} icon={<Users size={19} />}>Investigator KPIs</NavButton>
-        <NavButton id="rules" active={activeTab} onSelect={setActiveTab} icon={<Settings size={19} />}>Detection Rules</NavButton>
-        <NavButton id="architecture" active={activeTab} onSelect={setActiveTab} icon={<Network size={19} />}>Platform Health</NavButton>
+        <NavButton id="users" active={activeTab} onSelect={selectTab} icon={<Users size={19} />}>Investigator KPIs</NavButton>
+        <NavButton id="rules" active={activeTab} onSelect={selectTab} icon={<Settings size={19} />}>Detection Rules</NavButton>
+        <NavButton id="architecture" active={activeTab} onSelect={selectTab} icon={<Network size={19} />}>Platform Health</NavButton>
       </div></>}
     </nav>
     <div className="main-content">
