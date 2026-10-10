@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useDatasetContext } from './DatasetContext';
 
 export default function AnalyticsTab() {
+  const { datasetId, dataset } = useDatasetContext();
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [graphLoading, setGraphLoading] = useState(true);
   const [graphError, setGraphError] = useState('');
@@ -14,34 +16,39 @@ export default function AnalyticsTab() {
   const [insightError, setInsightError] = useState('');
 
   useEffect(() => {
+    if (datasetId !== 'live' && datasetId !== 'ds3_paysim') {
+      setGraphData({ nodes: [], links: [] });
+      setGraphSource('');
+      setGraphLoading(false);
+      setGraphError('');
+      return undefined;
+    }
     const baseUrl = window._env_?.API_URL || 'http://localhost:8000';
     const loadGraph = async () => {
-      const benchmarkResponse = await fetch(baseUrl + '/api/graph/benchmark');
-      if (!benchmarkResponse.ok) throw new Error('Không tải được AML graph');
-      const benchmark = await benchmarkResponse.json();
-      if (!benchmark || !Array.isArray(benchmark.nodes) || !Array.isArray(benchmark.links)) {
+      const endpoint = datasetId === 'ds3_paysim' ? '/api/graph/benchmark' : '/api/graph/circular';
+      const response = await fetch(baseUrl + endpoint);
+      if (!response.ok) throw new Error('Không tải được AML graph');
+      const graph = await response.json();
+      if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.links)) {
         throw new Error('Định dạng AML graph không hợp lệ');
       }
-      if (benchmark.nodes.length > 0) {
-        setGraphSource('PaySim — synthetic simulation');
-        return benchmark;
-      }
-      const liveResponse = await fetch(baseUrl + '/api/graph/circular');
-      if (!liveResponse.ok) throw new Error('Không tải được AML graph');
-      const live = await liveResponse.json();
-      if (!live || !Array.isArray(live.nodes) || !Array.isArray(live.links)) {
-        throw new Error('Định dạng AML graph không hợp lệ');
-      }
-      setGraphSource(live.nodes.length ? 'Transfer events' : '');
-      return live;
+      if (datasetId === 'ds3_paysim') setGraphSource('PaySim — synthetic simulation');
+      else setGraphSource(graph.nodes.length ? 'Transfer events' : '');
+      return graph;
     };
     loadGraph()
       .then(setGraphData)
       .catch(err => setGraphError(err.message))
       .finally(() => setGraphLoading(false));
-  }, []);
+  }, [datasetId]);
 
   useEffect(() => {
+    if (datasetId !== 'ds3_paysim') {
+      setMoneyFlow([]);
+      setFraudSequences([]);
+      setInsightError('');
+      return undefined;
+    }
     const baseUrl = window._env_?.API_URL || 'http://localhost:8000';
     Promise.all([
       fetch(baseUrl + '/api/graph/money-flow'),
@@ -57,7 +64,7 @@ export default function AnalyticsTab() {
         setFraudSequences(chainResult.sequences);
       })
       .catch(err => setInsightError(err.message));
-  }, []);
+  }, [datasetId]);
 
   useEffect(() => {
     if (!graphContainerRef.current) return undefined;
@@ -66,6 +73,16 @@ export default function AnalyticsTab() {
     window.addEventListener('resize', updateWidth);
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
+
+  if (datasetId !== 'live' && datasetId !== 'ds3_paysim') {
+    return (
+      <div className="panel dataset-not-applicable" role="status">
+        <h2 className="panel-title">AML Network không áp dụng cho {dataset.label}</h2>
+        <p>{dataset.description}</p>
+        <p>Chọn DS3 — PaySim hoặc Live để xem network analytics.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid">
@@ -92,7 +109,7 @@ export default function AnalyticsTab() {
           )}
         </div>
       </div>
-      <div className="panel col-span-6">
+      {datasetId === 'ds3_paysim' && <div className="panel col-span-6">
         <h2 className="panel-title">PaySim money flow</h2>
         <div className="dataset-provenance">Nguồn: PaySim — synthetic simulation</div>
         {moneyFlow.length ? (
@@ -106,8 +123,8 @@ export default function AnalyticsTab() {
             </BarChart>
           </ResponsiveContainer>
         ) : <div className="dataset-empty">{insightError || 'Chưa có money-flow benchmark.'}</div>}
-      </div>
-      <div className="panel col-span-6">
+      </div>}
+      {datasetId === 'ds3_paysim' && <div className="panel col-span-6">
         <h2 className="panel-title">TRANSFER → CASH_OUT sequences</h2>
         <div className="dataset-provenance">Adjacent source rows · same step/amount · không có participant link</div>
         {fraudSequences.length ? (
@@ -127,7 +144,7 @@ export default function AnalyticsTab() {
             </table>
           </div>
         ) : <div className="dataset-empty">{insightError || 'Chưa phát hiện sequence trong phạm vi dữ liệu đã replay.'}</div>}
-      </div>
+      </div>}
     </div>
   );
 }
