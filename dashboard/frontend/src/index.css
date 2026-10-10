@@ -380,6 +380,26 @@ body {
   margin: 0.5rem 0 0 0;
 }
 
+.metric-success { color: var(--accent-green); }
+.metric-warning { color: var(--accent-orange); }
+.metric-danger { color: var(--accent-red); }
+
+.command-center > .metric-card {
+  grid-column: span 4;
+}
+
+.command-context-panel p {
+  color: var(--text-secondary);
+  margin-top: 0;
+}
+
+.command-context-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .tab-btn {
   background: transparent;
   color: var(--text-secondary);
@@ -684,6 +704,10 @@ body {
 }
 
 @media (max-width: 1100px) {
+  .command-center > .metric-card {
+    grid-column: span 12;
+  }
+
   .dataset-context-bar {
     flex-direction: column;
     margin: 0 1rem;

@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { Activity, ShieldAlert, Zap, Server, LayoutDashboard, BarChart3, History, Settings, Users, Network, Database } from 'lucide-react';
-const OverviewTab = lazy(() => import('./components/OverviewTab'));
+const CommandCenterTab = lazy(() => import('./components/CommandCenterTab'));
 const SecurityTab = lazy(() => import('./components/SecurityTab'));
 const AnalyticsTab = lazy(() => import('./components/AnalyticsTab'));
 const HistoryTab = lazy(() => import('./components/HistoryTab'));
@@ -186,7 +186,7 @@ function MainApp() {
 
         {/* Tab Content */}
         <Suspense fallback={<div role="status">Đang tải nội dung...</div>}>
-        {activeTab === 'overview' && <OverviewTab data={chartData} />}
+        {activeTab === 'overview' && <CommandCenterTab data={chartData} tps={tps} totalValue={totalValue} isConnected={isConnected} />}
         {activeTab === 'security' && <SecurityTab />}
         {activeTab === 'analytics' && <AnalyticsTab />}
         {activeTab === 'datasets' && <DatasetsTab />}
