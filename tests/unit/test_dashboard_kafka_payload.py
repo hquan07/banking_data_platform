@@ -18,6 +18,13 @@ def test_valid_payment_is_decoded():
     assert decode_message("payment-events", json.dumps(event).encode()) == event
 
 
+def test_benchmark_event_requires_source_scope():
+    event = {"event_id": "ds1:1", "dataset_id": "ds1_creditcard", "schema_version": 1}
+    assert decode_message("benchmark-events", json.dumps(event).encode()) == event
+    assert decode_message("benchmark-events", b"not-json") is None
+    assert decode_message("benchmark-events", b'{"event_id":"ds1:1"}') is None
+
+
 def test_invalid_alert_remains_a_retryable_error():
     with pytest.raises(json.JSONDecodeError):
         decode_message("fraud-events", b"not-json")

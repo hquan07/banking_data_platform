@@ -16,7 +16,13 @@ from core.db import pg_conn, graph_driver, ch_client, redis_client, get_s3_clien
 from core.security import get_password_hash
 from core.deps import resolve_user_token
 from core.runtime import APP_MODE, validate_runtime_config
-from services.kafka_client import manager, consume_kafka, kafka_ready
+from services.kafka_client import (
+    benchmark_kafka_ready,
+    consume_benchmark_kafka,
+    consume_kafka,
+    kafka_ready,
+    manager,
+)
 
 # API Routers
 from api.auth import router as auth_router
@@ -100,8 +106,12 @@ async def lifespan(app: FastAPI):
             raise RuntimeError(f"Default user initialization failed: {e}") from e
 
     background_tasks.append(asyncio.create_task(consume_kafka()))
+    background_tasks.append(asyncio.create_task(consume_benchmark_kafka()))
     try:
-        await asyncio.wait_for(kafka_ready.wait(), timeout=30)
+        await asyncio.wait_for(
+            asyncio.gather(kafka_ready.wait(), benchmark_kafka_ready.wait()),
+            timeout=30,
+        )
     except asyncio.TimeoutError as exc:
         for task in background_tasks:
             task.cancel()
@@ -225,7 +235,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "healthy" if kafka_ready.is_set() else "degraded", "mode": APP_MODE, "clients_connected": len(manager.active_connections)}
+    stream_ready = kafka_ready.is_set() and benchmark_kafka_ready.is_set()
+    return {"status": "healthy" if stream_ready else "degraded", "mode": APP_MODE, "clients_connected": len(manager.active_connections)}
 
 
 @app.get("/api/health/live")
@@ -254,7 +265,7 @@ def readiness_check():
     dependencies = {"postgres": check(pg_conn, postgres_probe)}
     s3_client = get_s3_client()
     dependencies.update({
-        "kafka": kafka_ready.is_set(),
+        "kafka": kafka_ready.is_set() and benchmark_kafka_ready.is_set(),
         "redis": check(redis_client, redis_client.ping if redis_client else None),
         "neo4j": check(graph_driver, graph_driver.verify_connectivity if graph_driver else None),
         "clickhouse": check(ch_client, lambda: ch_client.execute("EXISTS TABLE payment_events") == [(1,)]),

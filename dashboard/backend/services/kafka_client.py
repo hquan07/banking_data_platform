@@ -38,6 +38,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 kafka_ready = asyncio.Event()
+benchmark_kafka_ready = asyncio.Event()
 
 KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP_SERVER", "localhost:9092")
 
@@ -134,5 +135,44 @@ async def consume_kafka():
                 await consumer.stop()
             except Exception as exc:
                 print(f"Kafka consumer cleanup failed: {exc}")
+        if retry:
+            await asyncio.sleep(5)
+
+
+async def consume_benchmark_kafka():
+    """Broadcast only new benchmark replay events; never replay an old Kafka backlog."""
+    from aiokafka import AIOKafkaConsumer
+
+    while True:
+        consumer = AIOKafkaConsumer(
+            "benchmark-events",
+            bootstrap_servers=KAFKA_BOOTSTRAP,
+            group_id="dashboard-benchmark-stream-v1",
+            enable_auto_commit=True,
+            auto_commit_interval_ms=1000,
+            auto_offset_reset="latest",
+        )
+        retry = False
+        try:
+            await consumer.start()
+            benchmark_kafka_ready.set()
+            async for msg in consumer:
+                data = decode_message(msg.topic, msg.value)
+                if data is None:
+                    print(
+                        f"Skipping invalid benchmark payload at partition={msg.partition} "
+                        f"offset={msg.offset}"
+                    )
+                    continue
+                await manager.broadcast({"topic": msg.topic, "data": data})
+        except Exception as exc:
+            print(f"Benchmark Kafka consumer failed; retrying in 5 seconds: {exc}")
+            retry = True
+        finally:
+            benchmark_kafka_ready.clear()
+            try:
+                await consumer.stop()
+            except Exception as exc:
+                print(f"Benchmark Kafka consumer cleanup failed: {exc}")
         if retry:
             await asyncio.sleep(5)
