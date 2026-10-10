@@ -3,6 +3,7 @@ import {
   Activity, AlertCircle, Archive, Boxes, CheckCircle2, Clock3, Database,
   GitBranch, HardDrive, Radio, RefreshCw, Server, ShieldCheck, Waves, Zap,
 } from 'lucide-react';
+import ArchitectureDiagram from './ArchitectureDiagram';
 import { Badge, MetricCard, PageHeader, Panel, StateMessage } from './ui';
 
 const services = [
@@ -118,14 +119,18 @@ export default function ArchitectureTab() {
   return <div className="page-stack platform-page">
     <PageHeader
       eyebrow="Runtime control plane"
-      title="Platform Health"
-      description="Readiness theo thời gian thực và data-flow map đúng với các nguồn live, benchmark và storage đang triển khai."
+      title="Kiến trúc Banking Data Platform"
+      description="Sơ đồ kiến trúc tương tác, readiness theo thời gian thực và data-flow map của nền tảng banking data."
       actions={<button className="secondary-button" onClick={checkHealth} disabled={loading}><RefreshCw className={loading ? 'spin' : ''} size={14}/> Run probes</button>}
     />
     <MetricCard icon={overall === 'ready' ? <CheckCircle2 size={17}/> : <AlertCircle size={17}/>} label="Platform status" value={overall === 'ready' ? 'Ready' : overall === 'checking' ? 'Checking' : overall === 'offline' ? 'Offline' : 'Degraded'} detail="FastAPI readiness contract" tone={overall === 'ready' ? 'green' : 'red'} />
     <MetricCard icon={<Activity size={17}/>} label="Passing probes" value={`${summary.passing}/${summary.probed || services.length}`} detail="Runtime dependencies responding" tone="green" />
     <MetricCard icon={<ShieldCheck size={17}/>} label="Failed probes" value={summary.failing} detail={summary.failing ? 'Needs operator attention' : 'No dependency failures'} tone={summary.failing ? 'red' : 'blue'} />
     <MetricCard icon={<Clock3 size={17}/>} label="Probe interval" value="30s" detail={lastChecked ? `Checked ${lastChecked.toLocaleTimeString('vi-VN')}` : 'First probe pending'} tone="violet" />
+
+    <Panel className="col-span-12" title="Kiến trúc Banking Data Platform" subtitle="Sơ đồ tương tác của nguồn dữ liệu, streaming, processing, storage, serving và observability">
+      <ArchitectureDiagram health={health} lastChecked={lastChecked} />
+    </Panel>
 
     <Panel className="col-span-8" title="Runtime dependencies" subtitle="Các trạng thái bên dưới lấy trực tiếp từ /api/health/ready" action={<Badge tone={overall === 'ready' ? 'green' : 'red'}>{overall}</Badge>}>
       {error && <StateMessage type="error">{error}</StateMessage>}

@@ -110,7 +110,7 @@ function MainApp() {
       {user?.role === 'ADMIN' && <><div className="nav-section-label nav-admin-label">Administration</div><div className="nav-menu">
         <NavButton id="users" active={activeTab} onSelect={selectTab} icon={<Users size={19} />}>Investigator KPIs</NavButton>
         <NavButton id="rules" active={activeTab} onSelect={selectTab} icon={<Settings size={19} />}>Detection Rules</NavButton>
-        <NavButton id="architecture" active={activeTab} onSelect={selectTab} icon={<Network size={19} />}>Platform Health</NavButton>
+        <NavButton id="architecture" active={activeTab} onSelect={selectTab} icon={<Network size={19} />}>Architecture Map</NavButton>
       </div></>}
     </nav>
     <div className="main-content">
