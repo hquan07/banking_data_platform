@@ -76,6 +76,29 @@ test('authenticated analytics and architecture views render end to end', async (
   await page.getByRole('button', { name: 'Architecture Map' }).click();
   await expect(page.getByRole('heading', { name: 'Kiến trúc Banking Data Platform', level: 1 })).toBeVisible();
   await expect(page.locator('.react-flow')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Realtime & Kafka' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText('Kafka broker')).toBeVisible();
+  await expect(page.getByText('Spark fraud engine')).toBeVisible();
+  await expect(page.getByText('Benchmark processor')).toBeVisible();
+  await expect(page.getByText('FastAPI backend')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Batch & DQ' }).click();
+  await expect(page.getByRole('button', { name: 'Batch & DQ' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('Airflow')).toBeVisible();
+  await expect(page.getByText('Spark master + worker')).toBeVisible();
+  await expect(page.getByText('Batch + DQ jobs')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Serving & Ops' }).click();
+  await expect(page.getByRole('button', { name: 'Serving & Ops' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('Kafka Exporter')).toBeVisible();
+  await expect(page.getByText('Prometheus')).toBeVisible();
+  await expect(page.getByText('Grafana')).toBeVisible();
+  await expect(page.getByText('Debezium Connect')).toBeVisible();
+  await expect(page.getByText('Apache Superset')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Toàn bộ' }).click();
+  await expect(page.getByRole('button', { name: 'Toàn bộ' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText(/Toàn bộ topology; dùng các view chuyên biệt/)).toBeVisible();
+  await expect(page.getByText(/Đường nối thể hiện integration contract trong code/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Runtime dependencies', level: 2 })).toBeVisible();
 });
