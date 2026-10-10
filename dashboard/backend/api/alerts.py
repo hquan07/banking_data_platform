@@ -38,7 +38,7 @@ def get_alerts(
     account_id: Optional[str] = None, payment_id: Optional[str] = None,
     rule: Optional[str] = None, status: Optional[str] = None,
     risk_level: Optional[str] = None,
-    dataset_id: Optional[str] = Query(None, pattern="^(ds1_creditcard|ds3_paysim|ds4_baf)$"),
+    dataset_id: Optional[str] = Query(None, pattern="^(live|ds1_creditcard|ds3_paysim|ds4_baf)$"),
     search: Optional[str] = Query(None, max_length=100),
     created_from: Optional[datetime] = None, created_to: Optional[datetime] = None,
     current_user: dict = Depends(get_current_user),
@@ -60,8 +60,11 @@ def get_alerts(
                         clauses.append(f"{column} = %s")
                         params.append(value)
                 if dataset_id:
-                    clauses.append("dataset_id = %s")
-                    params.append(dataset_id)
+                    if dataset_id == "live":
+                        clauses.append("dataset_id IS NULL")
+                    else:
+                        clauses.append("dataset_id = %s")
+                        params.append(dataset_id)
                 if search and search.strip():
                     pattern = "%" + search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
                     clauses.append("(account_id ILIKE %s OR payment_id ILIKE %s OR rule_name ILIKE %s)")
@@ -212,7 +215,7 @@ def get_alert_history(alert_id: int, current_user: dict = Depends(get_current_us
 def export_alerts(
     status: Optional[str] = None,
     risk_level: Optional[str] = None,
-    dataset_id: Optional[str] = Query(None, pattern="^(ds1_creditcard|ds3_paysim|ds4_baf)$"),
+    dataset_id: Optional[str] = Query(None, pattern="^(live|ds1_creditcard|ds3_paysim|ds4_baf)$"),
     search: Optional[str] = Query(None, max_length=100),
     current_user: dict = Depends(get_current_user),
 ):
@@ -225,10 +228,16 @@ def export_alerts(
     try:
         with pg_conn.cursor() as cur:
             clauses, params = [], []
-            for column, value in (("status", status), ("risk_level", risk_level), ("dataset_id", dataset_id)):
+            for column, value in (("status", status), ("risk_level", risk_level)):
                 if value:
                     clauses.append(f"{column} = %s")
                     params.append(value)
+            if dataset_id:
+                if dataset_id == "live":
+                    clauses.append("dataset_id IS NULL")
+                else:
+                    clauses.append("dataset_id = %s")
+                    params.append(dataset_id)
             if search and search.strip():
                 pattern = "%" + search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
                 clauses.append("(account_id ILIKE %s OR payment_id ILIKE %s OR rule_name ILIKE %s)")

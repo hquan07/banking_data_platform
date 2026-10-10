@@ -28,7 +28,7 @@ export default function SecurityTab() {
 
   const loadAlerts = () => {
     const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
-    if (datasetId !== 'live') params.set('dataset_id', datasetId);
+    params.set('dataset_id', datasetId);
     if (query) params.set('search', query);
     if (status) params.set('status', status);
     if (risk) params.set('risk_level', risk);
@@ -56,7 +56,7 @@ export default function SecurityTab() {
   const exportCsv = async () => {
     try {
       const params = new URLSearchParams();
-      if (datasetId !== 'live') params.set('dataset_id', datasetId);
+      params.set('dataset_id', datasetId);
       if (query) params.set('search', query);
       if (status) params.set('status', status);
       if (risk) params.set('risk_level', risk);
