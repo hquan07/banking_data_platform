@@ -324,8 +324,9 @@ export default function Login() {
                         )}
                         
                         <div className="input-group">
-                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#cbd5e1', fontWeight: 500 }}>Username</label>
+                            <label htmlFor="login-username" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#cbd5e1', fontWeight: 500 }}>Username</label>
                             <input 
+                                id="login-username"
                                 type="text" 
                                 className="input-field"
                                 value={username}
@@ -337,8 +338,9 @@ export default function Login() {
                         </div>
 
                         <div className="input-group">
-                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#cbd5e1', fontWeight: 500 }}>Password</label>
+                            <label htmlFor="login-password" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#cbd5e1', fontWeight: 500 }}>Password</label>
                             <input 
+                                id="login-password"
                                 type="password" 
                                 className="input-field"
                                 value={password}

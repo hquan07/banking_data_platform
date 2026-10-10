@@ -11,6 +11,8 @@ env/
 dashboard/frontend/node_modules/
 dashboard/frontend/.vite/
 dashboard/frontend/dist/
+dashboard/frontend/playwright-report/
+dashboard/frontend/test-results/
 
 # Runtime/checkpoint artifacts
 .runtime/
