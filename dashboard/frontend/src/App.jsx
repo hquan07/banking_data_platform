@@ -11,6 +11,8 @@ const DatasetsTab = lazy(() => import('./components/DatasetsTab'));
 import Login from './components/Login';
 import { parseStreamMessage } from './streamContract';
 import { AuthProvider, AuthContext } from './components/AuthContext';
+import { DatasetProvider } from './components/DatasetContext';
+import DatasetContextBar from './components/DatasetContextBar';
 import './index.css';
 
 function MainApp() {
@@ -155,6 +157,7 @@ function MainApp() {
             {isConnected ? 'Live stream' : 'Live stream disconnected'}
           </div>
         </div>
+        <DatasetContextBar />
         <main className="dashboard-container">
           {/* Metric Cards (Always visible) */}
           <div className="grid" style={{marginBottom: '1.5rem'}}>
@@ -201,7 +204,9 @@ function MainApp() {
 export default function App() {
   return (
     <AuthProvider>
-      <MainApp />
+      <DatasetProvider>
+        <MainApp />
+      </DatasetProvider>
     </AuthProvider>
   );
 }
