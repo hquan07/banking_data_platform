@@ -17,9 +17,17 @@ from services.dataset_status import (
 
 router = APIRouter(prefix="/api/datasets", tags=["Datasets"])
 
+SUPPORTED_DATASET_IDS = {"ds1_creditcard", "ds3_paysim", "ds4_baf"}
+
 def _database_required():
     if pg_conn is None:
         raise HTTPException(status_code=503, detail="Dataset database unavailable")
+
+
+def _validate_dataset_id(dataset_id: str) -> str:
+    if dataset_id not in SUPPORTED_DATASET_IDS:
+        raise HTTPException(status_code=404, detail="Unknown dataset")
+    return dataset_id
 
 
 @router.get("/status")
@@ -326,3 +334,170 @@ def get_behavior_distributions(current_user: dict = Depends(get_current_user)):
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Behavior distributions unavailable") from exc
+
+
+@router.get("/{dataset_id}/overview")
+def get_dataset_overview(dataset_id: str, current_user: dict = Depends(get_current_user)):
+    """Return one consistent KPI contract for every benchmark dataset."""
+    _database_required()
+    dataset_id = _validate_dataset_id(dataset_id)
+    try:
+        with pg_conn.cursor() as cursor:
+            cursor.execute(
+                """
+                WITH latest AS (
+                    SELECT DISTINCT ON (event_id) event_id, predicted_fraud
+                    FROM benchmark_evaluations
+                    WHERE dataset_id = %s
+                    ORDER BY event_id, evaluated_at DESC, evaluation_id DESC
+                ), event_metrics AS (
+                    SELECT
+                        count(*) AS event_count,
+                        count(*) FILTER (WHERE e.ground_truth_is_fraud) AS fraud_count,
+                        COALESCE(sum((e.payload->>'amount')::double precision), 0) AS total_amount,
+                        avg((e.payload->>'amount')::double precision) AS average_amount,
+                        min(e.relative_time_value) AS minimum_time,
+                        max(e.relative_time_value) AS maximum_time,
+                        min(e.relative_time_unit) AS time_unit,
+                        min(e.ingested_at) AS first_ingested_at,
+                        max(e.ingested_at) AS last_ingested_at,
+                        count(l.event_id) AS evaluated_count,
+                        count(*) FILTER (WHERE l.predicted_fraud) AS predicted_fraud,
+                        count(*) FILTER (WHERE l.predicted_fraud AND e.ground_truth_is_fraud) AS tp,
+                        count(*) FILTER (WHERE l.predicted_fraud AND NOT e.ground_truth_is_fraud) AS fp,
+                        count(*) FILTER (WHERE NOT l.predicted_fraud AND NOT e.ground_truth_is_fraud) AS tn,
+                        count(*) FILTER (WHERE NOT l.predicted_fraud AND e.ground_truth_is_fraud) AS fn
+                    FROM benchmark_events e
+                    LEFT JOIN latest l ON l.event_id = e.event_id
+                    WHERE e.dataset_id = %s
+                ), alert_metrics AS (
+                    SELECT count(*) AS alert_count,
+                           count(*) FILTER (WHERE status IN ('PENDING', 'INVESTIGATING')) AS open_alerts
+                    FROM alerts WHERE dataset_id = %s
+                )
+                SELECT event_metrics.*, alert_metrics.alert_count, alert_metrics.open_alerts
+                FROM event_metrics CROSS JOIN alert_metrics
+                """,
+                (dataset_id, dataset_id, dataset_id),
+            )
+            row = cursor.fetchone()
+        total, fraud = row[0], row[1]
+        tp, fp, tn, fn = row[11], row[12], row[13], row[14]
+        precision = tp / (tp + fp) if tp + fp else None
+        recall = tp / (tp + fn) if tp + fn else None
+        false_positive_rate = fp / (fp + tn) if fp + tn else None
+        return {
+            "dataset_id": dataset_id,
+            "event_count": total,
+            "fraud_count": fraud,
+            "fraud_rate": fraud / total if total else 0,
+            "total_amount": float(row[2] or 0),
+            "average_amount": float(row[3]) if row[3] is not None else None,
+            "minimum_time": row[4],
+            "maximum_time": row[5],
+            "time_unit": row[6],
+            "first_ingested_at": row[7].isoformat() if row[7] else None,
+            "last_ingested_at": row[8].isoformat() if row[8] else None,
+            "evaluated_count": row[9],
+            "predicted_fraud": row[10],
+            "confusion_matrix": {"tp": tp, "fp": fp, "tn": tn, "fn": fn},
+            "precision": precision,
+            "recall": recall,
+            "false_positive_rate": false_positive_rate,
+            "alert_count": row[15],
+            "open_alerts": row[16],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Dataset overview unavailable") from exc
+
+
+@router.get("/{dataset_id}/timeseries")
+def get_dataset_timeseries(dataset_id: str, current_user: dict = Depends(get_current_user)):
+    """Aggregate event/fraud volume using the source's relative time semantics."""
+    _database_required()
+    dataset_id = _validate_dataset_id(dataset_id)
+    bucket_expression = (
+        "floor(relative_time_value / 60) * 60"
+        if dataset_id == "ds1_creditcard"
+        else "relative_time_value"
+    )
+    try:
+        with pg_conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT {bucket_expression} AS bucket,
+                       min(relative_time_unit) AS unit,
+                       count(*) AS event_count,
+                       count(*) FILTER (WHERE ground_truth_is_fraud) AS fraud_count,
+                       COALESCE(sum((payload->>'amount')::double precision), 0) AS total_amount
+                FROM benchmark_events
+                WHERE dataset_id = %s
+                GROUP BY bucket
+                ORDER BY bucket
+                """,
+                (dataset_id,),
+            )
+            rows = cursor.fetchall()
+        return [
+            {"bucket": row[0], "time_unit": row[1], "event_count": row[2],
+             "fraud_count": row[3], "total_amount": float(row[4] or 0)}
+            for row in rows
+        ]
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Dataset time series unavailable") from exc
+
+
+@router.get("/{dataset_id}/segments")
+def get_dataset_segments(dataset_id: str, current_user: dict = Depends(get_current_user)):
+    """Return dataset-native categorical distributions without inventing common entities."""
+    _database_required()
+    dataset_id = _validate_dataset_id(dataset_id)
+    if dataset_id == "ds1_creditcard":
+        segment_queries = {
+            "amount_band": """
+                CASE WHEN (payload->>'amount')::double precision < 10 THEN '< 10'
+                     WHEN (payload->>'amount')::double precision < 50 THEN '10–49'
+                     WHEN (payload->>'amount')::double precision < 100 THEN '50–99'
+                     WHEN (payload->>'amount')::double precision < 500 THEN '100–499'
+                     ELSE '500+' END
+            """,
+        }
+    elif dataset_id == "ds3_paysim":
+        segment_queries = {"transaction_type": "payload->>'transaction_type'"}
+    else:
+        segment_queries = {
+            "source": "payload #>> '{features,source}'",
+            "device_os": "payload #>> '{features,device_os}'",
+            "payment_type": "payload #>> '{features,payment_type}'",
+            "age_band": """
+                CASE WHEN (payload #>> '{features,customer_age}')::integer < 30 THEN '< 30'
+                     WHEN (payload #>> '{features,customer_age}')::integer < 50 THEN '30–49'
+                     WHEN (payload #>> '{features,customer_age}')::integer < 70 THEN '50–69'
+                     ELSE '70+' END
+            """,
+        }
+    try:
+        response = {}
+        with pg_conn.cursor() as cursor:
+            for segment, expression in segment_queries.items():
+                cursor.execute(
+                    f"""
+                    SELECT {expression} AS label, count(*) AS event_count,
+                           count(*) FILTER (WHERE ground_truth_is_fraud) AS fraud_count
+                    FROM benchmark_events
+                    WHERE dataset_id = %s
+                    GROUP BY label
+                    ORDER BY event_count DESC, label
+                    """,
+                    (dataset_id,),
+                )
+                response[segment] = [
+                    {"label": row[0] or "unknown", "event_count": row[1],
+                     "fraud_count": row[2], "fraud_rate": row[2] / row[1] if row[1] else 0}
+                    for row in cursor.fetchall()
+                ]
+        return {"dataset_id": dataset_id, "segments": response}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Dataset segments unavailable") from exc
