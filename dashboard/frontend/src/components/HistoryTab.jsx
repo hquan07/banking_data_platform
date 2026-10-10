@@ -1,93 +1,50 @@
-import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Activity, Banknote, CalendarDays, ShieldAlert } from 'lucide-react';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useDatasetContext } from './DatasetContext';
+import { formatNumber, MetricCard, PageHeader, Panel, StateMessage } from './ui';
+import { useDatasetAnalytics } from './useDatasetAnalytics';
 
 export default function HistoryTab() {
   const { datasetId, dataset } = useDatasetContext();
-  const [historyData, setHistoryData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const benchmark = useDatasetAnalytics();
+  const [live, setLive] = useState({ data: [], loading: datasetId === 'live', error: '' });
 
   useEffect(() => {
-    if (datasetId !== 'live') {
-      setHistoryData([]);
-      setLoading(false);
-      setError('');
-      return undefined;
-    }
-    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/analytics/history')
-      .then(async res => { if (!res.ok) throw new Error('Không tải được dữ liệu lịch sử'); return res.json(); })
-      .then(data => {
-        if (!Array.isArray(data)) throw new Error('Định dạng dữ liệu lịch sử không hợp lệ');
-        // Map date to string if needed, format the data
-        const formattedData = data.map(item => ({
-          ...item,
-          total_tx: Number(item.total_tx),
-          total_alerts: Number(item.total_alerts),
-          total_amount: Number(item.total_amount)
-        }));
-        setHistoryData(formattedData);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
+    if (datasetId !== 'live') { setLive({ data: [], loading: false, error: '' }); return undefined; }
+    const controller = new AbortController(); setLive(previous => ({ ...previous, loading: true, error: '' }));
+    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/analytics/history', { signal: controller.signal })
+      .then(async response => { if (!response.ok) throw new Error((await response.json()).detail || 'Không tải được ClickHouse history'); return response.json(); })
+      .then(data => { if (!Array.isArray(data)) throw new Error('History response không hợp lệ'); setLive({ data: data.map(item => ({ ...item, total_tx:Number(item.total_tx), total_alerts:Number(item.total_alerts), total_amount:Number(item.total_amount) })), loading:false, error:'' }); })
+      .catch(error => { if (error.name !== 'AbortError') setLive({ data:[], loading:false, error:error.message }); });
+    return () => controller.abort();
   }, [datasetId]);
 
-  if (datasetId !== 'live') {
-    return (
-      <div className="panel dataset-not-applicable" role="status">
-        <h2 className="panel-title">Lịch sử ClickHouse không áp dụng cho {dataset.label}</h2>
-        <p>Trang này dành cho payment events của nguồn Live và dùng event timestamp theo ngày.</p>
-        <p>Dataset benchmark cần trang historical analytics riêng theo {dataset.timeSemantics}.</p>
-      </div>
-    );
-  }
+  const rows = datasetId === 'live' ? live.data : benchmark.timeseries.map(item => ({ ...item, label: `${item.bucket} ${item.time_unit}` }));
+  const loading = datasetId === 'live' ? live.loading : benchmark.loading;
+  const error = datasetId === 'live' ? live.error : benchmark.error;
+  const metrics = useMemo(() => rows.reduce((acc, row) => ({
+    events: acc.events + Number(row.total_tx ?? row.event_count ?? 0),
+    alerts: acc.alerts + Number(row.total_alerts ?? row.fraud_count ?? 0),
+    amount: acc.amount + Number(row.total_amount ?? 0),
+  }), { events:0, alerts:0, amount:0 }), [rows]);
+  const xKey = datasetId === 'live' ? 'date' : 'label';
+  const eventKey = datasetId === 'live' ? 'total_tx' : 'event_count';
+  const alertKey = datasetId === 'live' ? 'total_alerts' : 'fraud_count';
 
-  if (loading) {
-    return <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px', color: '#94a3b8'}}>Loading ClickHouse Historical Data...</div>;
-  }
-  if (error) return <div role="alert" style={{color: '#ef4444'}}>{error}</div>;
-  if (historyData.length === 0) return <div role="status" style={{color: '#94a3b8'}}>Chưa có giao dịch lịch sử.</div>;
-
-  return (
-    <div className="grid">
-      <div className="panel col-span-12" style={{height: '400px'}}>
-        <h2 className="panel-title">Transaction Volume (30 Days) - ClickHouse</h2>
-        <ResponsiveContainer width="100%" height={320}>
-          <BarChart data={historyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis dataKey="date" stroke="#94a3b8" />
-            <YAxis yAxisId="left" orientation="left" stroke="#94a3b8" />
-            <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" />
-            <Tooltip 
-              contentStyle={{backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px'}} 
-              itemStyle={{color: '#f8fafc'}}
-            />
-            <Legend />
-            <Bar yAxisId="left" dataKey="total_tx" name="Total Transactions" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-            <Bar yAxisId="right" dataKey="total_alerts" name="Alerts created (all statuses)" fill="#ef4444" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="panel col-span-12" style={{height: '400px'}}>
-        <h2 className="panel-title">Total Transaction Value - ClickHouse</h2>
-        <ResponsiveContainer width="100%" height={320}>
-          <LineChart data={historyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis dataKey="date" stroke="#94a3b8" />
-            <YAxis stroke="#94a3b8" />
-            <Tooltip 
-              contentStyle={{backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px'}} 
-              itemStyle={{color: '#f8fafc'}}
-            />
-            <Legend />
-            <Line type="monotone" dataKey="total_amount" name="Total Amount ($)" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
+  return <div className="page-stack">
+    <PageHeader eyebrow="Temporal analysis" title="Historical Analytics" description={`${dataset.label} · ${datasetId === 'live' ? 'Lịch sử theo ngày từ ClickHouse.' : `Timeline theo ${dataset.timeSemantics}; fraud là ground truth.`}`} />
+    <MetricCard icon={<CalendarDays size={17} />} label="Time buckets" value={formatNumber(rows.length)} detail={dataset.timeSemantics} tone="blue" />
+    <MetricCard icon={<Activity size={17} />} label={datasetId === 'live' ? 'Transactions' : 'Records'} value={formatNumber(metrics.events)} detail="Trong các bucket hiện có" tone="cyan" />
+    <MetricCard icon={<ShieldAlert size={17} />} label={datasetId === 'live' ? 'Alerts created' : 'Ground-truth fraud'} value={formatNumber(metrics.alerts)} detail={datasetId === 'live' ? 'Mọi status' : 'Không phải model prediction'} tone="red" />
+    <MetricCard icon={<Banknote size={17} />} label="Total amount" value={formatNumber(metrics.amount, 2)} detail="Đơn vị theo source dataset" tone="green" />
+    {loading ? <Panel className="col-span-12"><StateMessage type="loading">Đang tải historical analytics…</StateMessage></Panel> : error ? <Panel className="col-span-12"><StateMessage type="error">{error}</StateMessage></Panel> : rows.length === 0 ? <Panel className="col-span-12"><StateMessage>Chưa có dữ liệu lịch sử cho nguồn này.</StateMessage></Panel> : <>
+      <Panel className="col-span-12" title="Volume and risk signal" subtitle={datasetId === 'live' ? 'Transaction volume và alert creation theo ngày' : 'Record volume và ground-truth fraud theo relative-time bucket'}>
+        <ResponsiveContainer width="100%" height={330}><BarChart data={rows}><CartesianGrid stroke="#20314b" vertical={false} /><XAxis dataKey={xKey} stroke="#70839e" fontSize={9} /><YAxis yAxisId="volume" stroke="#70839e" fontSize={9} /><YAxis yAxisId="risk" orientation="right" stroke="#fb7185" fontSize={9} /><Tooltip contentStyle={{ background:'#0d1829', border:'1px solid #263750', fontSize:10 }} /><Legend /><Bar yAxisId="volume" dataKey={eventKey} name={datasetId === 'live' ? 'Transactions' : 'Records'} fill="#4f8cff" radius={[4,4,0,0]} /><Bar yAxisId="risk" dataKey={alertKey} name={datasetId === 'live' ? 'Alerts' : 'Ground-truth fraud'} fill="#fb7185" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>
+      </Panel>
+      <Panel className="col-span-12" title="Amount over time" subtitle="Tổng amount trong từng time bucket; không quy đổi tiền tệ giữa nguồn">
+        <ResponsiveContainer width="100%" height={300}><AreaChart data={rows}><defs><linearGradient id="historyAmount" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#35d399" stopOpacity={.35}/><stop offset="95%" stopColor="#35d399" stopOpacity={0}/></linearGradient></defs><CartesianGrid stroke="#20314b" vertical={false} /><XAxis dataKey={xKey} stroke="#70839e" fontSize={9} /><YAxis stroke="#70839e" fontSize={9} /><Tooltip contentStyle={{ background:'#0d1829', border:'1px solid #263750', fontSize:10 }} /><Area type="monotone" dataKey="total_amount" name="Total amount" stroke="#35d399" fill="url(#historyAmount)" strokeWidth={2}/></AreaChart></ResponsiveContainer>
+      </Panel>
+    </>}
+  </div>;
 }
