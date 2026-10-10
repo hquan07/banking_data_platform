@@ -28,8 +28,8 @@ is not yet a production-readiness claim.
 1. Complete and commit one workstream before starting the next.
 2. Every runtime dependency must have a real health signal and an alert.
 3. Benchmark, replay and live data must remain explicitly source-scoped.
-4. No release is promoted unless unit, data-quality, integration and browser
-   gates all pass from a clean checkout.
+4. Every workstream must pass its documented local unit, data-quality,
+   integration and browser acceptance checks from a clean checkout.
 5. Stateful upgrades require a tested backup and rollback path.
 
 ## Phase 0 — Stabilization and reproducibility
@@ -45,19 +45,6 @@ Target: 2–3 working days.
 
 Exit criteria: a clean branch reproduces the current dashboard and all tests
 pass without relying on uncommitted files.
-
-### P2-002: Make CI a blocking acceptance gate
-
-- Upgrade GitHub Actions to maintained major versions.
-- Replace `npm install` with `npm ci`.
-- Run Python unit tests, data-quality tests, frontend lint/unit/build and
-  `docker compose config --quiet` on every pull request.
-- Add a Compose-backed job for the 11 live integration tests and Playwright.
-- Make critical/high dependency findings blocking, with an explicit and
-  reviewed exception file instead of `exit-code: 0`.
-- Upload Playwright traces, pytest reports and container logs on failure.
-
-Exit criteria: merge is blocked unless every acceptance gate passes.
 
 ### P2-003: Complete runtime observability
 
@@ -90,7 +77,7 @@ Target: 1–2 weeks after Phase 0.
 
 - Add machine-readable schemas for payment, transfer, fraud, AML and benchmark
   events.
-- Enforce backward-compatible changes in CI.
+- Add a local compatibility checker and contract regression tests.
 - Quarantine incompatible messages with reason, source and trace ID.
 
 ### P2-102: Reconciliation and freshness controls
@@ -154,8 +141,8 @@ Target: 1–2 weeks, in parallel with an infrastructure owner.
 - Introduce TLS at ingress and encrypted service connections where supported.
 - Use separate least-privilege identities for API, processors, migrations,
   monitoring and backup jobs.
-- Pin CI actions and container images by digest; generate SBOMs and verify
-  signatures before promotion.
+- Pin container images by digest; generate SBOMs and verify signatures before
+  promotion.
 - Add rate limits, audit-log retention, session revocation and security-event
   alerts.
 - Perform a threat review covering ingestion authentication, replay controls,
@@ -195,10 +182,12 @@ evidence, governance approval and a tested rollback.
 ## Recommended execution order
 
 1. P2-001 clean branch and acceptance baseline.
-2. P2-002 blocking CI.
-3. P2-003 observability and P2-004 soak/fault testing.
-4. P2-101 through P2-104 data reliability and recovery.
-5. P2-201 through P2-203 dashboard/operator improvements.
-6. Phase 3 security hardening.
-7. Phase 4 ML enablement only after its data prerequisites are approved.
+2. P2-003 observability and P2-004 soak/fault testing.
+3. P2-101 through P2-104 data reliability and recovery.
+4. P2-201 through P2-203 dashboard/operator improvements.
+5. Phase 3 security hardening.
+6. Phase 4 ML enablement only after its data prerequisites are approved.
 
+CI/CD is intentionally outside this roadmap's current execution scope. The
+detailed implementation sequence and local acceptance gates are defined in
+`docs/p2-implementation-plan.md`.
