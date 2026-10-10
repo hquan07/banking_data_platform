@@ -32,16 +32,22 @@ export default function DatasetsTab() {
       ...(datasetId === 'ds4_baf' ? { account: '/api/datasets/account-risk', behavior: '/api/datasets/behavior-distributions' } : {}),
     };
     setLoading(true); setWarnings([]);
-    Promise.allSettled(Object.entries(paths).map(async ([key, path]) => {
-      const response = await fetch(base + path, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
-      if (!response.ok) throw new Error(`${key}: HTTP ${response.status}`);
-      return [key, await response.json()];
-    })).then(results => {
-      if (controller.signal.aborted) return;
+    const load = async () => {
       const next = { ...EMPTY }; const failed = [];
-      results.forEach(result => { if (result.status === 'fulfilled') next[result.value[0]] = result.value[1]; else failed.push(result.reason.message); });
+      for (const [key, path] of Object.entries(paths)) {
+        try {
+          const response = await fetch(base + path, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
+          if (!response.ok) throw new Error(`${key}: HTTP ${response.status}`);
+          next[key] = await response.json();
+        } catch (fetchError) {
+          if (controller.signal.aborted) return;
+          failed.push(fetchError.message);
+        }
+      }
+      if (controller.signal.aborted) return;
       setData(next); setWarnings(failed);
-    }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    };
+    load().finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [datasetId, token]);
 
