@@ -97,6 +97,7 @@ services:
       - APP_MODE=${APP_MODE:-integration}
       - LIVE_INGESTION_API_KEY=${LIVE_INGESTION_API_KEY:-integration-live-key-change-me}
       - KAFKA_BOOTSTRAP_SERVERS=banking_kafka:9092
+      - LIVE_SOURCE_ACTIVE_WINDOW_SECONDS=${LIVE_SOURCE_ACTIVE_WINDOW_SECONDS:-60}
     depends_on:
       kafka_topics_init:
         condition: service_completed_successfully
@@ -286,6 +287,9 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus:/etc/prometheus
+    depends_on:
+      live_ingestion:
+        condition: service_healthy
     networks:
       - backend_network
       - data_network
@@ -481,6 +485,7 @@ services:
       - DASHBOARD_ADMIN_PASSWORD=${DASHBOARD_ADMIN_PASSWORD}
       - DASHBOARD_ANALYST_PASSWORD=${DASHBOARD_ANALYST_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVER=banking_kafka:9092
+      - LIVE_INGESTION_URL=http://live_ingestion:8085
       - REDIS_HOST=banking_redis
       - REDIS_PORT=6379
       - SPARK_CHECKPOINT_DIR=/checkpoints/fraud-engine
@@ -498,6 +503,8 @@ services:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     depends_on:
       postgres:
+        condition: service_healthy
+      live_ingestion:
         condition: service_healthy
     networks:
       - backend_network

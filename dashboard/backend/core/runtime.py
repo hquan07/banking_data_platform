@@ -18,6 +18,7 @@ def validate_runtime_config() -> None:
         "NEO4J_USER", "NEO4J_PASSWORD", "CLICKHOUSE_HOST",
         "CLICKHOUSE_DB", "CLICKHOUSE_USER", "CLICKHOUSE_PASSWORD",
         "MINIO_ENDPOINT", "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD",
+        "LIVE_INGESTION_URL",
     )
     missing = [name for name in required if not os.environ.get(name) or os.environ[name].startswith("replace-with-")]
     if missing:

@@ -50,7 +50,7 @@ class KafkaEventPublisher:
     def ready(self) -> bool:
         try:
             self.start()
-            return bool(self._producer and self._producer.bootstrap_connected())
+            return bool(self._producer and self._producer.partitions_for("payment-events"))
         except PublishUnavailable:
             return False
 

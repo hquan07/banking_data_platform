@@ -3,8 +3,10 @@ Banking Command Center API — Entry Point.
 This file only initializes the FastAPI app, registers routers, and starts background tasks.
 """
 import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
+from urllib.request import urlopen
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi import Request
@@ -271,6 +273,14 @@ def readiness_check():
         "clickhouse": check(ch_client, lambda: ch_client.execute("EXISTS TABLE payment_events") == [(1,)]),
         "minio": check(s3_client, lambda: s3_client.head_bucket(Bucket="evidence")),
     })
+    live_source = {"status": "unavailable", "configured": True, "kafka": False, "last_event_at": None}
+    try:
+        source_url = os.environ["LIVE_INGESTION_URL"].rstrip("/")
+        with urlopen(f"{source_url}/health/source", timeout=3) as response:
+            live_source = json.loads(response.read())
+        dependencies["live_ingestion"] = live_source.get("kafka") is True
+    except Exception:
+        dependencies["live_ingestion"] = False
     if not all(dependencies.values()):
-        raise HTTPException(status_code=503, detail={"status": "not_ready", **dependencies})
-    return {"status": "ready", "mode": APP_MODE, **dependencies}
+        raise HTTPException(status_code=503, detail={"status": "not_ready", **dependencies, "live_source": live_source})
+    return {"status": "ready", "mode": APP_MODE, **dependencies, "live_source": live_source}

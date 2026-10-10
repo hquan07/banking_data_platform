@@ -50,6 +50,9 @@ def test_gateway_normalizes_and_routes_canonical_events(monkeypatch):
     assert publisher.events[1][2]["source_system"] == "unit-source"
     normalize_payment_event(publisher.events[0][2])
     normalize_transfer_event(publisher.events[1][2])
+    source_health = route_endpoint(app, "/health/source")()
+    assert source_health["status"] == "streaming"
+    assert source_health["event_types_seen"] == ["payment", "transfer"]
 
 
 def test_gateway_rejects_invalid_contract_before_publish(monkeypatch):

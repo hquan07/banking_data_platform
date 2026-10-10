@@ -11,6 +11,16 @@ groups:
         for: 1m
         labels: {severity: critical}
         annotations: {summary: "Kafka exporter unavailable"}
+      - alert: LiveIngestionDown
+        expr: up{job="live_ingestion"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "Live ingestion gateway metrics unavailable"}
+      - alert: LiveIngestionKafkaFailures
+        expr: increase(live_ingest_kafka_publish_failures_total[5m]) > 0
+        for: 1m
+        labels: {severity: warning}
+        annotations: {summary: "Live ingestion failed to publish events to Kafka"}
       - alert: KafkaConsumerLagHigh
         expr: max by (consumergroup) (kafka_consumergroup_lag) > 1000
         for: 5m
