@@ -4,6 +4,7 @@ import Login from './components/Login';
 import { AuthContext, AuthProvider } from './components/AuthContext';
 import DatasetContextBar from './components/DatasetContextBar';
 import { DatasetProvider, useDatasetContext } from './components/DatasetContext';
+import { fixedDatasetForTab } from './datasetContextContract';
 import { describeStreamStatus, parseStreamMessage } from './streamContract';
 import './index.css';
 
@@ -43,12 +44,22 @@ function MainApp() {
   const [isConnected, setIsConnected] = useState(false);
   const [chartData, setChartData] = useState([]);
   const { token, user, logout } = React.useContext(AuthContext);
-  const { datasetId } = useDatasetContext();
-  const selectTab = tab => { setActiveTab(tab); sessionStorage.setItem('sentinel-active-tab', tab); };
+  const { datasetId, setDatasetId } = useDatasetContext();
+  const fixedDatasetId = fixedDatasetForTab(activeTab);
+  const selectTab = tab => {
+    const tabDatasetId = fixedDatasetForTab(tab);
+    if (tabDatasetId && tabDatasetId !== datasetId) setDatasetId(tabDatasetId);
+    setActiveTab(tab);
+    sessionStorage.setItem('sentinel-active-tab', tab);
+  };
 
   useEffect(() => {
     if (user?.role !== 'ADMIN' && ADMIN_TABS.includes(activeTab)) selectTab('overview');
   }, [activeTab, user?.role]);
+
+  useEffect(() => {
+    if (fixedDatasetId && fixedDatasetId !== datasetId) setDatasetId(fixedDatasetId);
+  }, [activeTab, datasetId, fixedDatasetId]);
 
   useEffect(() => {
     let mounted = true;
@@ -118,17 +129,19 @@ function MainApp() {
         <div className="status-indicators" aria-live="polite"><span className={`status-dot ${streamStatus.state === 'offline' ? 'disconnected' : streamStatus.state === 'idle' ? 'idle' : ''}`} /><span>{streamStatus.connection}</span><span className="header-divider" /><Radio size={15} /><span className={streamStatus.state === 'idle' ? 'stream-rate-idle' : ''}>{streamStatus.activity}</span></div>
         <div className="user-profile"><span className="user-avatar">{user?.username?.slice(0, 2).toUpperCase()}</span><div><strong>{user?.username}</strong><small>{user?.role}</small></div><button className="icon-button" onClick={logout} aria-label="Đăng xuất"><LogOut size={17} /></button></div>
       </header>
-      <DatasetContextBar />
+      {!fixedDatasetId && <DatasetContextBar />}
       <main className="dashboard-container"><Suspense fallback={<div className="state-message">Đang tải nội dung…</div>}>
-        {activeTab === 'overview' && <CommandCenterTab data={chartData} tps={liveTps} totalValue={totalValue} sessionEvents={sessionEvents} isConnected={isConnected} />}
-        {activeTab === 'fraud' && <FraudMonitoringTab />}
-        {activeTab === 'security' && <SecurityTab />}
-        {activeTab === 'analytics' && <AnalyticsTab />}
-        {activeTab === 'datasets' && <DatasetsTab />}
-        {activeTab === 'history' && <HistoryTab />}
-        {activeTab === 'users' && <UserManagementTab />}
-        {activeTab === 'rules' && <RulesManagementTab />}
-        {activeTab === 'architecture' && <ArchitectureTab />}
+        {fixedDatasetId && fixedDatasetId !== datasetId ? <div className="state-message">Đang áp dụng phạm vi DS3…</div> : <>
+          {activeTab === 'overview' && <CommandCenterTab data={chartData} tps={liveTps} totalValue={totalValue} sessionEvents={sessionEvents} isConnected={isConnected} />}
+          {activeTab === 'fraud' && <FraudMonitoringTab />}
+          {activeTab === 'security' && <SecurityTab />}
+          {activeTab === 'analytics' && <AnalyticsTab />}
+          {activeTab === 'datasets' && <DatasetsTab />}
+          {activeTab === 'history' && <HistoryTab />}
+          {activeTab === 'users' && <UserManagementTab />}
+          {activeTab === 'rules' && <RulesManagementTab />}
+          {activeTab === 'architecture' && <ArchitectureTab />}
+        </>}
       </Suspense></main>
     </div>
   </div>;

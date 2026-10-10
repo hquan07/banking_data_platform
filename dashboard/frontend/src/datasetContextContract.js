@@ -39,6 +39,15 @@ export const DATASET_MODE_MATRIX = {
 
 export const DEFAULT_DASHBOARD_CONTEXT = Object.freeze({ datasetId: 'live', mode: 'operational' });
 
+export const FIXED_TAB_DATASETS = Object.freeze({
+  security: 'ds3_paysim',
+  analytics: 'ds3_paysim',
+});
+
+export function fixedDatasetForTab(tabId) {
+  return FIXED_TAB_DATASETS[tabId] || null;
+}
+
 export function allowedModesForDataset(datasetId) {
   return DATASET_MODE_MATRIX[datasetId] || DATASET_MODE_MATRIX.live;
 }

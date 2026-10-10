@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  allowedModesForDataset, canShowGroundTruth, normalizeDashboardContext,
+  allowedModesForDataset, canShowGroundTruth, fixedDatasetForTab, normalizeDashboardContext,
 } from './datasetContextContract.js';
 
 test('normalizes live sources to operational mode', () => {
@@ -28,4 +28,10 @@ test('rejects unknown persisted context values', () => {
   assert.deepEqual(normalizeDashboardContext(null), {
     datasetId: 'live', mode: 'operational',
   });
+});
+
+test('locks investigations and AML Network to DS3 PaySim', () => {
+  assert.equal(fixedDatasetForTab('security'), 'ds3_paysim');
+  assert.equal(fixedDatasetForTab('analytics'), 'ds3_paysim');
+  assert.equal(fixedDatasetForTab('overview'), null);
 });
