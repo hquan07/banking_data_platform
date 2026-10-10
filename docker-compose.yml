@@ -109,6 +109,25 @@ services:
       - data_network
       - backend_network
 
+  live_event_simulator:
+    profiles: ["live-demo"]
+    build:
+      context: .
+      dockerfile: docker/live-ingestion/Dockerfile
+    command: ["python", "-m", "ingestion.live_simulator"]
+    environment:
+      - LIVE_GATEWAY_URL=http://live_ingestion:8085
+      - LIVE_INGESTION_API_KEY=${LIVE_INGESTION_API_KEY:-integration-live-key-change-me}
+      - LIVE_SIMULATOR_RATE=${LIVE_SIMULATOR_RATE:-2}
+      - LIVE_SIMULATOR_MAX_EVENTS=${LIVE_SIMULATOR_MAX_EVENTS:-0}
+      - LIVE_SIMULATOR_PAYMENT_RATIO=${LIVE_SIMULATOR_PAYMENT_RATIO:-0.8}
+      - LIVE_SIMULATOR_SEED=${LIVE_SIMULATOR_SEED:-20261010}
+    depends_on:
+      live_ingestion:
+        condition: service_healthy
+    networks:
+      - data_network
+
   debezium:
     image: quay.io/debezium/connect:2.4
     container_name: banking_debezium
