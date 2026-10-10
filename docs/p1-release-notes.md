@@ -22,6 +22,9 @@
   are pinned. Stateful Compose services use pinned image versions.
 - The Architecture Map retains the Banking Data Platform diagram and shows the
   opt-in benchmark replay separately from unconfigured live sources.
+- The bounded PaySim benchmark sustained 50 events/second for five minutes.
+  Kafka processor/graph peak lag remained at 53/6, both groups drained to zero,
+  the DLQ did not grow, and all measured API responses stayed below two seconds.
 
 See `docs/p1-demo-acceptance.md` for the current data-source status and the
 database-volume cleanup boundary.
@@ -49,5 +52,6 @@ removing mock-data generation because their provenance may be mixed.
   are required before approving or deploying an ML model.
 - Connect authorized live payment/transfer sources before interpreting the
   platform as a live banking system. Benchmark results remain source-scoped.
-- Load testing, backup/restore rehearsal and a security review are still needed
-  before claiming production readiness. CI/CD remains out of scope.
+- The scoped local benchmark is complete. Longer soak testing, backup/restore
+  rehearsal and a security review are still needed before claiming production
+  readiness. CI/CD remains out of scope.

@@ -7,9 +7,10 @@ required datastore is unavailable instead of substituting sample values.
 
 The public benchmark adapter is available as an explicit, source-scoped replay
 workflow. DS1, DS3 and DS4 have validated local profiles; DS1 and DS4 have
-reconciled 1,000-row canaries, while DS3 has a reconciled 1,000-row canary plus
-a controlled 10,000-row increment. Benchmark replay is opt-in and is not
-presented as a live banking feed.
+reconciled 1,000-row canaries, while DS3 has 91,501 reconciled rows. Its final
+15,000-row acceptance run sustained 50 events/second for five minutes with
+peak consumer lag below 100, final lag zero and no DLQ growth. Benchmark replay
+is opt-in and is not presented as a live banking feed.
 
 DS1 and DS4 model artifacts are audited offline candidates only. DS4 uses all
 30 source features with months 0–5 for training, month 6 for threshold
@@ -29,4 +30,4 @@ rule evaluation input.
 
 The original mock-data cleanup was followed by an explicit purge of this
 project's Kafka and datastore volumes. The current persisted benchmark records
-come only from the documented DS3 and DS4 runs.
+come only from the documented DS1, DS3 and DS4 runs.

@@ -49,5 +49,6 @@ latency were not captured by an instrumented harness.
 
 A full 6.36-million-row replay remains an explicit operator decision because
 it materially increases Kafka retention, database volume and dashboard query
-cost. The current 11,000-event DS3 corpus is sufficient for the demo analytics,
-rule evaluation and graph views.
+cost. At this checkpoint, the 11,000-event DS3 corpus was sufficient for the
+demo analytics, rule evaluation and graph views; later performance runs are
+recorded separately.
