@@ -1,24 +1,26 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { Activity, Banknote, CalendarDays, ShieldAlert } from 'lucide-react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { AuthContext } from './AuthContext';
 import { useDatasetContext } from './DatasetContext';
 import { formatNumber, MetricCard, PageHeader, Panel, StateMessage } from './ui';
 import { useDatasetAnalytics } from './useDatasetAnalytics';
 
 export default function HistoryTab() {
+  const { token } = useContext(AuthContext);
   const { datasetId, dataset, groundTruthVisible } = useDatasetContext();
   const benchmark = useDatasetAnalytics();
   const [live, setLive] = useState({ data: [], loading: datasetId === 'live', error: '' });
 
   useEffect(() => {
-    if (datasetId !== 'live') { setLive({ data: [], loading: false, error: '' }); return undefined; }
+    if (datasetId !== 'live' || !token) { setLive({ data: [], loading: false, error: '' }); return undefined; }
     const controller = new AbortController(); setLive(previous => ({ ...previous, loading: true, error: '' }));
-    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/analytics/history', { signal: controller.signal })
+    fetch((window._env_?.API_URL || 'http://localhost:8000') + '/api/analytics/history', { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
       .then(async response => { if (!response.ok) throw new Error((await response.json()).detail || 'Không tải được ClickHouse history'); return response.json(); })
       .then(data => { if (!Array.isArray(data)) throw new Error('History response không hợp lệ'); setLive({ data: data.map(item => ({ ...item, total_tx:Number(item.total_tx), total_alerts:Number(item.total_alerts), total_amount:Number(item.total_amount) })), loading:false, error:'' }); })
       .catch(error => { if (error.name !== 'AbortError') setLive({ data:[], loading:false, error:error.message }); });
     return () => controller.abort();
-  }, [datasetId]);
+  }, [datasetId, token]);
 
   const rows = datasetId === 'live' ? live.data : benchmark.timeseries.map(item => ({ ...item, label: `${item.bucket} ${item.time_unit}` }));
   const loading = datasetId === 'live' ? live.loading : benchmark.loading;

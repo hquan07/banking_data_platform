@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api", tags=["Analytics"])
 
 
 @router.get("/analytics/history")
-def get_history_analytics():
+def get_history_analytics(current_user: dict = Depends(get_current_user)):
     if ch_client:
         try:
             query = """

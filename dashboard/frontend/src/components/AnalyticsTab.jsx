@@ -1,10 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { AuthContext } from './AuthContext';
 import { useDatasetContext } from './DatasetContext';
 import { formatNumber, PageHeader, Panel, StateMessage } from './ui';
 
 export default function AnalyticsTab() {
+  const { token } = useContext(AuthContext);
   const { datasetId, dataset } = useDatasetContext();
   const [graph, setGraph] = useState({ nodes: [], links: [] });
   const [flow, setFlow] = useState([]);
@@ -16,17 +18,18 @@ export default function AnalyticsTab() {
   const applicable = datasetId === 'live' || datasetId === 'ds3_paysim';
 
   useEffect(() => {
-    if (!applicable) { setGraph({ nodes: [], links: [] }); setFlow([]); setSequences([]); setLoading(false); setError(''); return undefined; }
+    if (!applicable || !token) { setGraph({ nodes: [], links: [] }); setFlow([]); setSequences([]); setLoading(false); setError(''); return undefined; }
     const controller = new AbortController(); const base = window._env_?.API_URL || 'http://localhost:8000'; setLoading(true); setError('');
+    const requestOptions = { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal };
     const graphEndpoint = datasetId === 'ds3_paysim' ? '/api/graph/benchmark' : '/api/graph/circular';
-    const requests = [fetch(base + graphEndpoint, { signal: controller.signal }).then(response => { if (!response.ok) throw new Error('Graph database unavailable'); return response.json(); })];
+    const requests = [fetch(base + graphEndpoint, requestOptions).then(response => { if (!response.ok) throw new Error('Graph database unavailable'); return response.json(); })];
     if (datasetId === 'ds3_paysim') requests.push(
-      fetch(base + '/api/graph/money-flow', { signal: controller.signal }).then(response => { if (!response.ok) throw new Error('Money-flow analytics unavailable'); return response.json(); }),
-      fetch(base + '/api/graph/fraud-sequences', { signal: controller.signal }).then(response => { if (!response.ok) throw new Error('Fraud-sequence analytics unavailable'); return response.json(); }),
+      fetch(base + '/api/graph/money-flow', requestOptions).then(response => { if (!response.ok) throw new Error('Money-flow analytics unavailable'); return response.json(); }),
+      fetch(base + '/api/graph/fraud-sequences', requestOptions).then(response => { if (!response.ok) throw new Error('Fraud-sequence analytics unavailable'); return response.json(); }),
     );
     Promise.all(requests).then(([graphPayload, flowPayload = [], sequencePayload = { sequences: [] }]) => { setGraph(graphPayload); setFlow(flowPayload); setSequences(sequencePayload.sequences || []); }).catch(fetchError => { if (fetchError.name !== 'AbortError') setError(fetchError.message); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [applicable, datasetId]);
+  }, [applicable, datasetId, token]);
   useEffect(() => { const resize = () => setWidth(containerRef.current?.offsetWidth || 800); resize(); window.addEventListener('resize', resize); return () => window.removeEventListener('resize', resize); }, []);
 
   return <div className="page-stack">

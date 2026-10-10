@@ -1,11 +1,12 @@
 """
 Neo4j graph network router.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from core.db import graph_driver
+from core.deps import get_current_user
 from services.graph_analytics import fraud_sequence_payload
 
-router = APIRouter(prefix="/api/graph", tags=["Graph"])
+router = APIRouter(prefix="/api/graph", tags=["Graph"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/circular")

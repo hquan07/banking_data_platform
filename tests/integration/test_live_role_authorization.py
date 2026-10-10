@@ -54,6 +54,25 @@ def test_role_revocation_and_case_search():
     assert result["total"] == 0
     assert result["data"] == []
 
+    protected_analytics = [
+        "/api/graph/circular",
+        "/api/graph/benchmark",
+        "/api/graph/money-flow",
+        "/api/graph/fraud-sequences",
+        "/api/analytics/history",
+    ]
+    for path in protected_analytics:
+        with pytest.raises(HTTPError) as error:
+            urlopen(f"http://localhost:8000{path}", timeout=10)
+        assert error.value.code == 401
+
+        authorized_request = Request(
+            f"http://localhost:8000{path}",
+            headers={"Authorization": f"Bearer {token(admin_id, admin_name)}"},
+        )
+        with urlopen(authorized_request, timeout=10) as response:
+            assert response.status == 200
+
     import websocket
 
     with pytest.raises(websocket.WebSocketBadStatusException):
