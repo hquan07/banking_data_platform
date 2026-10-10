@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Database, Gauge, ShieldCheck } from 'lucid
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import { AuthContext } from './AuthContext';
+import { useDatasetContext } from './DatasetContext';
 
 
 const SOURCE_LABELS = {
@@ -34,6 +35,7 @@ function formatNumber(value, maximumFractionDigits = 0) {
 
 export default function DatasetsTab() {
   const { token } = useContext(AuthContext);
+  const { datasetId, dataset } = useDatasetContext();
   const [data, setData] = useState({
     status: [], performance: [], rules: [], types: [], balance: null, velocity: null,
     account: null, models: [], behavior: { velocity_heatmap: [], session_bins: [], session_missing_sentinel_count: 0 },
@@ -108,6 +110,11 @@ export default function DatasetsTab() {
         </div>
       </section>
 
+      <section className="panel col-span-12 dataset-context-note">
+        <h2 className="panel-title">Đang xem: {dataset.label}</h2>
+        <p>{dataset.description} Các biểu đồ chi tiết bên dưới chỉ hiện khi phù hợp với dataset này.</p>
+      </section>
+
       <section className="panel col-span-12">
         <h2 className="panel-title">Offline model candidates</h2>
         {data.models.length ? data.models.map(candidate => (
@@ -173,7 +180,7 @@ export default function DatasetsTab() {
         ) : <Empty>Chưa có rule hit từ dataset.</Empty>}
       </section>
 
-      <section className="panel col-span-8 dataset-chart-panel">
+      {datasetId === 'ds3_paysim' && <section className="panel col-span-8 dataset-chart-panel">
         <h2 className="panel-title">PaySim — phân bố loại giao dịch</h2>
         {data.types.length ? (
           <ResponsiveContainer width="100%" height={300}>
@@ -187,9 +194,9 @@ export default function DatasetsTab() {
             </BarChart>
           </ResponsiveContainer>
         ) : <Empty>Chưa có dữ liệu PaySim.</Empty>}
-      </section>
+      </section>}
 
-      <section className="panel col-span-4">
+      {datasetId === 'ds4_baf' && <section className="panel col-span-4">
         <h2 className="panel-title">BAF — velocity summary</h2>
         {data.velocity ? (
           <dl className="dataset-summary-list">
@@ -200,9 +207,9 @@ export default function DatasetsTab() {
             <div><dt>Velocity 4w trung bình</dt><dd>{formatNumber(data.velocity.velocity_4w_avg, 2)}</dd></div>
           </dl>
         ) : <Empty>Chưa có dữ liệu BAF.</Empty>}
-      </section>
+      </section>}
 
-      <section className="panel col-span-12 dataset-chart-panel">
+      {datasetId === 'ds3_paysim' && <section className="panel col-span-12 dataset-chart-panel">
         <h2 className="panel-title">PaySim — balance anomaly</h2>
         {data.balance ? (
           <>
@@ -232,9 +239,9 @@ export default function DatasetsTab() {
             </p>
           </>
         ) : <Empty>Chưa có dữ liệu PaySim để phân tích số dư.</Empty>}
-      </section>
+      </section>}
 
-      <section className="panel col-span-12 dataset-chart-panel">
+      {datasetId === 'ds4_baf' && <section className="panel col-span-12 dataset-chart-panel">
         <h2 className="panel-title">BAF — account application analytics</h2>
         {data.account ? (
           <>
@@ -283,9 +290,9 @@ export default function DatasetsTab() {
             </p>
           </>
         ) : <Empty>Chưa có dữ liệu BAF để phân tích account application.</Empty>}
-      </section>
+      </section>}
 
-      <section className="panel col-span-12 dataset-chart-panel">
+      {datasetId === 'ds4_baf' && <section className="panel col-span-12 dataset-chart-panel">
         <h2 className="panel-title">BAF — velocity & session distributions</h2>
         {data.behavior.velocity_heatmap.length ? (
           <div className="dataset-split-grid">
@@ -331,7 +338,7 @@ export default function DatasetsTab() {
             </div>
           </div>
         ) : <Empty>Chưa có dữ liệu BAF để tạo behavioral distributions.</Empty>}
-      </section>
+      </section>}
 
     </div>
   );

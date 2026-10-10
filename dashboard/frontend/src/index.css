@@ -703,6 +703,11 @@ body {
   color: #fca5a5;
 }
 
+.dataset-context-note p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
 .dataset-not-applicable {
   min-height: 180px;
   justify-content: center;
