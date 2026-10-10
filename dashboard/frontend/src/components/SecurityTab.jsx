@@ -55,9 +55,14 @@ export default function SecurityTab() {
   };
   const exportCsv = async () => {
     try {
-      const response = await fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts/export`, { headers: { Authorization: `Bearer ${token}` } });
+      const params = new URLSearchParams();
+      if (datasetId !== 'live') params.set('dataset_id', datasetId);
+      if (query) params.set('search', query);
+      if (status) params.set('status', status);
+      if (risk) params.set('risk_level', risk);
+      const response = await fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts/export?${params}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) throw new Error('Chỉ ADMIN có thể export');
-      const url = URL.createObjectURL(await response.blob()); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'alerts_export.csv'; anchor.click(); URL.revokeObjectURL(url);
+      const url = URL.createObjectURL(await response.blob()); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `alerts_${datasetId}.csv`; anchor.click(); URL.revokeObjectURL(url);
     } catch (exportError) { setError(exportError.message); }
   };
 

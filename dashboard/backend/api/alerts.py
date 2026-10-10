@@ -209,7 +209,13 @@ def get_alert_history(alert_id: int, current_user: dict = Depends(get_current_us
 
 
 @router.get("/alerts/export")
-def export_alerts(current_user: dict = Depends(get_current_user)):
+def export_alerts(
+    status: Optional[str] = None,
+    risk_level: Optional[str] = None,
+    dataset_id: Optional[str] = Query(None, pattern="^(ds1_creditcard|ds3_paysim|ds4_baf)$"),
+    search: Optional[str] = Query(None, max_length=100),
+    current_user: dict = Depends(get_current_user),
+):
     if current_user["role"] != "ADMIN":
         raise HTTPException(status_code=403, detail="Only ADMIN can export reports")
 
@@ -218,17 +224,32 @@ def export_alerts(current_user: dict = Depends(get_current_user)):
 
     try:
         with pg_conn.cursor() as cur:
-            cur.execute("SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at FROM alerts ORDER BY created_at DESC")
+            clauses, params = [], []
+            for column, value in (("status", status), ("risk_level", risk_level), ("dataset_id", dataset_id)):
+                if value:
+                    clauses.append(f"{column} = %s")
+                    params.append(value)
+            if search and search.strip():
+                pattern = "%" + search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+                clauses.append("(account_id ILIKE %s OR payment_id ILIKE %s OR rule_name ILIKE %s)")
+                params.extend([pattern] * 3)
+            where_sql = " WHERE " + " AND ".join(clauses) if clauses else ""
+            cur.execute(
+                "SELECT alert_id, dataset_id, account_id, payment_id, rule_name, amount, risk_score, "
+                "risk_level, status, created_at FROM alerts" + where_sql + " ORDER BY created_at DESC",
+                params,
+            )
             rows = cur.fetchall()
 
             output = io.StringIO()
             writer = csv.writer(output)
-            writer.writerow(["Alert ID", "Account ID", "Rule Name", "Amount", "Risk Score", "Status", "Created At"])
+            writer.writerow(["Alert ID", "Dataset", "Account ID", "Payment ID", "Rule Name", "Amount", "Risk Score", "Risk Level", "Status", "Created At"])
             for row in rows:
                 writer.writerow(row)
 
             output.seek(0)
-            return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=alerts_export.csv"})
+            scope = dataset_id or "live"
+            return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": f"attachment; filename=alerts_{scope}.csv"})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
