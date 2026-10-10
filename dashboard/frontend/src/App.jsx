@@ -1,192 +1,87 @@
-import React, { Suspense, lazy, useState, useEffect } from 'react';
-import { Activity, ShieldAlert, Zap, Server, LayoutDashboard, BarChart3, History, Settings, Users, Network, Database } from 'lucide-react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { BarChart3, Database, History, LayoutDashboard, LogOut, Network, Radio, Search, Settings, ShieldAlert, Users } from 'lucide-react';
+import Login from './components/Login';
+import { AuthContext, AuthProvider } from './components/AuthContext';
+import DatasetContextBar from './components/DatasetContextBar';
+import { DatasetProvider } from './components/DatasetContext';
+import { parseStreamMessage } from './streamContract';
+import './index.css';
+
 const CommandCenterTab = lazy(() => import('./components/CommandCenterTab'));
+const FraudMonitoringTab = lazy(() => import('./components/FraudMonitoringTab'));
 const SecurityTab = lazy(() => import('./components/SecurityTab'));
 const AnalyticsTab = lazy(() => import('./components/AnalyticsTab'));
-const HistoryTab = lazy(() => import('./components/HistoryTab'));
-const RulesManagementTab = lazy(() => import('./components/RulesManagementTab'));
-const UserManagementTab = lazy(() => import('./components/UserManagementTab'));
-const ArchitectureTab = lazy(() => import('./components/ArchitectureTab'));
 const DatasetsTab = lazy(() => import('./components/DatasetsTab'));
-import Login from './components/Login';
-import { parseStreamMessage } from './streamContract';
-import { AuthProvider, AuthContext } from './components/AuthContext';
-import { DatasetProvider } from './components/DatasetContext';
-import DatasetContextBar from './components/DatasetContextBar';
-import './index.css';
+const HistoryTab = lazy(() => import('./components/HistoryTab'));
+const UserManagementTab = lazy(() => import('./components/UserManagementTab'));
+const RulesManagementTab = lazy(() => import('./components/RulesManagementTab'));
+const ArchitectureTab = lazy(() => import('./components/ArchitectureTab'));
+
+function NavButton({ id, active, onSelect, icon, children, badge }) {
+  return <button className={`nav-item ${active === id ? 'active' : ''}`} onClick={() => onSelect(id)}>{icon}<span>{children}</span>{badge > 0 && <span className="badge">{badge}</span>}</button>;
+}
 
 function MainApp() {
   const [activeTab, setActiveTab] = useState('overview');
   const [alerts, setAlerts] = useState([]);
   const [tps, setTps] = useState(0);
   const [totalValue, setTotalValue] = useState(0);
+  const [sessionEvents, setSessionEvents] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
-  const { token, user, logout } = React.useContext(AuthContext);
-  
-  // Real-time chart data
   const [chartData, setChartData] = useState([]);
+  const { token, user, logout } = React.useContext(AuthContext);
 
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
     if (!token) return undefined;
-    const ws = new WebSocket((window._env_?.WS_URL || "ws://localhost:8000") + "/ws/stream", ['bearer', token]);
-
-    ws.onopen = () => {
-      console.log("Connected to WebSocket");
-      if (isMounted) setIsConnected(true);
-    };
-
-    ws.onmessage = (event) => {
+    const ws = new WebSocket(`${window._env_?.WS_URL || 'ws://localhost:8000'}/ws/stream`, ['bearer', token]);
+    ws.onopen = () => { if (mounted) setIsConnected(true); };
+    ws.onmessage = event => {
       const message = parseStreamMessage(event.data);
       if (!message) return;
-      if (message.topic === "payment-events") {
-        setTps(prev => prev + 1);
-        setTotalValue(prev => prev + message.data.amount);
-        
-        // Update Area chart
-        setChartData(prev => {
-          const newData = [...prev.slice(1), {
-            time: new Date().toLocaleTimeString([], { hour12: false }),
-            amount: message.data.amount
-          }];
-          return newData;
-        });
-
-      } else if (message.topic === "fraud-events" || message.topic === "aml-events") {
-        setAlerts(prev => {
-          const newAlerts = [message.data, ...prev];
-          if (newAlerts.length > 5) newAlerts.pop();
-          return newAlerts;
-        });
+      if (message.topic === 'payment-events') {
+        setTps(value => value + 1);
+        setSessionEvents(value => value + 1);
+        setTotalValue(value => value + message.data.amount);
+        setChartData(previous => [...previous.slice(-59), { time: new Date().toLocaleTimeString('vi-VN', { hour12: false }), amount: message.data.amount }]);
+      } else {
+        setAlerts(previous => [message.data, ...previous].slice(0, 20));
       }
     };
-
-    ws.onclose = () => {
-      if (isMounted) setIsConnected(false);
-    };
-
-    // Reset TPS counter every second
-    const interval = setInterval(() => {
-      setTps(0);
-    }, 1000);
-
-    return () => {
-      isMounted = false;
-      ws.close();
-      clearInterval(interval);
-    };
+    ws.onclose = () => { if (mounted) setIsConnected(false); };
+    const interval = window.setInterval(() => setTps(0), 1000);
+    return () => { mounted = false; ws.close(); window.clearInterval(interval); };
   }, [token]);
 
-  if (!token) {
-    return <Login />;
-  }
+  if (!token) return <Login />;
 
-  return (
-    <div className="app-container">
-      {/* Sidebar Navigation */}
-      <nav className="sidebar">
-        <div className="sidebar-logo">
-          <ShieldAlert size={28} color="#3b82f6" />
-          <h1>Command Center</h1>
-        </div>
-        <div className="nav-menu">
-          <button className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
-            <LayoutDashboard size={20} />
-            Overview
-          </button>
-          <button className={`nav-item ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>
-            <ShieldAlert size={20} />
-            Security 
-            {alerts.length > 0 && <span className="badge">{alerts.length}</span>}
-          </button>
-          <button className={`nav-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
-            <BarChart3 size={20} />
-            Analytics
-          </button>
-          <button className={`nav-item ${activeTab === 'datasets' ? 'active' : ''}`} onClick={() => setActiveTab('datasets')}>
-            <Database size={20} />
-            Datasets
-          </button>
-          <button className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
-            <History size={20} />
-            History
-          </button>
-          {user?.role === 'ADMIN' && (
-            <>
-              <button className={`nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
-                <Users size={20} />
-                Users
-              </button>
-              <button className={`nav-item ${activeTab === 'rules' ? 'active' : ''}`} onClick={() => setActiveTab('rules')}>
-                <Settings size={20} />
-                Rules
-              </button>
-              <button className={`nav-item ${activeTab === 'architecture' ? 'active' : ''}`} onClick={() => setActiveTab('architecture')}>
-                <Network size={20} />
-                Architecture Map
-              </button>
-            </>
-          )}
-        </div>
-      </nav>
-
-      {/* Main Content Area */}
-      <div className="main-content">
-        {/* Header */}
-        <header className="header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-          <div className="status-indicators">
-            <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`}></span>
-            <span className="status-text">{isConnected ? 'WebSocket đã kết nối' : 'WebSocket chưa kết nối'}</span>
-            <span style={{marginLeft: '20px', color: '#94a3b8'}}>Streaming TPS: <strong style={{color: '#fff'}}>{tps}</strong></span>
-          </div>
-          <div className="user-profile" style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-            <div style={{textAlign: 'right'}}>
-              <div style={{fontWeight: 'bold', fontSize: '14px', color: '#fff'}}>{user?.username}</div>
-              <div style={{fontSize: '12px', color: '#94a3b8'}}>{user?.role}</div>
-            </div>
-            <button onClick={logout} style={{background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'}}>
-              Logout
-            </button>
-          </div>
-        </header>
-
-        {/* Dynamic Tab Content */}
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '2rem', padding: '10px 20px'}}>
-          <div className="status-badge" style={{borderColor: isConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}}>
-            <span className="dot" style={{backgroundColor: isConnected ? '#10b981' : '#ef4444'}}></span>
-            {isConnected ? 'Live stream' : 'Live stream disconnected'}
-          </div>
-        </div>
-        <DatasetContextBar />
-        <main className="dashboard-container">
-          {/* Metric Cards (Always visible) */}
-          <div className="grid" style={{marginBottom: '1.5rem'}}>
-          <div className="metric-card col-span-4">
-            <div className="metric-header">
-              <Activity className="icon" size={20} />
-              <span>Lưu lượng WebSocket của phiên</span>
-            </div>
-            <div className="metric-value">{tps} <span style={{fontSize: '1rem', color: 'var(--text-secondary)'}}>tx/s</span></div>
-          </div>
-          <div className="metric-card col-span-4">
-            <div className="metric-header">
-              <Zap className="icon" size={20} style={{color: '#10b981'}} />
-              <span>Giá trị quan sát từ khi mở trang</span>
-            </div>
-            <div className="metric-value">${totalValue.toLocaleString()}</div>
-          </div>
-          <div className="metric-card col-span-4">
-            <div className="metric-header">
-              <Server className="icon" size={20} style={{color: '#8b5cf6'}} />
-              <span>Kết nối WebSocket</span>
-            </div>
-            <div className="metric-value" style={{color: isConnected ? '#10b981' : '#ef4444'}}>{isConnected ? 'Đã kết nối' : 'Mất kết nối'}</div>
-          </div>
-        </div>
-
-        {/* Tab Content */}
-        <Suspense fallback={<div role="status">Đang tải nội dung...</div>}>
-        {activeTab === 'overview' && <CommandCenterTab data={chartData} tps={tps} totalValue={totalValue} isConnected={isConnected} />}
+  return <div className="app-container">
+    <nav className="sidebar" aria-label="Điều hướng chính">
+      <div className="sidebar-logo"><span className="brand-mark"><ShieldAlert size={22} /></span><div><h1>Sentinel</h1><small>Banking Intelligence</small></div></div>
+      <div className="nav-section-label">Workspace</div>
+      <div className="nav-menu">
+        <NavButton id="overview" active={activeTab} onSelect={setActiveTab} icon={<LayoutDashboard size={19} />}>Command Center</NavButton>
+        <NavButton id="fraud" active={activeTab} onSelect={setActiveTab} icon={<BarChart3 size={19} />}>Fraud Monitor</NavButton>
+        <NavButton id="security" active={activeTab} onSelect={setActiveTab} icon={<Search size={19} />} badge={alerts.length}>Investigations</NavButton>
+        <NavButton id="analytics" active={activeTab} onSelect={setActiveTab} icon={<Network size={19} />}>AML Network</NavButton>
+        <NavButton id="datasets" active={activeTab} onSelect={setActiveTab} icon={<Database size={19} />}>Data Sources</NavButton>
+        <NavButton id="history" active={activeTab} onSelect={setActiveTab} icon={<History size={19} />}>Historical Analytics</NavButton>
+      </div>
+      {user?.role === 'ADMIN' && <><div className="nav-section-label nav-admin-label">Administration</div><div className="nav-menu">
+        <NavButton id="users" active={activeTab} onSelect={setActiveTab} icon={<Users size={19} />}>Investigator KPIs</NavButton>
+        <NavButton id="rules" active={activeTab} onSelect={setActiveTab} icon={<Settings size={19} />}>Detection Rules</NavButton>
+        <NavButton id="architecture" active={activeTab} onSelect={setActiveTab} icon={<Network size={19} />}>Platform Health</NavButton>
+      </div></>}
+    </nav>
+    <div className="main-content">
+      <header className="header">
+        <div className="status-indicators"><span className={`status-dot ${isConnected ? '' : 'disconnected'}`} /><span>{isConnected ? 'Live stream connected' : 'Live stream offline'}</span><span className="header-divider" /><Radio size={15} /><span>{tps} events/s</span></div>
+        <div className="user-profile"><span className="user-avatar">{user?.username?.slice(0, 2).toUpperCase()}</span><div><strong>{user?.username}</strong><small>{user?.role}</small></div><button className="icon-button" onClick={logout} aria-label="Đăng xuất"><LogOut size={17} /></button></div>
+      </header>
+      <DatasetContextBar />
+      <main className="dashboard-container"><Suspense fallback={<div className="state-message">Đang tải nội dung…</div>}>
+        {activeTab === 'overview' && <CommandCenterTab data={chartData} tps={tps} totalValue={totalValue} sessionEvents={sessionEvents} isConnected={isConnected} />}
+        {activeTab === 'fraud' && <FraudMonitoringTab />}
         {activeTab === 'security' && <SecurityTab />}
         {activeTab === 'analytics' && <AnalyticsTab />}
         {activeTab === 'datasets' && <DatasetsTab />}
@@ -194,19 +89,9 @@ function MainApp() {
         {activeTab === 'users' && <UserManagementTab />}
         {activeTab === 'rules' && <RulesManagementTab />}
         {activeTab === 'architecture' && <ArchitectureTab />}
-        </Suspense>
-        </main>
-      </div>
+      </Suspense></main>
     </div>
-  );
+  </div>;
 }
 
-export default function App() {
-  return (
-    <AuthProvider>
-      <DatasetProvider>
-        <MainApp />
-      </DatasetProvider>
-    </AuthProvider>
-  );
-}
+export default function App() { return <AuthProvider><DatasetProvider><MainApp /></DatasetProvider></AuthProvider>; }
