@@ -2,9 +2,11 @@ import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from './AuthContext';
 import { ChevronDown, ChevronUp, Upload, MessageSquare, UserCheck } from 'lucide-react';
 import KYCProfile from './KYCProfile';
+import { useDatasetContext } from './DatasetContext';
 
 export default function SecurityTab() {
   const { token } = useContext(AuthContext);
+  const { datasetId, dataset } = useDatasetContext();
   const [pgAlerts, setPgAlerts] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedAlert, setExpandedAlert] = useState(null);
@@ -31,12 +33,13 @@ export default function SecurityTab() {
     fetchUsers();
     const interval = setInterval(fetchAlerts, 3000);
     return () => clearInterval(interval);
-  }, [currentPage, debouncedSearch, token]);
+  }, [currentPage, debouncedSearch, token, datasetId]);
 
   const fetchAlerts = () => {
     if (!token) return;
     setLoadingCases(true);
     const params = new URLSearchParams({ page: currentPage, limit: itemsPerPage });
+    if (datasetId !== 'live') params.set('dataset_id', datasetId);
     if (debouncedSearch) params.set('search', debouncedSearch);
     fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts?${params}`, {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -202,7 +205,7 @@ export default function SecurityTab() {
       {/* Alert Feed (Case Management) */}
       <div className="panel col-span-12">
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-          <h2 className="panel-title" style={{margin: 0}}>Case Management (Postgres)</h2>
+          <h2 className="panel-title" style={{margin: 0}}>Case Management (Postgres) · {dataset.shortLabel}</h2>
           <button onClick={handleExportCSV} style={{background: '#10b981', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
             Export CSV
           </button>

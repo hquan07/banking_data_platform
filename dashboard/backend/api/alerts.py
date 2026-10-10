@@ -38,6 +38,7 @@ def get_alerts(
     account_id: Optional[str] = None, payment_id: Optional[str] = None,
     rule: Optional[str] = None, status: Optional[str] = None,
     risk_level: Optional[str] = None,
+    dataset_id: Optional[str] = Query(None, pattern="^(ds1_creditcard|ds3_paysim|ds4_baf)$"),
     search: Optional[str] = Query(None, max_length=100),
     created_from: Optional[datetime] = None, created_to: Optional[datetime] = None,
     current_user: dict = Depends(get_current_user),
@@ -58,6 +59,9 @@ def get_alerts(
                     if value:
                         clauses.append(f"{column} = %s")
                         params.append(value)
+                if dataset_id:
+                    clauses.append("dataset_id = %s")
+                    params.append(dataset_id)
                 if search and search.strip():
                     pattern = "%" + search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
                     clauses.append("(account_id ILIKE %s OR payment_id ILIKE %s OR rule_name ILIKE %s)")
@@ -73,7 +77,7 @@ def get_alerts(
                 total = cur.fetchone()[0]
                 cur.execute(
                     "SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at, "
-                    "xai_explanation, notes, evidence_file_url, assignee_id, version, payment_id, risk_level, trace_id "
+                    "xai_explanation, notes, evidence_file_url, assignee_id, version, payment_id, risk_level, trace_id, dataset_id "
                     "FROM alerts" + where_sql + " ORDER BY created_at DESC, alert_id DESC LIMIT %s OFFSET %s",
                     (*params, limit, offset),
                 )
@@ -96,6 +100,7 @@ def get_alerts(
                         "payment_id": row[12],
                         "risk_level": row[13],
                         "trace_id": row[14],
+                        "dataset_id": row[15],
                     })
                 return {"total": total, "page": page, "limit": limit, "data": data}
         except Exception as e:
