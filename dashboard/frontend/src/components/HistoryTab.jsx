@@ -6,7 +6,7 @@ import { formatNumber, MetricCard, PageHeader, Panel, StateMessage } from './ui'
 import { useDatasetAnalytics } from './useDatasetAnalytics';
 
 export default function HistoryTab() {
-  const { datasetId, dataset } = useDatasetContext();
+  const { datasetId, dataset, groundTruthVisible } = useDatasetContext();
   const benchmark = useDatasetAnalytics();
   const [live, setLive] = useState({ data: [], loading: datasetId === 'live', error: '' });
 
@@ -25,9 +25,9 @@ export default function HistoryTab() {
   const error = datasetId === 'live' ? live.error : benchmark.error;
   const metrics = useMemo(() => rows.reduce((acc, row) => ({
     events: acc.events + Number(row.total_tx ?? row.event_count ?? 0),
-    alerts: acc.alerts + Number(row.total_alerts ?? row.fraud_count ?? 0),
+    alerts: acc.alerts + Number(row.total_alerts ?? (groundTruthVisible ? row.fraud_count : 0) ?? 0),
     amount: acc.amount + Number(row.total_amount ?? 0),
-  }), { events:0, alerts:0, amount:0 }), [rows]);
+  }), { events:0, alerts:0, amount:0 }), [groundTruthVisible, rows]);
   const xKey = datasetId === 'live' ? 'date' : 'label';
   const eventKey = datasetId === 'live' ? 'total_tx' : 'event_count';
   const alertKey = datasetId === 'live' ? 'total_alerts' : 'fraud_count';
@@ -36,11 +36,11 @@ export default function HistoryTab() {
     <PageHeader eyebrow="Temporal analysis" title="Historical Analytics" description={`${dataset.label} · ${datasetId === 'live' ? 'Lịch sử theo ngày từ ClickHouse.' : `Timeline theo ${dataset.timeSemantics}; fraud là ground truth.`}`} />
     <MetricCard icon={<CalendarDays size={17} />} label="Time buckets" value={formatNumber(rows.length)} detail={dataset.timeSemantics} tone="blue" />
     <MetricCard icon={<Activity size={17} />} label={datasetId === 'live' ? 'Transactions' : 'Records'} value={formatNumber(metrics.events)} detail="Trong các bucket hiện có" tone="cyan" />
-    <MetricCard icon={<ShieldAlert size={17} />} label={datasetId === 'live' ? 'Alerts created' : 'Ground-truth fraud'} value={formatNumber(metrics.alerts)} detail={datasetId === 'live' ? 'Mọi status' : 'Không phải model prediction'} tone="red" />
+    <MetricCard icon={<ShieldAlert size={17} />} label={datasetId === 'live' ? 'Alerts created' : 'Ground-truth fraud'} value={groundTruthVisible || datasetId === 'live' ? formatNumber(metrics.alerts) : 'Hidden'} detail={datasetId === 'live' ? 'Mọi status' : groundTruthVisible ? 'Không phải model prediction' : 'Operational isolation'} tone="red" />
     <MetricCard icon={<Banknote size={17} />} label="Total amount" value={formatNumber(metrics.amount, 2)} detail="Đơn vị theo source dataset" tone="green" />
     {loading ? <Panel className="col-span-12"><StateMessage type="loading">Đang tải historical analytics…</StateMessage></Panel> : error ? <Panel className="col-span-12"><StateMessage type="error">{error}</StateMessage></Panel> : rows.length === 0 ? <Panel className="col-span-12"><StateMessage>Chưa có dữ liệu lịch sử cho nguồn này.</StateMessage></Panel> : <>
       <Panel className="col-span-12" title="Volume and risk signal" subtitle={datasetId === 'live' ? 'Transaction volume và alert creation theo ngày' : 'Record volume và ground-truth fraud theo relative-time bucket'}>
-        <ResponsiveContainer width="100%" height={330}><BarChart data={rows}><CartesianGrid stroke="#20314b" vertical={false} /><XAxis dataKey={xKey} stroke="#70839e" fontSize={9} /><YAxis yAxisId="volume" stroke="#70839e" fontSize={9} /><YAxis yAxisId="risk" orientation="right" stroke="#fb7185" fontSize={9} /><Tooltip contentStyle={{ background:'#0d1829', border:'1px solid #263750', fontSize:10 }} /><Legend /><Bar yAxisId="volume" dataKey={eventKey} name={datasetId === 'live' ? 'Transactions' : 'Records'} fill="#4f8cff" radius={[4,4,0,0]} /><Bar yAxisId="risk" dataKey={alertKey} name={datasetId === 'live' ? 'Alerts' : 'Ground-truth fraud'} fill="#fb7185" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>
+        <ResponsiveContainer width="100%" height={330}><BarChart data={rows}><CartesianGrid stroke="#20314b" vertical={false} /><XAxis dataKey={xKey} stroke="#70839e" fontSize={9} /><YAxis yAxisId="volume" stroke="#70839e" fontSize={9} />{(datasetId === 'live' || groundTruthVisible) && <YAxis yAxisId="risk" orientation="right" stroke="#fb7185" fontSize={9} />}<Tooltip contentStyle={{ background:'#0d1829', border:'1px solid #263750', fontSize:10 }} /><Legend /><Bar yAxisId="volume" dataKey={eventKey} name={datasetId === 'live' ? 'Transactions' : 'Records'} fill="#4f8cff" radius={[4,4,0,0]} />{(datasetId === 'live' || groundTruthVisible) && <Bar yAxisId="risk" dataKey={alertKey} name={datasetId === 'live' ? 'Alerts' : 'Ground-truth fraud'} fill="#fb7185" radius={[4,4,0,0]} />}</BarChart></ResponsiveContainer>
       </Panel>
       <Panel className="col-span-12" title="Amount over time" subtitle="Tổng amount trong từng time bucket; không quy đổi tiền tệ giữa nguồn">
         <ResponsiveContainer width="100%" height={300}><AreaChart data={rows}><defs><linearGradient id="historyAmount" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#35d399" stopOpacity={.35}/><stop offset="95%" stopColor="#35d399" stopOpacity={0}/></linearGradient></defs><CartesianGrid stroke="#20314b" vertical={false} /><XAxis dataKey={xKey} stroke="#70839e" fontSize={9} /><YAxis stroke="#70839e" fontSize={9} /><Tooltip contentStyle={{ background:'#0d1829', border:'1px solid #263750', fontSize:10 }} /><Area type="monotone" dataKey="total_amount" name="Total amount" stroke="#35d399" fill="url(#historyAmount)" strokeWidth={2}/></AreaChart></ResponsiveContainer>

@@ -15,7 +15,7 @@ const EMPTY = { status: [], performance: [], rules: [], models: [], balance: nul
 
 export default function DatasetsTab() {
   const { token } = useContext(AuthContext);
-  const { datasetId, dataset } = useDatasetContext();
+  const { datasetId, dataset, groundTruthVisible } = useDatasetContext();
   const analytics = useDatasetAnalytics();
   const [data, setData] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
@@ -63,14 +63,14 @@ export default function DatasetsTab() {
     <PageHeader eyebrow="Data estate" title="Data Sources" description="Provenance, coverage và dataset-native diagnostics; không nối danh tính giữa các benchmark độc lập." />
     <MetricCard icon={<Database size={17} />} label="Sources loaded" value={`${data.status.filter(item => item.status === 'loaded').length}/3`} detail="Benchmark sources in PostgreSQL" tone="blue" />
     <MetricCard icon={<Layers3 size={17} />} label="Selected records" value={datasetId === 'live' ? 'Live' : formatNumber(overview?.event_count)} detail={dataset.timeSemantics} tone="cyan" />
-    <MetricCard icon={<Fingerprint size={17} />} label="Ground truth" value={datasetId === 'live' ? 'Hidden' : formatNumber(overview?.fraud_count)} detail={datasetId === 'live' ? 'Operational isolation' : formatPercent(overview?.fraud_rate)} tone="red" />
+    <MetricCard icon={<Fingerprint size={17} />} label="Ground truth" value={groundTruthVisible ? formatNumber(overview?.fraud_count) : 'Hidden'} detail={groundTruthVisible ? formatPercent(overview?.fraud_rate) : 'Operational isolation'} tone="red" />
     <MetricCard icon={<Activity size={17} />} label="Evaluated" value={datasetId === 'live' ? 'N/A' : formatNumber(overview?.evaluated_count)} detail={datasetId === 'live' ? 'Streaming source' : `${formatNumber(overview?.predicted_fraud)} predicted fraud`} tone="green" />
 
     {warnings.length > 0 && <Panel className="col-span-12"><StateMessage type="error">Một số nguồn phụ chưa sẵn sàng: {warnings.join(' · ')}</StateMessage></Panel>}
     <Panel className="col-span-12" title="Dataset catalog" subtitle="Trạng thái nạp và ranh giới provenance">
       {loading && !data.status.length ? <StateMessage type="loading">Đang đọc data catalog…</StateMessage> : <div className="dataset-status-grid">{data.status.map(item => {
         const definition = DATASET_DEFINITIONS[item.dataset_id];
-        return <article className={`dataset-card ${item.status === 'loaded' ? 'loaded' : ''}`} key={item.dataset_id}><div className="dataset-card-title"><Database size={16} /><strong>{definition?.shortLabel || item.dataset_id}</strong><Badge tone={item.status === 'loaded' ? 'green' : 'neutral'}>{item.status}</Badge></div><span className="dataset-kind">{SOURCE_LABELS[item.source_kind] || item.source_kind}</span><p>{definition?.description}</p><dl><div><dt>Records</dt><dd>{formatNumber(item.event_count)}</dd></div><div><dt>Ground truth</dt><dd>{formatNumber(item.fraud_count)}</dd></div><div><dt>Last ingest</dt><dd>{item.last_ingested_at ? new Date(item.last_ingested_at).toLocaleString('vi-VN') : '—'}</dd></div></dl></article>;
+        return <article className={`dataset-card ${item.status === 'loaded' ? 'loaded' : ''}`} key={item.dataset_id}><div className="dataset-card-title"><Database size={16} /><strong>{definition?.shortLabel || item.dataset_id}</strong><Badge tone={item.status === 'loaded' ? 'green' : 'neutral'}>{item.status}</Badge></div><span className="dataset-kind">{SOURCE_LABELS[item.source_kind] || item.source_kind}</span><p>{definition?.description}</p><dl><div><dt>Records</dt><dd>{formatNumber(item.event_count)}</dd></div><div><dt>Ground truth</dt><dd>{groundTruthVisible ? formatNumber(item.fraud_count) : 'Hidden'}</dd></div><div><dt>Last ingest</dt><dd>{item.last_ingested_at ? new Date(item.last_ingested_at).toLocaleString('vi-VN') : '—'}</dd></div></dl></article>;
       })}</div>}
     </Panel>
 
