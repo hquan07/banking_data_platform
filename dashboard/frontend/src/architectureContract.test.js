@@ -38,6 +38,9 @@ test('unconfigured integrations cannot appear as active flows', () => {
   assert.equal(nodes['transfer-source'].status, 'planned');
   assert.equal(nodes.debezium.status, 'inactive');
   assert.equal(nodes.superset.status, 'inactive');
+  const liveSourceEdge = ARCHITECTURE_EDGES.find(item => `${item.source}->${item.target}` === 'transfer-source->kafka');
+  assert.equal(liveSourceEdge.state, 'planned');
+  assert.match(liveSourceEdge.label, /chưa cấu hình/);
   for (const key of ['postgres->debezium', 'debezium->kafka', 'postgres->superset', 'clickhouse->superset']) {
     const edge = ARCHITECTURE_EDGES.find(item => `${item.source}->${item.target}` === key);
     assert.equal(edge.state, 'inactive');

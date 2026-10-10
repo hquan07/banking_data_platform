@@ -81,6 +81,13 @@ test('authenticated analytics and architecture views render end to end', async (
   await expect(page.getByText('Spark fraud engine')).toBeVisible();
   await expect(page.getByText('Benchmark processor')).toBeVisible();
   await expect(page.getByText('FastAPI backend')).toBeVisible();
+  await page.getByText('Live event sources', { exact: true }).click();
+  const componentDetail = page.getByRole('region', { name: 'Chi tiết thành phần' });
+  await expect(componentDetail).toContainText('Chưa có nguồn payment-events hoặc transfer-events bên ngoài được kết nối.');
+  await expect(componentDetail).toContainText('Chưa tích hợp');
+  await expect(page.getByText('payment + transfer · chưa cấu hình')).toBeVisible();
+  await componentDetail.getByRole('button', { name: 'Đóng chi tiết thành phần' }).click();
+  await expect(componentDetail).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Batch & DQ' }).click();
   await expect(page.getByRole('button', { name: 'Batch & DQ' })).toHaveAttribute('aria-pressed', 'true');

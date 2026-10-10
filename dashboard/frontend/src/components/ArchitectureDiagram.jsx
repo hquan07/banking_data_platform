@@ -65,15 +65,6 @@ function ArchitectureNode({ data, selected }) {
       borderRadius: '50%', background: statusColors[status], border: '2px solid #0b0f19',
       boxShadow: status === 'healthy' ? `0 0 9px ${statusColors.healthy}` : 'none',
     }} />
-    {selected && <div style={{
-      position: 'absolute', zIndex: 20, top: 'calc(100% + 10px)', left: 0,
-      width: 250, padding: 12, borderRadius: 9, background: '#0f172af5',
-      border: '1px solid #475569', boxShadow: '0 12px 28px #000a',
-      fontSize: 12, lineHeight: 1.45, color: '#cbd5e1',
-    }}>
-      <div>{data.description}</div>
-      <div style={{ color: statusColors[status], fontWeight: 700, marginTop: 7 }}>{statusLabels[status]}</div>
-    </div>}
   </div>;
 }
 
@@ -117,6 +108,7 @@ function edgesForView(viewId, nodes) {
       type: 'smoothstep', animated: false, pathOptions: { borderRadius: 14, offset: 24 },
       style: {
         stroke: item.color, strokeWidth: 2,
+        opacity: item.state === 'planned' || item.state === 'inactive' ? 0.55 : 1,
         ...(item.state !== 'configured' ? { strokeDasharray: '6 5' } : {}),
       },
       markerEnd: { type: MarkerType.ArrowClosed, color: item.color },
@@ -130,10 +122,12 @@ function edgesForView(viewId, nodes) {
 export default function ArchitectureDiagram({ health = {}, lastChecked = null }) {
   const [viewId, setViewId] = useState('realtime');
   const [nodes, setNodes] = useState(() => nodesForView('realtime'));
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
   const onNodesChange = useCallback(changes => setNodes(current => applyNodeChanges(changes, current)), []);
   const selectView = nextView => {
     setViewId(nextView);
     setNodes(nodesForView(nextView));
+    setSelectedNodeId(null);
   };
   const edges = useMemo(() => edgesForView(viewId, nodes), [nodes, viewId]);
   const visibleNodes = useMemo(() => nodes.map(item => {
@@ -143,6 +137,8 @@ export default function ArchitectureDiagram({ health = {}, lastChecked = null })
     const status = typeof value === 'boolean' ? (value ? 'healthy' : 'unhealthy') : item.data.status;
     return { ...item, data: { ...item.data, health: status } };
   }), [health, nodes]);
+  const selectedNode = visibleNodes.find(item => item.id === selectedNodeId);
+  const selectedStatus = selectedNode?.data.health || selectedNode?.data.status || 'documented';
 
   return <>
     <div className="architecture-view-switcher" role="group" aria-label="Architecture layer">
@@ -162,10 +158,20 @@ export default function ArchitectureDiagram({ health = {}, lastChecked = null })
       {lastChecked && <span>Kiểm tra lúc {lastChecked.toLocaleTimeString('vi-VN')}</span>}
     </div>
     <p className="architecture-contract-note">Đường nối thể hiện integration contract trong code; không khẳng định event đang chảy tại thời điểm xem. Nét đứt là on-demand hoặc chưa cấu hình.</p>
+    {selectedNode && <section className="architecture-node-detail" aria-label="Chi tiết thành phần">
+      <div>
+        <strong>{selectedNode.data.label}</strong>
+        <small>{selectedNode.data.sublabel}</small>
+      </div>
+      <p>{selectedNode.data.description}</p>
+      <span style={{ color: statusColors[selectedStatus] }}>{statusLabels[selectedStatus]}</span>
+      <button type="button" aria-label="Đóng chi tiết thành phần" onClick={() => setSelectedNodeId(null)}>×</button>
+    </section>}
     <div className="architecture-flow" style={{ height: viewId === 'all' ? 900 : 680 }}>
       <ReactFlow
         key={viewId} colorMode="dark" nodes={visibleNodes} edges={edges} nodeTypes={nodeTypes}
         onNodesChange={onNodesChange} nodesConnectable={false} edgesFocusable={false}
+        onNodeClick={(_, node) => setSelectedNodeId(node.id)} onPaneClick={() => setSelectedNodeId(null)}
         fitView fitViewOptions={{ padding: 0.18 }} attributionPosition="bottom-left"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />

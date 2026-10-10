@@ -69,7 +69,7 @@ const edge = (source, target, label, color, options = {}) => ({
 
 export const ARCHITECTURE_EDGES = [
   edge('payment-producer', 'kafka', 'benchmark-events', '#10b981', { state: 'ondemand' }),
-  edge('transfer-source', 'kafka', 'payment + transfer', '#f59e0b', { state: 'planned' }),
+  edge('transfer-source', 'kafka', 'payment + transfer · chưa cấu hình', '#f59e0b', { state: 'planned' }),
   edge('retry-submit', 'kafka', 'payment-events-retry', '#64748b', { state: 'ondemand' }),
   edge('kafka', 'retry', 'payment-events-retry', '#ef4444'),
   edge('retry', 'kafka', 'payment / DLQ', '#ef4444', { sourceSide: 'bottom', targetSide: 'bottom' }),
