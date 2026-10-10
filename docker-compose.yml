@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Mount thư mục DDL để tự động chạy các script SQL khởi tạo khi container khởi động lần đầu
@@ -26,8 +26,8 @@ services:
     image: bitnamilegacy/kafka@sha256:f45d5b813412e1ef7ce67b467309a84e4c6dc03d7626a0b6da867db9b69bd107
     container_name: banking_kafka
     ports:
-      - "9092:9092"
-      - "9094:9094"
+      - "127.0.0.1:9092:9092"
+      - "127.0.0.1:9094:9094"
     environment:
       - KAFKA_ENABLE_KRAFT=yes
       - KAFKA_CFG_PROCESS_ROLES=broker,controller
@@ -89,7 +89,7 @@ services:
     image: quay.io/debezium/connect:2.4
     container_name: banking_debezium
     ports:
-      - "8083:8083"
+      - "127.0.0.1:8083:8083"
     environment:
       - BOOTSTRAP_SERVERS=banking_kafka:9092
       - GROUP_ID=1
@@ -110,8 +110,8 @@ services:
     environment:
       - SPARK_MODE=master
     ports:
-      - "8080:8080"
-      - "7077:7077"
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:7077:7077"
     volumes:
       - .:/workspace:ro
       - spark_checkpoints:/checkpoints
@@ -221,7 +221,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - AWS_REGION=us-east-1
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     command: standalone
     depends_on:
       postgres:
@@ -240,7 +240,7 @@ services:
     image: prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
     container_name: banking_prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus:/etc/prometheus
     networks:
@@ -251,7 +251,7 @@ services:
     image: grafana/grafana@sha256:b28bae15e219c998fb0e0424ed724930cc61b1f61fb404d47c862f9a23f9e572
     container_name: banking_grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
     volumes:
@@ -267,7 +267,7 @@ services:
     restart: on-failure
     command: ["--kafka.server=banking_kafka:9092"]
     ports:
-      - "9308:9308"
+      - "127.0.0.1:9308:9308"
     depends_on:
       kafka:
         condition: service_healthy
@@ -279,8 +279,8 @@ services:
     image: clickhouse/clickhouse-server@sha256:5d6b622bbb109f40d12333187e44ae80864cf72aa71ae9a4704a53496615e941
     container_name: banking_clickhouse
     ports:
-      - "8123:8123"
-      - "9002:9000"
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9002:9000"
     environment:
       - CLICKHOUSE_DB=${CLICKHOUSE_DB}
       - CLICKHOUSE_USER=${CLICKHOUSE_USER}
@@ -304,7 +304,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -317,8 +317,8 @@ services:
     image: neo4j:5.11
     container_name: banking_neo4j
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
     environment:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
     volumes:
@@ -399,7 +399,7 @@ services:
     image: banking-superset:p1
     container_name: banking_superset
     ports:
-      - "8088:8088"
+      - "127.0.0.1:8088:8088"
     environment:
       - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
       - SUPERSET_ADMIN_USER=${SUPERSET_ADMIN_USER}
@@ -426,7 +426,7 @@ services:
     container_name: banking_dashboard_backend
     restart: on-failure
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - APP_MODE=${APP_MODE:-integration}
       - POSTGRES_HOST=banking_postgres
@@ -525,7 +525,7 @@ services:
       dockerfile: Dockerfile
     container_name: banking_dashboard_frontend
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     depends_on:
       - dashboard_backend
     networks:

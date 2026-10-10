@@ -97,6 +97,10 @@ ClickHouse and MinIO must be reachable. API errors are reported instead of
 showing sample data. PostgreSQL and dashboard credentials are required for
 authentication and alert storage.
 
+All published Compose ports bind to `127.0.0.1`. Access from another machine
+requires an authenticated tunnel or a separately reviewed deployment ingress;
+do not widen datastore ports directly to a LAN or the internet.
+
 ```bash
 docker compose up -d
 ```

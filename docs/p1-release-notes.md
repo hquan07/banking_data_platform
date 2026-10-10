@@ -29,11 +29,14 @@
   alert lifecycle, RBAC, Redis, Neo4j and MinIO end-to-end paths.
 - The PostgreSQL backup command now validates a custom archive by restoring it
   into an isolated temporary database and reconciling every application table.
+- All local Compose host ports now bind to loopback, with a regression test
+  preventing accidental exposure on every network interface.
 
 See `docs/p1-demo-acceptance.md` for the current data-source status and the
 database-volume cleanup boundary. See `docs/p1-e2e-acceptance.md` for the live
 integration evidence and `docs/p1-postgres-recovery-rehearsal.md` for the
-recovery workflow and evidence.
+recovery workflow and evidence. Local exposure controls are recorded in
+`docs/p1-local-network-hardening.md`.
 
 ## Data migration and rollback
 
