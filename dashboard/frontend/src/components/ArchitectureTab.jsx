@@ -8,6 +8,7 @@ import { Badge, MetricCard, PageHeader, Panel, StateMessage } from './ui';
 
 const services = [
   { key: 'api', name: 'FastAPI', role: 'Auth, cases & analytics API', group: 'Serving', icon: Server },
+  { key: 'live_ingestion', name: 'Live Ingestion', role: 'HTTP contracts & Kafka ACK', group: 'Streaming', icon: Waves },
   { key: 'kafka', name: 'Kafka', role: 'Event backbone & DLQ', group: 'Streaming', icon: Zap },
   { key: 'postgres', name: 'PostgreSQL', role: 'Ledger, cases & benchmark', group: 'Storage', icon: Database },
   { key: 'redis', name: 'Redis', role: 'Velocity state & rule updates', group: 'Storage', icon: Radio },
@@ -22,7 +23,8 @@ const stages = [
     tone: 'blue',
     nodes: [
       { name: 'Dataset catalog', meta: 'DS1 · DS3 · DS4', state: 'documented' },
-      { name: 'Live producers', meta: 'Not configured', state: 'planned' },
+      { name: 'External / demo sources', meta: 'Awaiting source probe', liveSource: true },
+      { name: 'Live ingestion gateway', meta: 'HTTP contract → Kafka ACK', healthKey: 'live_ingestion' },
     ],
   },
   {
@@ -54,6 +56,13 @@ const stages = [
 ];
 
 function healthState(node, health) {
+  if (node.liveSource) {
+    const status = health.live_source?.status;
+    if (status === 'streaming') return 'healthy';
+    if (status === 'idle') return 'idle';
+    if (status === 'unavailable') return 'unhealthy';
+    return 'planned';
+  }
   if (node.state) return node.state;
   const keys = node.healthKeys || [node.healthKey];
   const values = keys.map(key => health[key]);
@@ -68,7 +77,17 @@ const stateLabel = {
   unknown: 'Awaiting probe',
   documented: 'No direct probe',
   planned: 'Not integrated',
+  idle: 'Configured · idle',
 };
+
+function sourceMeta(node, health) {
+  if (!node.liveSource) return node.meta;
+  const source = health.live_source;
+  if (!source) return node.meta;
+  if (source.status === 'streaming') return `Streaming · ${source.event_types_seen?.join(' + ') || 'live events'}`;
+  if (source.status === 'idle') return 'Gateway ready · no recent events';
+  return 'Gateway or Kafka unavailable';
+}
 
 export default function ArchitectureTab() {
   const [health, setHealth] = useState({});
@@ -89,6 +108,7 @@ export default function ArchitectureTab() {
       services.filter(service => service.key !== 'api').forEach(service => {
         next[service.key] = typeof probes[service.key] === 'boolean' ? probes[service.key] : null;
       });
+      next.live_source = probes.live_source || null;
       setHealth(next);
       setOverall(response.ok && probes.status === 'ready' ? 'ready' : 'degraded');
     } catch (healthError) {
@@ -129,7 +149,7 @@ export default function ArchitectureTab() {
     <MetricCard icon={<Clock3 size={17}/>} label="Probe interval" value="30s" detail={lastChecked ? `Checked ${lastChecked.toLocaleTimeString('vi-VN')}` : 'First probe pending'} tone="violet" />
 
     <Panel className="col-span-12" title="Kiến trúc Banking Data Platform" subtitle="Sơ đồ tương tác của nguồn dữ liệu, streaming, processing, storage, serving và observability">
-      <ArchitectureDiagram health={health} lastChecked={lastChecked} />
+      <ArchitectureDiagram health={health} liveSource={health.live_source} lastChecked={lastChecked} />
     </Panel>
 
     <Panel className="col-span-8" title="Runtime dependencies" subtitle="Các trạng thái bên dưới lấy trực tiếp từ /api/health/ready" action={<Badge tone={overall === 'ready' ? 'green' : 'red'}>{overall}</Badge>}>
@@ -153,8 +173,9 @@ export default function ArchitectureTab() {
         <div><i className="status-unhealthy"/><span><strong>Probe failed</strong><small>Dependency được cấu hình nhưng không sẵn sàng.</small></span></div>
         <div><i className="status-documented"/><span><strong>No direct probe</strong><small>Thành phần có trong topology nhưng readiness API chưa đo.</small></span></div>
         <div><i className="status-planned"/><span><strong>Not integrated</strong><small>Nguồn live bên ngoài chưa được kết nối.</small></span></div>
+        <div><i style={{ background: '#60a5fa' }}/><span><strong>Configured · idle</strong><small>Gateway sẵn sàng nhưng chưa có event trong active window.</small></span></div>
       </div>
-      <div className="health-boundary-note"><Waves size={15}/><p>Platform readiness không đồng nghĩa live events đang chảy. Hiện nguồn payment/transfer bên ngoài vẫn chưa được cấu hình.</p></div>
+      <div className="health-boundary-note"><Waves size={15}/><p>Gateway đã được tích hợp. Trạng thái hiện tại: {health.live_source?.status || 'awaiting probe'}; platform readiness không đồng nghĩa live events đang chảy.</p></div>
     </Panel>
 
     <Panel className="col-span-12" title="Data-flow map" subtitle="Luồng dữ liệu hiện hành; màu trạng thái phân biệt probe thật với thành phần chỉ được mô tả">
@@ -166,7 +187,7 @@ export default function ArchitectureTab() {
               {stage.nodes.map(node => {
                 const state = healthState(node, health);
                 return <article className={`topology-node state-${state}`} key={node.name}>
-                  <div><strong>{node.name}</strong><span>{node.meta}</span></div>
+                  <div><strong>{node.name}</strong><span>{sourceMeta(node, health)}</span></div>
                   <small><i aria-hidden="true" />{stateLabel[state]}</small>
                 </article>;
               })}

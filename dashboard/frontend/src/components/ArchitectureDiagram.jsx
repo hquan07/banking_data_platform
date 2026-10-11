@@ -18,7 +18,7 @@ const icons = {
 
 const statusColors = {
   healthy: '#22c55e', unhealthy: '#ef4444', documented: '#64748b', planned: '#f59e0b',
-  inactive: '#f59e0b', ondemand: '#60a5fa',
+  inactive: '#f59e0b', ondemand: '#60a5fa', idle: '#60a5fa',
 };
 
 const statusLabels = {
@@ -28,6 +28,7 @@ const statusLabels = {
   planned: 'Chưa tích hợp',
   inactive: 'Container có mặt nhưng data flow chưa cấu hình',
   ondemand: 'Chỉ chạy khi operator chủ động kích hoạt',
+  idle: 'Đã cấu hình · chưa có event gần đây',
 };
 
 const handlePositions = [
@@ -39,7 +40,8 @@ function ArchitectureNode({ data, selected }) {
   const Icon = icons[data.icon] || Server;
   const status = data.health || data.status || 'documented';
   const color = status === 'unhealthy' ? statusColors.unhealthy : data.color;
-  const dashed = ['planned', 'inactive', 'ondemand'].includes(status);
+  const dashed = ['planned', 'inactive', 'ondemand', 'idle'].includes(status);
+  const statusText = data.statusText || statusLabels[status];
 
   return <div style={{
     width: 208, padding: '12px 14px', position: 'relative', cursor: 'pointer',
@@ -60,7 +62,7 @@ function ArchitectureNode({ data, selected }) {
         <small style={{ display: 'block', color: '#cbd5e1', fontSize: 11, marginTop: 3 }}>{data.sublabel}</small>
       </span>
     </div>
-    <span title={statusLabels[status]} aria-label={statusLabels[status]} style={{
+    <span title={statusText} aria-label={statusText} style={{
       position: 'absolute', top: -7, right: -7, width: 15, height: 15,
       borderRadius: '50%', background: statusColors[status], border: '2px solid #0b0f19',
       boxShadow: status === 'healthy' ? `0 0 9px ${statusColors.healthy}` : 'none',
@@ -71,7 +73,7 @@ function ArchitectureNode({ data, selected }) {
 const nodeTypes = { architecture: ArchitectureNode };
 const probedNodes = {
   backend: 'api', postgres: 'postgres', kafka: 'kafka', redis: 'redis',
-  neo4j: 'neo4j', clickhouse: 'clickhouse', minio: 'minio',
+  neo4j: 'neo4j', clickhouse: 'clickhouse', minio: 'minio', 'live-ingestion': 'live_ingestion',
 };
 
 const viewDescriptions = {
@@ -98,9 +100,23 @@ function automaticSides(edge, nodeById) {
   return dy > 0 ? ['bottom', 'top'] : ['top', 'bottom'];
 }
 
-function edgesForView(viewId, nodes) {
+function edgesForView(viewId, nodes, liveSource) {
   const nodeById = new Map(nodes.map(item => [item.id, item]));
-  return topologyForView(viewId).edges.map(item => {
+  return topologyForView(viewId).edges.map(contractEdge => {
+    let item = contractEdge;
+    if (contractEdge.id === 'transfer-source-live-ingestion' && liveSource?.configured) {
+      const streaming = liveSource.status === 'streaming';
+      const unavailable = liveSource.status === 'unavailable';
+      item = {
+        ...contractEdge,
+        label: `HTTP payment + transfer · ${liveSource.status}`,
+        color: streaming ? '#22c55e' : unavailable ? '#ef4444' : '#60a5fa',
+        state: streaming ? 'configured' : unavailable ? 'inactive' : 'ondemand',
+      };
+    }
+    if (contractEdge.id === 'live-ingestion-kafka' && liveSource?.configured && !liveSource.kafka) {
+      item = { ...contractEdge, color: '#ef4444', state: 'inactive' };
+    }
     const [sourceSide, targetSide] = automaticSides(item, nodeById);
     return {
       id: item.id, source: item.source, target: item.target, label: item.label,
@@ -108,7 +124,7 @@ function edgesForView(viewId, nodes) {
       type: 'smoothstep', animated: false, pathOptions: { borderRadius: 14, offset: 24 },
       style: {
         stroke: item.color, strokeWidth: 2,
-        opacity: item.state === 'planned' || item.state === 'inactive' ? 0.55 : 1,
+        opacity: item.state === 'configured' ? 1 : 0.55,
         ...(item.state !== 'configured' ? { strokeDasharray: '6 5' } : {}),
       },
       markerEnd: { type: MarkerType.ArrowClosed, color: item.color },
@@ -119,7 +135,7 @@ function edgesForView(viewId, nodes) {
   });
 }
 
-export default function ArchitectureDiagram({ health = {}, lastChecked = null }) {
+export default function ArchitectureDiagram({ health = {}, liveSource = null, lastChecked = null }) {
   const [viewId, setViewId] = useState('realtime');
   const [nodes, setNodes] = useState(() => nodesForView('realtime'));
   const [selectedNodeId, setSelectedNodeId] = useState(null);
@@ -129,14 +145,26 @@ export default function ArchitectureDiagram({ health = {}, lastChecked = null })
     setNodes(nodesForView(nextView));
     setSelectedNodeId(null);
   };
-  const edges = useMemo(() => edgesForView(viewId, nodes), [nodes, viewId]);
+  const edges = useMemo(() => edgesForView(viewId, nodes, liveSource), [nodes, viewId, liveSource]);
   const visibleNodes = useMemo(() => nodes.map(item => {
+    if (item.id === 'transfer-source' && liveSource?.configured) {
+      const sourceStatus = liveSource.status === 'streaming'
+        ? 'healthy' : liveSource.status === 'unavailable' ? 'unhealthy' : 'idle';
+      const lastEvent = liveSource.last_event_at ? ` Event gần nhất: ${liveSource.last_event_at}.` : '';
+      return { ...item, data: {
+        ...item.data,
+        health: sourceStatus,
+        sublabel: liveSource.status === 'streaming' ? 'Streaming' : liveSource.status === 'unavailable' ? 'Unavailable' : 'Configured · idle',
+        statusText: sourceStatus === 'healthy' ? 'Đang nhận live events' : statusLabels[sourceStatus],
+        description: `Nguồn bên ngoài hoặc live simulator gọi HTTP gateway.${lastEvent}`,
+      } };
+    }
     const probe = probedNodes[item.id];
     if (!probe) return item;
     const value = health[probe];
     const status = typeof value === 'boolean' ? (value ? 'healthy' : 'unhealthy') : item.data.status;
     return { ...item, data: { ...item.data, health: status } };
-  }), [health, nodes]);
+  }), [health, liveSource, nodes]);
   const selectedNode = visibleNodes.find(item => item.id === selectedNodeId);
   const selectedStatus = selectedNode?.data.health || selectedNode?.data.status || 'documented';
 
@@ -155,6 +183,7 @@ export default function ArchitectureDiagram({ health = {}, lastChecked = null })
       <span><i style={{ background: statusColors.planned }} /> Chưa tích hợp</span>
       <span><i className="legend-diamond" style={{ borderColor: statusColors.inactive }} /> Service có mặt, flow chưa cấu hình</span>
       <span><i className="legend-diamond" style={{ borderColor: statusColors.ondemand }} /> On-demand</span>
+      <span><i style={{ background: statusColors.idle }} /> Configured · idle</span>
       {lastChecked && <span>Kiểm tra lúc {lastChecked.toLocaleTimeString('vi-VN')}</span>}
     </div>
     <p className="architecture-contract-note">Đường nối thể hiện integration contract trong code; không khẳng định event đang chảy tại thời điểm xem. Nét đứt là on-demand hoặc chưa cấu hình.</p>
@@ -164,7 +193,7 @@ export default function ArchitectureDiagram({ health = {}, lastChecked = null })
         <small>{selectedNode.data.sublabel}</small>
       </div>
       <p>{selectedNode.data.description}</p>
-      <span style={{ color: statusColors[selectedStatus] }}>{statusLabels[selectedStatus]}</span>
+      <span style={{ color: statusColors[selectedStatus] }}>{selectedNode.data.statusText || statusLabels[selectedStatus]}</span>
       <button type="button" aria-label="Đóng chi tiết thành phần" onClick={() => setSelectedNodeId(null)}>×</button>
     </section>}
     <div className="architecture-flow" style={{ height: viewId === 'all' ? 900 : 680 }}>

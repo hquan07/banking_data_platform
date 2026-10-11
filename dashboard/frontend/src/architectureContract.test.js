@@ -24,6 +24,7 @@ test('architecture topology has unique nodes, edges and valid endpoints', () => 
 
 test('architecture topology preserves required deployed data flows', () => {
   const requiredEdges = [
+    'transfer-source->live-ingestion', 'live-ingestion->kafka',
     'kafka->backend', 'kafka->retry', 'retry->kafka',
     'fraud-engine->kafka', 'benchmark-processor->kafka', 'benchmark-graph-processor->kafka',
     'backend->redis', 'postgres->batch-dq', 'batch-dq->minio', 'minio->batch-dq',
@@ -33,14 +34,14 @@ test('architecture topology preserves required deployed data flows', () => {
   for (const required of requiredEdges) assert.ok(edgeKeys.has(required), `missing ${required}`);
 });
 
-test('unconfigured integrations cannot appear as active flows', () => {
+test('on-demand and unconfigured integrations cannot appear as active flows', () => {
   const nodes = Object.fromEntries(ARCHITECTURE_NODES.map(node => [node.id, node]));
-  assert.equal(nodes['transfer-source'].status, 'planned');
+  assert.equal(nodes['transfer-source'].status, 'idle');
   assert.equal(nodes.debezium.status, 'inactive');
   assert.equal(nodes.superset.status, 'inactive');
-  const liveSourceEdge = ARCHITECTURE_EDGES.find(item => `${item.source}->${item.target}` === 'transfer-source->kafka');
-  assert.equal(liveSourceEdge.state, 'planned');
-  assert.match(liveSourceEdge.label, /chưa cấu hình/);
+  const liveSourceEdge = ARCHITECTURE_EDGES.find(item => `${item.source}->${item.target}` === 'transfer-source->live-ingestion');
+  assert.equal(liveSourceEdge.state, 'ondemand');
+  assert.match(liveSourceEdge.label, /idle/);
   for (const key of ['postgres->debezium', 'debezium->kafka', 'postgres->superset', 'clickhouse->superset']) {
     const edge = ARCHITECTURE_EDGES.find(item => `${item.source}->${item.target}` === key);
     assert.equal(edge.state, 'inactive');

@@ -7,7 +7,8 @@ export const ARCHITECTURE_VIEWS = [
 
 export const ARCHITECTURE_NODES = [
   { id: 'payment-producer', label: 'Dataset catalog + replay', sublabel: 'Opt-in benchmark source', description: 'Profile và replay DS1, DS3, DS4 vào benchmark-events.', icon: 'database', color: '#10b981', status: 'ondemand' },
-  { id: 'transfer-source', label: 'Live event sources', sublabel: 'Chưa cấu hình', description: 'Chưa có nguồn payment-events hoặc transfer-events bên ngoài được kết nối.', icon: 'network', color: '#f59e0b', status: 'planned' },
+  { id: 'transfer-source', label: 'External / demo sources', sublabel: 'On-demand · idle', description: 'Nguồn bên ngoài hoặc live simulator gọi HTTP gateway; idle không đồng nghĩa gateway lỗi.', icon: 'network', color: '#60a5fa', status: 'idle' },
+  { id: 'live-ingestion', label: 'Live ingestion gateway', sublabel: 'HTTP contract ingress', description: 'Xác thực API key, validate payment/transfer v1 và chỉ trả accepted sau Kafka ACK.', icon: 'server', color: '#3b82f6' },
   { id: 'retry-submit', label: 'Approved retry submit', sublabel: 'On-demand operator tool', description: 'Gửi envelope đã phê duyệt vào payment-events-retry; không phải producer chạy thường trực.', icon: 'retry', color: '#64748b', status: 'ondemand' },
   { id: 'user', label: 'Dashboard user', sublabel: 'Web client', description: 'Người dùng truy cập giao diện và case management.', icon: 'user', color: '#3b82f6' },
   { id: 'retry', label: 'Payment retry worker', sublabel: 'Retry consumer + producer', description: 'Đọc payment-events-retry rồi phát lại payment-events hoặc chuyển payment-events-dlq.', icon: 'retry', color: '#3b82f6' },
@@ -37,7 +38,7 @@ export const ARCHITECTURE_NODES = [
 export const ARCHITECTURE_LAYOUTS = {
   realtime: {
     'payment-producer': [0, 0], 'transfer-source': [300, 0], 'retry-submit': [600, 0], user: [1200, 0],
-    retry: [150, 155], kafka: [600, 155], frontend: [1200, 155],
+    retry: [0, 155], 'live-ingestion': [300, 155], kafka: [600, 155], frontend: [1200, 155],
     'spark-payment': [0, 340], 'fraud-engine': [300, 340], 'benchmark-processor': [600, 340],
     'live-graph-processor': [900, 340], backend: [1200, 340], 'benchmark-graph-processor': [900, 515],
     postgres: [0, 690], clickhouse: [300, 690], redis: [600, 690], neo4j: [900, 690], minio: [1200, 690],
@@ -47,14 +48,14 @@ export const ARCHITECTURE_LAYOUTS = {
     postgres: [0, 210], 'batch-dq': [330, 210], minio: [660, 210], clickhouse: [990, 210],
   },
   serving: {
-    kafka: [0, 0], backend: [300, 0], frontend: [600, 0], user: [900, 0],
+    'live-ingestion': [0, 0], kafka: [240, 0], backend: [480, 0], frontend: [720, 0], user: [960, 0],
     postgres: [0, 210], clickhouse: [240, 210], redis: [480, 210], neo4j: [720, 210], minio: [960, 210],
     'kafka-exporter': [0, 420], prometheus: [300, 420], grafana: [600, 420],
     debezium: [0, 630], superset: [600, 630],
   },
   all: {
     'payment-producer': [0, 0], 'transfer-source': [300, 0], 'retry-submit': [600, 0], user: [1200, 0],
-    retry: [150, 150], kafka: [600, 150], frontend: [1200, 150],
+    retry: [0, 150], 'live-ingestion': [300, 150], kafka: [600, 150], frontend: [1200, 150],
     'spark-payment': [0, 320], 'fraud-engine': [300, 320], 'benchmark-processor': [600, 320],
     'live-graph-processor': [900, 320], backend: [1200, 320], airflow: [0, 490], 'batch-dq': [300, 490],
     'spark-cluster': [600, 490], 'benchmark-graph-processor': [900, 490],
@@ -69,7 +70,8 @@ const edge = (source, target, label, color, options = {}) => ({
 
 export const ARCHITECTURE_EDGES = [
   edge('payment-producer', 'kafka', 'benchmark-events', '#10b981', { state: 'ondemand' }),
-  edge('transfer-source', 'kafka', 'payment + transfer · chưa cấu hình', '#f59e0b', { state: 'planned' }),
+  edge('transfer-source', 'live-ingestion', 'HTTP payment + transfer · idle', '#60a5fa', { state: 'ondemand' }),
+  edge('live-ingestion', 'kafka', 'validated events + Kafka ACK', '#3b82f6'),
   edge('retry-submit', 'kafka', 'payment-events-retry', '#64748b', { state: 'ondemand' }),
   edge('kafka', 'retry', 'payment-events-retry', '#ef4444'),
   edge('retry', 'kafka', 'payment / DLQ', '#ef4444', { sourceSide: 'bottom', targetSide: 'bottom' }),

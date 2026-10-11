@@ -81,11 +81,12 @@ test('authenticated analytics and architecture views render end to end', async (
   await expect(page.getByText('Spark fraud engine')).toBeVisible();
   await expect(page.getByText('Benchmark processor')).toBeVisible();
   await expect(page.getByText('FastAPI backend')).toBeVisible();
-  await page.getByText('Live event sources', { exact: true }).click();
+  await expect(page.getByTestId('rf__node-live-ingestion').getByText('Live ingestion gateway', { exact: true })).toBeVisible();
+  await page.getByTestId('rf__node-transfer-source').getByText('External / demo sources', { exact: true }).click();
   const componentDetail = page.getByRole('region', { name: 'Chi tiết thành phần' });
-  await expect(componentDetail).toContainText('Chưa có nguồn payment-events hoặc transfer-events bên ngoài được kết nối.');
-  await expect(componentDetail).toContainText('Chưa tích hợp');
-  await expect(page.getByText('payment + transfer · chưa cấu hình')).toBeVisible();
+  await expect(componentDetail).toContainText('Nguồn bên ngoài hoặc live simulator gọi HTTP gateway.');
+  await expect(componentDetail).toContainText(/Đã cấu hình|Đang nhận live events/);
+  await expect(page.getByText(/HTTP payment \+ transfer · (idle|streaming)/)).toBeVisible();
   await componentDetail.getByRole('button', { name: 'Đóng chi tiết thành phần' }).click();
   await expect(componentDetail).toHaveCount(0);
 
@@ -102,10 +103,12 @@ test('authenticated analytics and architecture views render end to end', async (
   await expect(page.getByText('Grafana')).toBeVisible();
   await expect(page.getByText('Debezium Connect')).toBeVisible();
   await expect(page.getByText('Apache Superset')).toBeVisible();
+  await expect(page.getByTestId('rf__node-live-ingestion').getByText('Live ingestion gateway', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Toàn bộ' }).click();
   await expect(page.getByRole('button', { name: 'Toàn bộ' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText(/Toàn bộ topology; dùng các view chuyên biệt/)).toBeVisible();
   await expect(page.getByText(/Đường nối thể hiện integration contract trong code/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Runtime dependencies', level: 2 })).toBeVisible();
+  await expect(page.getByText('Live Ingestion', { exact: true })).toBeVisible();
 });
