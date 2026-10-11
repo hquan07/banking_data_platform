@@ -36,6 +36,7 @@ from api.users import router as users_router
 from api.config import router as config_router
 from api.datasets import router as datasets_router
 from api.operations import router as operations_router
+from api.runs import router as runs_router
 
 import logging
 from pythonjsonlogger import jsonlogger
@@ -79,7 +80,7 @@ async def lifespan(app: FastAPI):
     if pg_conn:
         try:
             sql_dir = os.path.join(os.path.dirname(__file__), "sql")
-            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql", "p1_dq_results.sql", "p1_trace_context.sql", "dataset_benchmark.sql", "dataset_model_candidates.sql", "p2_runtime_observability.sql"):
+            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql", "p1_dq_results.sql", "p1_trace_context.sql", "dataset_benchmark.sql", "dataset_model_candidates.sql", "p2_runtime_observability.sql", "p2_run_control.sql"):
                 migration_path = os.path.join(sql_dir, migration_name)
                 if not os.path.exists(migration_path):
                     continue
@@ -351,6 +352,7 @@ app.include_router(users_router)
 app.include_router(config_router)
 app.include_router(datasets_router)
 app.include_router(operations_router)
+app.include_router(runs_router)
 
 
 # =============================================
