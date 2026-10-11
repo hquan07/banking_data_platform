@@ -6,6 +6,7 @@
   "required": ["schema_version", "event_id", "rule", "risk_score"],
   "properties": {
     "schema_version": {"const": 1},
+    "run_id": {"type": ["string", "null"], "format": "uuid"},
     "event_id": {"type": "string", "minLength": 1, "maxLength": 160},
     "trace_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 120},
     "dataset_id": {"type": ["string", "null"]},

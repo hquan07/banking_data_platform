@@ -76,12 +76,23 @@ services:
       - DATASET_MAX_EVENTS=${DATASET_MAX_EVENTS:-0}
       - DATASET_START_ROW=${DATASET_START_ROW:-0}
       - DATASET_MAX_IN_FLIGHT=${DATASET_MAX_IN_FLIGHT:-500}
+      - DATASET_CONTROL_INTERVAL=${DATASET_CONTROL_INTERVAL:-100}
+      - PIPELINE_RUN_ID=${PIPELINE_RUN_ID:-}
+      - DATASET_VERSION=${DATASET_VERSION:-}
+      - RUN_OWNER_USERNAME=${RUN_OWNER_USERNAME:-admin}
+      - POSTGRES_HOST=banking_postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     command: ["python", "kafka/producers/dataset_replay.py"]
     volumes:
       - ./datasets/raw:/workspace/datasets/raw:ro
     depends_on:
       kafka_topics_init:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     networks:
       - data_network
 

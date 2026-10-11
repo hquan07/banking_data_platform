@@ -10,10 +10,12 @@ SPEC.loader.exec_module(GRAPH_MODULE)
 graph_record = GRAPH_MODULE.graph_record
 build_sequence_alert = GRAPH_MODULE.build_sequence_alert
 sequence_alerts = GRAPH_MODULE.sequence_alerts
+RUN_ID = "11111111-1111-4111-8111-111111111111"
 
 
 def _event(tx_type="TRANSFER", label=False):
     return {
+        "run_id": RUN_ID,
         "event_id": "ds3_paysim:10",
         "trace_id": "ds3_paysim:10",
         "dataset_id": "ds3_paysim",
@@ -30,8 +32,8 @@ def _event(tx_type="TRANSFER", label=False):
 
 def test_graph_record_uses_isolated_synthetic_account_ids():
     record = graph_record(_event())
-    assert record["origin_id"] == "ds3_paysim:C1"
-    assert record["destination_id"] == "ds3_paysim:C2"
+    assert record["origin_id"] == f"{RUN_ID}:ds3_paysim:C1"
+    assert record["destination_id"] == f"{RUN_ID}:ds3_paysim:C2"
     assert record["relative_step"] == 7
     assert record["source_row_number"] == 10
 
@@ -49,6 +51,7 @@ def test_label_change_does_not_change_sequence_alert():
     first = build_sequence_alert(transfer, cashout)
     second = build_sequence_alert(transfer, changed)
     assert first == second
+    assert first["run_id"] == RUN_ID
     assert first["rule"] == "TRANSFER_CASHOUT_SEQUENCE"
     assert first["entity_type"] == "benchmark_sequence"
     assert first["evidence"]["participant_linked"] is False

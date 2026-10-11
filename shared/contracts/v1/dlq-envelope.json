@@ -9,6 +9,7 @@
   ],
   "properties": {
     "schema_version": {"const": 1},
+    "run_id": {"type": "string", "format": "uuid"},
     "contract": {"enum": ["payment", "transfer", "benchmark", "alert", "payment_retry"]},
     "contract_version": {"type": "integer", "minimum": 1},
     "reason": {"type": "string", "pattern": "^[a-z0-9_]+$", "maxLength": 120},

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from typing import Any
+from uuid import UUID
 
 from shared.contract_error import ContractError
 
@@ -68,4 +69,15 @@ def normalize_benchmark_event(event: dict[str, Any]) -> dict[str, Any]:
         "privacy_preserving_synthetic",
     }:
         _reject(event, "invalid_source_kind")
+    return result
+
+
+def require_benchmark_run(event: dict[str, Any]) -> dict[str, Any]:
+    """Require the additive run identity used by durable replay consumers."""
+    result = normalize_benchmark_event(event)
+    run_id = result.get("run_id")
+    try:
+        result["run_id"] = str(UUID(run_id))
+    except (TypeError, ValueError, AttributeError):
+        _reject(event, "invalid_run_id")
     return result

@@ -11,7 +11,7 @@ from typing import Any
 from kafka import KafkaConsumer, KafkaProducer, TopicPartition
 from kafka.structs import OffsetAndMetadata
 
-from shared.benchmark_contract import normalize_benchmark_event
+from shared.benchmark_contract import require_benchmark_run
 from shared.contract_error import build_dlq_envelope
 from shared.processor_heartbeat import ProcessorHeartbeat
 
@@ -32,12 +32,13 @@ def graph_record(event: dict[str, Any]) -> dict[str, Any] | None:
     if source_row_number < 0:
         raise ValueError("invalid_paysim_source_row")
     return {
+        "run_id": event["run_id"],
         "event_id": event["event_id"],
         "trace_id": event["trace_id"],
         "dataset_id": event["dataset_id"],
-        "origin_id": f"{event['dataset_id']}:{origin}",
+        "origin_id": f"{event['run_id']}:{event['dataset_id']}:{origin}",
         "origin_display_id": origin,
-        "destination_id": f"{event['dataset_id']}:{destination}",
+        "destination_id": f"{event['run_id']}:{event['dataset_id']}:{destination}",
         "destination_display_id": destination,
         "source_row_number": source_row_number,
         "transaction_type": payload["transaction_type"],
@@ -48,11 +49,17 @@ def graph_record(event: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def build_sequence_alert(transfer: dict[str, Any], cashout: dict[str, Any]) -> dict[str, Any]:
+    if transfer["run_id"] != cashout["run_id"]:
+        raise ValueError("cross_run_sequence")
     source_ids = [transfer["event_id"], cashout["event_id"]]
     digest = hashlib.sha256(":".join(source_ids).encode("utf-8")).hexdigest()
-    sequence_id = f"ds3_paysim:rows:{transfer['source_row_number']}-{cashout['source_row_number']}"
+    sequence_id = (
+        f"{transfer['run_id']}:ds3_paysim:rows:"
+        f"{transfer['source_row_number']}-{cashout['source_row_number']}"
+    )
     return {
         "schema_version": 1,
+        "run_id": transfer["run_id"],
         "event_id": f"benchmark-sequence:{digest}",
         "trace_id": cashout["trace_id"],
         "dataset_id": "ds3_paysim",
@@ -141,6 +148,7 @@ class BenchmarkGraph:
                           destination.provenance = 'synthetic_simulation'
             MERGE (origin)-[event:BENCHMARK_TRANSACTION {event_id: record.event_id}]->(destination)
             SET event.trace_id = record.trace_id,
+                event.run_id = record.run_id,
                 event.transaction_type = record.transaction_type,
                 event.amount = record.amount,
                 event.relative_step = record.relative_step,
@@ -169,11 +177,13 @@ class BenchmarkGraph:
             MATCH (origin:BenchmarkAccount)-[other:BENCHMARK_TRANSACTION]->
                   (destination:BenchmarkAccount)
             WHERE other.transaction_type = current.counterpart_type
+              AND other.run_id = current.run_id
               AND other.source_row_number = current.counterpart_row
               AND other.relative_step = current.relative_step
               AND abs(other.amount - current.amount) <= 0.01
             RETURN current,
                    {
+                       run_id: other.run_id,
                        event_id: other.event_id,
                        trace_id: other.trace_id,
                        origin_display_id: origin.display_id,
@@ -217,7 +227,7 @@ def run_consumer() -> None:
             for topic_partition, messages in polled.items():
                 for message in messages:
                     try:
-                        event = normalize_benchmark_event(json.loads(message.value.decode("utf-8")))
+                        event = require_benchmark_run(json.loads(message.value.decode("utf-8")))
                         record = graph_record(event)
                         if record is not None:
                             records.append(record)

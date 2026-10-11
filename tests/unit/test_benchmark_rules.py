@@ -54,6 +54,7 @@ def test_ds1_is_not_scored_without_calibrated_model():
 
 def test_ground_truth_cannot_change_rules_or_alert_identity():
     event = {
+        "run_id": "11111111-1111-4111-8111-111111111111",
         "event_id": "ds3_paysim:10",
         "trace_id": "ds3_paysim:10",
         "dataset_id": "ds3_paysim",
@@ -71,5 +72,5 @@ def test_ground_truth_cannot_change_rules_or_alert_identity():
     second = evaluate_benchmark_payload(changed["dataset_id"], changed["payload"])
     assert first == second
     alert = build_alert(event, first[0])
-    assert alert["entity_id"] == "C1"
+    assert alert["entity_id"] == "11111111-1111-4111-8111-111111111111:C1"
     assert alert["entity_type"] == "simulated_account"

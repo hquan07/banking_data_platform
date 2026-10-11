@@ -12,7 +12,7 @@ from kafka import KafkaConsumer, KafkaProducer, TopicPartition
 from kafka.structs import OffsetAndMetadata
 
 from fraud.rules.benchmark_rules import EVALUATOR_VERSION, evaluate_benchmark_payload
-from shared.benchmark_contract import normalize_benchmark_event
+from shared.benchmark_contract import require_benchmark_run
 from shared.contract_error import build_dlq_envelope
 from shared.processor_heartbeat import ProcessorHeartbeat
 
@@ -20,7 +20,7 @@ from shared.processor_heartbeat import ProcessorHeartbeat
 def build_alert(event: dict[str, Any], signal: dict[str, Any]) -> dict[str, Any]:
     payload = event["payload"]
     if event["dataset_id"] == "ds3_paysim":
-        entity_id = payload["participant_ids"]["origin"]
+        entity_id = f"{event['run_id']}:{payload['participant_ids']['origin']}"
         entity_type = "simulated_account"
         amount = payload.get("amount", 0)
         account_id = entity_id
@@ -31,6 +31,7 @@ def build_alert(event: dict[str, Any], signal: dict[str, Any]) -> dict[str, Any]
         account_id = None
     return {
         "schema_version": 1,
+        "run_id": event["run_id"],
         "event_id": event["event_id"],
         "trace_id": event["trace_id"],
         "dataset_id": event["dataset_id"],
@@ -46,7 +47,7 @@ def build_alert(event: dict[str, Any], signal: dict[str, Any]) -> dict[str, Any]
     }
 
 
-def persist_evaluation(connection: Any, event: dict[str, Any], signals: list[dict[str, Any]]) -> None:
+def persist_evaluation(connection: Any, event: dict[str, Any], signals: list[dict[str, Any]]) -> bool:
     event_time = event["event_time"]
     provenance = event["provenance"]
     max_score = max((signal["risk_score"] for signal in signals), default=0)
@@ -55,14 +56,14 @@ def persist_evaluation(connection: Any, event: dict[str, Any], signals: list[dic
         cursor.execute(
             """
             INSERT INTO benchmark_events
-                (event_id, trace_id, dataset_id, source_row_id, event_type,
+                (run_id, event_id, trace_id, dataset_id, source_row_id, event_type,
                  relative_time_value, relative_time_unit, payload,
                  ground_truth_is_fraud, source_file, source_kind)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
-            ON CONFLICT (event_id) DO NOTHING
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+            ON CONFLICT (run_id, event_id) DO NOTHING
             """,
             (
-                event["event_id"], event["trace_id"], event["dataset_id"],
+                event["run_id"], event["event_id"], event["trace_id"], event["dataset_id"],
                 event["source_row_id"], event["event_type"], event_time["value"],
                 event_time["unit"], json.dumps(event["payload"]),
                 event["ground_truth"]["is_fraud"], provenance["source_file"],
@@ -72,16 +73,30 @@ def persist_evaluation(connection: Any, event: dict[str, Any], signals: list[dic
         cursor.execute(
             """
             INSERT INTO benchmark_evaluations
-                (event_id, dataset_id, evaluator_version, predicted_fraud,
+                (run_id, event_id, dataset_id, evaluator_version, predicted_fraud,
                  max_score, triggered_rules)
-            VALUES (%s, %s, %s, %s, %s, %s::jsonb)
-            ON CONFLICT (event_id, evaluator_version) DO NOTHING
+            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+            ON CONFLICT (run_id, event_id, evaluator_version) DO NOTHING
+            RETURNING evaluation_id
             """,
             (
-                event["event_id"], event["dataset_id"], EVALUATOR_VERSION,
+                event["run_id"], event["event_id"], event["dataset_id"], EVALUATOR_VERSION,
                 bool(signals), max_score, json.dumps(rules),
             ),
         )
+        inserted = cursor.fetchone() is not None
+        if inserted:
+            cursor.execute(
+                """
+                INSERT INTO pipeline_run_counters (run_id, counter_name, counter_value)
+                VALUES (%s, 'evaluated', 1)
+                ON CONFLICT (run_id, counter_name) DO UPDATE SET
+                    counter_value = pipeline_run_counters.counter_value + 1,
+                    updated_at = NOW()
+                """,
+                (event["run_id"],),
+            )
+        return inserted
 
 
 def run_consumer() -> None:
@@ -107,7 +122,7 @@ def run_consumer() -> None:
         for message in consumer:
             source = {"topic": message.topic, "partition": message.partition, "offset": message.offset}
             try:
-                event = normalize_benchmark_event(json.loads(message.value.decode("utf-8")))
+                event = require_benchmark_run(json.loads(message.value.decode("utf-8")))
                 signals = evaluate_benchmark_payload(event["dataset_id"], event["payload"])
                 persist_evaluation(connection, event, signals)
                 connection.commit()

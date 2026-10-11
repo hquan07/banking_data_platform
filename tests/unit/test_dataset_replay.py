@@ -1,6 +1,7 @@
 import json
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 
@@ -12,25 +13,31 @@ SPEC = importlib.util.spec_from_file_location("dataset_replay_under_test", REPLA
 REPLAY_MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REPLAY_MODULE)
 replay = REPLAY_MODULE.replay
+ReplayCancelled = REPLAY_MODULE.ReplayCancelled
+RUN_ID = "11111111-1111-4111-8111-111111111111"
 
 
 class FakeFuture:
-    def __init__(self):
+    def __init__(self, topic, offset):
         self.awaited = False
+        self.metadata = SimpleNamespace(topic=topic, partition=0, offset=offset)
 
     def get(self, timeout):
         self.awaited = True
-        return self
+        return self.metadata
 
 
 class FakeProducer:
     def __init__(self):
         self.messages = []
         self.futures = []
+        self.offsets = {}
 
     def send(self, topic, key, value):
         self.messages.append((topic, key.decode(), json.loads(value)))
-        future = FakeFuture()
+        offset = self.offsets.get(topic, 0)
+        self.offsets[topic] = offset + 1
+        future = FakeFuture(topic, offset)
         self.futures.append(future)
         return future
 
@@ -53,7 +60,7 @@ def test_replay_publishes_valid_rows_and_routes_invalid_rows_to_dlq(tmp_path):
     _write_ds1(raw_dir)
     producer = FakeProducer()
 
-    result = replay(producer, "ds1_creditcard", raw_dir, rate=0)
+    result = replay(producer, "ds1_creditcard", raw_dir, RUN_ID, rate=0)
 
     assert result["dataset_id"] == "ds1_creditcard"
     assert result["start_row"] == 0
@@ -63,7 +70,8 @@ def test_replay_publishes_valid_rows_and_routes_invalid_rows_to_dlq(tmp_path):
     assert result["elapsed_seconds"] >= 0
     assert result["observed_rate_eps"] >= 0
     assert producer.messages[0][0] == "benchmark-events"
-    assert producer.messages[0][1] == "ds1_creditcard:0"
+    assert producer.messages[0][1] == f"{RUN_ID}:ds1_creditcard:0"
+    assert producer.messages[0][2]["run_id"] == RUN_ID
     assert producer.messages[1][0] == "benchmark-events-dlq"
     assert producer.messages[1][2]["source"] == {
         "topic": "dataset-replay", "partition": None, "offset": 1,
@@ -77,10 +85,13 @@ def test_replay_honors_stable_start_row_and_limit(tmp_path):
     _write_ds1(raw_dir)
     producer = FakeProducer()
 
-    result = replay(producer, "ds1_creditcard", raw_dir, rate=0, start_row=1, max_events=1)
+    result = replay(
+        producer, "ds1_creditcard", raw_dir, RUN_ID,
+        rate=0, start_row=1, max_events=1,
+    )
 
     assert result["scanned"] == 1
-    assert producer.messages[0][1] == "ds1_creditcard:1"
+    assert producer.messages[0][1] == f"{RUN_ID}:ds1_creditcard:1"
 
 
 def test_replay_bounds_unacknowledged_sends(tmp_path):
@@ -88,6 +99,54 @@ def test_replay_bounds_unacknowledged_sends(tmp_path):
     _write_ds1(raw_dir)
     producer = FakeProducer()
 
-    replay(producer, "ds1_creditcard", raw_dir, rate=0, max_in_flight=1)
+    replay(producer, "ds1_creditcard", raw_dir, RUN_ID, rate=0, max_in_flight=1)
 
     assert all(future.awaited for future in producer.futures)
+
+
+class FakeController:
+    def __init__(self, cancel=False, cancel_on_check=1):
+        self.cancel = cancel
+        self.cancel_on_check = cancel_on_check
+        self.progress = []
+        self.checks = 0
+
+    def record_progress(self, acknowledgements):
+        self.progress.extend(acknowledgements)
+
+    def await_runnable(self):
+        self.checks += 1
+        if self.cancel and self.checks >= self.cancel_on_check:
+            raise ReplayCancelled(RUN_ID)
+
+
+def test_replay_checkpoints_offsets_and_honors_cancellation(tmp_path):
+    raw_dir = tmp_path / "raw"
+    _write_ds1(raw_dir)
+    controller = FakeController(cancel=True)
+
+    result = replay(
+        FakeProducer(), "ds1_creditcard", raw_dir, RUN_ID, rate=0,
+        controller=controller, control_interval=1,
+    )
+
+    assert result["cancelled"] is True
+    assert result["scanned"] == 1
+    assert controller.checks == 1
+    assert controller.progress[0]["source_row"] == 0
+    assert controller.progress[0]["outcome"] == "published"
+
+
+def test_replay_honors_cancellation_at_final_control_check(tmp_path):
+    raw_dir = tmp_path / "raw"
+    _write_ds1(raw_dir)
+    controller = FakeController(cancel=True)
+
+    result = replay(
+        FakeProducer(), "ds1_creditcard", raw_dir, RUN_ID, rate=0,
+        max_events=1, controller=controller, control_interval=100,
+    )
+
+    assert result["cancelled"] is True
+    assert result["scanned"] == 1
+    assert controller.checks == 1

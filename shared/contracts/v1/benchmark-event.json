@@ -9,6 +9,7 @@
   ],
   "properties": {
     "schema_version": {"const": 1},
+    "run_id": {"type": "string", "format": "uuid"},
     "event_id": {"type": "string", "minLength": 1, "maxLength": 120},
     "trace_id": {"type": "string", "minLength": 1, "maxLength": 120},
     "dataset_id": {"enum": ["ds1_creditcard", "ds3_paysim", "ds4_baf"]},

@@ -32,7 +32,7 @@ class RunCreate(BaseModel):
     dataset_hash: str = Field(..., pattern=r"^[a-f0-9]{64}$")
     contract_version: int = Field(..., ge=1)
     evaluator_version: str = Field(..., min_length=1, max_length=120)
-    requested_rate: float = Field(..., gt=0, le=100000)
+    requested_rate: float = Field(..., ge=0, le=100000)
     requested_start_offset: int | None = Field(None, ge=0)
     requested_end_offset: int | None = Field(None, ge=0)
 

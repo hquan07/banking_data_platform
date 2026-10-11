@@ -7,7 +7,7 @@ from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 
 from datasets.schema_mapping import DS1_FEATURES, map_ds1
 from shared.alert_contract import normalize_alert_event
-from shared.benchmark_contract import normalize_benchmark_event
+from shared.benchmark_contract import normalize_benchmark_event, require_benchmark_run
 from shared.contract_error import ContractError, build_dlq_envelope, payload_fingerprint
 from shared.payment_contract import normalize_payment_event
 from shared.transfer_contract import normalize_transfer_event
@@ -76,10 +76,23 @@ def test_runtime_normalizers_publish_schema_valid_events():
 def test_alert_validator_and_schema_have_matching_common_fields():
     alert = normalize_alert_event({
         "schema_version": 1, "event_id": "alert-1", "trace_id": "trace-1",
+        "run_id": "11111111-1111-4111-8111-111111111111",
         "rule": "LARGE_TRANSACTION", "risk_score": 80, "risk_level": "HIGH",
         "decision": "REVIEW", "amount": 12000,
     })
     validate("alert-envelope.json", alert)
+
+
+def test_benchmark_consumers_require_a_uuid_run_id():
+    row = {"Time": 42, "Amount": 19.95, "Class": 1}
+    row.update({name: index / 10 for index, name in enumerate(DS1_FEATURES)})
+    benchmark = map_ds1(row, 7)
+
+    with pytest.raises(ContractError, match="invalid_run_id"):
+        require_benchmark_run(benchmark)
+
+    benchmark["run_id"] = "11111111-1111-4111-8111-111111111111"
+    assert require_benchmark_run(benchmark)["run_id"] == benchmark["run_id"]
 
 
 def test_contract_error_and_dlq_envelope_never_copy_sensitive_payload():

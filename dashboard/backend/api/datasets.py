@@ -63,7 +63,8 @@ def get_dataset_performance(current_user: dict = Depends(get_current_user)):
                        count(*) FILTER (WHERE NOT v.predicted_fraud AND NOT e.ground_truth_is_fraud) AS tn,
                        count(*) FILTER (WHERE NOT v.predicted_fraud AND e.ground_truth_is_fraud) AS fn
                 FROM benchmark_events e
-                JOIN benchmark_evaluations v ON v.event_id = e.event_id
+                JOIN benchmark_evaluations v
+                  ON v.run_id = e.run_id AND v.event_id = e.event_id
                 GROUP BY e.dataset_id, v.evaluator_version
                 ORDER BY e.dataset_id, v.evaluator_version
                 """
@@ -135,11 +136,11 @@ def get_balance_anomalies(current_user: dict = Depends(get_current_user)):
             cursor.execute(
                 """
                 WITH latest_evaluation AS (
-                    SELECT DISTINCT ON (event_id)
-                           event_id, predicted_fraud, triggered_rules
+                    SELECT DISTINCT ON (run_id, event_id)
+                           run_id, event_id, predicted_fraud, triggered_rules
                     FROM benchmark_evaluations
                     WHERE dataset_id = 'ds3_paysim'
-                    ORDER BY event_id, evaluated_at DESC, evaluation_id DESC
+                    ORDER BY run_id, event_id, evaluated_at DESC, evaluation_id DESC
                 )
                 SELECT
                     count(*) AS total_events,
@@ -160,7 +161,8 @@ def get_balance_anomalies(current_user: dict = Depends(get_current_user)):
                           AND NOT e.ground_truth_is_fraud
                     )
                 FROM benchmark_events e
-                LEFT JOIN latest_evaluation v ON v.event_id = e.event_id
+                LEFT JOIN latest_evaluation v
+                  ON v.run_id = e.run_id AND v.event_id = e.event_id
                 WHERE e.dataset_id = 'ds3_paysim'
                 """
             )
@@ -346,10 +348,10 @@ def get_dataset_overview(dataset_id: str, current_user: dict = Depends(get_curre
             cursor.execute(
                 """
                 WITH latest AS (
-                    SELECT DISTINCT ON (event_id) event_id, predicted_fraud
+                    SELECT DISTINCT ON (run_id, event_id) run_id, event_id, predicted_fraud
                     FROM benchmark_evaluations
                     WHERE dataset_id = %s
-                    ORDER BY event_id, evaluated_at DESC, evaluation_id DESC
+                    ORDER BY run_id, event_id, evaluated_at DESC, evaluation_id DESC
                 ), event_metrics AS (
                     SELECT
                         count(*) AS event_count,
@@ -368,7 +370,8 @@ def get_dataset_overview(dataset_id: str, current_user: dict = Depends(get_curre
                         count(*) FILTER (WHERE NOT l.predicted_fraud AND NOT e.ground_truth_is_fraud) AS tn,
                         count(*) FILTER (WHERE NOT l.predicted_fraud AND e.ground_truth_is_fraud) AS fn
                     FROM benchmark_events e
-                    LEFT JOIN latest l ON l.event_id = e.event_id
+                    LEFT JOIN latest l
+                      ON l.run_id = e.run_id AND l.event_id = e.event_id
                     WHERE e.dataset_id = %s
                 ), alert_metrics AS (
                     SELECT count(*) AS alert_count,

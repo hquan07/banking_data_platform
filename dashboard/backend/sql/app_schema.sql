@@ -61,9 +61,8 @@ VALUES
     ('CIRCULAR_TRANSFER', 'Chuỗi chuyển tiền vòng tròn', 5000, 300, 3)
 ON CONFLICT (name) DO NOTHING;
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_alerts_event_rule
-    ON alerts (event_id, rule_name)
-    WHERE event_id IS NOT NULL;
+-- Run-aware live/benchmark uniqueness indexes are created by
+-- p2_run_aware_replay.sql after alerts.run_id exists.
 CREATE INDEX IF NOT EXISTS ix_alerts_created_at ON alerts (created_at DESC);
 CREATE INDEX IF NOT EXISTS ix_alerts_status ON alerts (status);
 CREATE INDEX IF NOT EXISTS ix_alerts_assignee ON alerts (assignee_id);

@@ -16,6 +16,7 @@ from typing import Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from uuid import UUID
 
 
 DEFAULT_GROUPS = ("benchmark-processor-v2", "benchmark-graph-v1")
@@ -138,15 +139,19 @@ def dlq_offsets() -> dict[int, int]:
     return parse_topic_offsets(output)
 
 
-def postgres_counts(dataset_id: str) -> dict[str, int]:
+def postgres_counts(dataset_id: str, run_id: str | None = None) -> dict[str, int]:
     if dataset_id not in DATASET_IDS:
         raise ValueError(f"Unsupported dataset: {dataset_id}")
+    run_filter = ""
+    if run_id is not None:
+        run_id = str(UUID(run_id))
+        run_filter = f" AND run_id = '{run_id}'"
     sql = (
         "SELECT "
-        f"(SELECT count(*) FROM benchmark_events WHERE dataset_id = '{dataset_id}'),"
+        f"(SELECT count(*) FROM benchmark_events WHERE dataset_id = '{dataset_id}'{run_filter}),"
         f"(SELECT count(*) FROM benchmark_evaluations WHERE dataset_id = '{dataset_id}' "
-        "AND evaluator_version = 'benchmark-rules-v2'),"
-        f"(SELECT count(*) FROM alerts WHERE dataset_id = '{dataset_id}');"
+        f"AND evaluator_version = 'benchmark-rules-v2'{run_filter}),"
+        f"(SELECT count(*) FROM alerts WHERE dataset_id = '{dataset_id}'{run_filter});"
     )
     output = _run([
         "docker", "exec", "banking_postgres", "sh", "-c",
@@ -297,6 +302,7 @@ def run_benchmark(args: argparse.Namespace) -> dict:
     drain_seconds = time.monotonic() - drain_started
 
     counts_after = postgres_counts(args.dataset)
+    run_counts = postgres_counts(args.dataset, producer_summary["run_id"])
     dlq_after = dlq_offsets()
     token = api_token(args.api_base_url, args.env_file)
     api_results = measure_api(args.api_base_url, api_paths, args.api_repetitions, token)
@@ -315,8 +321,8 @@ def run_benchmark(args: argparse.Namespace) -> dict:
         producer_summary.get("rejected") == 0,
         observed_rate >= args.rate * args.minimum_rate_ratio,
         all(value <= args.max_peak_lag for value in peak_lag.values()),
-        count_delta["events"] == args.events,
-        count_delta["evaluations"] == args.events,
+        run_counts["events"] == args.events,
+        run_counts["evaluations"] == args.events,
         dlq_delta == 0,
         not drain_timed_out,
         api_failures == 0,
@@ -353,6 +359,8 @@ def run_benchmark(args: argparse.Namespace) -> dict:
             "samples": lag_samples,
         },
         "postgres": {
+            "run_id": producer_summary["run_id"],
+            "run": run_counts,
             "before": counts_before,
             "after": counts_after,
             "delta": count_delta,
