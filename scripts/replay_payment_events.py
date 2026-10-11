@@ -1,7 +1,9 @@
 """Validate corrected payment JSONL and optionally publish it to Kafka.
 
-Extract raw_value from payment-events-dlq, correct invalid events in a JSONL
-file, then run this script. Keep event_id/payment_id unchanged for retries.
+Use the DLQ fingerprint and Kafka source coordinates to retrieve the original
+record from an authorized source, correct it in a JSONL file, then run this
+script. DLQ envelopes intentionally do not retain raw payloads. Keep
+event_id/payment_id unchanged for retries.
 """
 
 import argparse

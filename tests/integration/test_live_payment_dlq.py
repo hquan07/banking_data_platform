@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from shared.contract_error import payload_fingerprint
+
 
 pytestmark = pytest.mark.skipif(
     os.getenv("RUN_LIVE_E2E") != "1", reason="requires the running Docker Compose stack"
@@ -51,12 +53,17 @@ def test_malformed_and_unsupported_payment_events_reach_dlq():
             for messages in consumer.poll(timeout_ms=2000).values():
                 for message in messages:
                     value = message.value
-                    if value.get("raw_value") in payloads:
-                        assert value["validation_error"] == payloads[value["raw_value"]]
-                        assert value["source_topic"] == "payment-events"
-                        assert isinstance(value["source_partition"], int)
-                        assert isinstance(value["source_offset"], int)
-                        found.add(value["raw_value"])
+                    matching_payload = next((
+                        payload for payload in payloads
+                        if payload_fingerprint(payload) == value.get("payload_fingerprint")
+                    ), None)
+                    if matching_payload is not None:
+                        assert value["reason"] == payloads[matching_payload]
+                        assert value["source"]["topic"] == "payment-events"
+                        assert isinstance(value["source"]["partition"], int)
+                        assert isinstance(value["source"]["offset"], int)
+                        assert "raw_value" not in value
+                        found.add(matching_payload)
 
         assert found == set(payloads), f"DLQ missing {set(payloads) - found}"
     finally:

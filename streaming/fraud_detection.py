@@ -56,6 +56,7 @@ def start_fraud_engine(spark):
     # ==========================================
     large_amount_df = apply_large_amount_rule(watermarked_df)
     query_large_amount = large_amount_df \
+        .withColumn("schema_version", lit(1)) \
         .selectExpr("CAST(payment_id AS STRING) AS key", "to_json(struct(*)) AS value") \
         .writeStream \
         .outputMode("append") \
@@ -71,6 +72,7 @@ def start_fraud_engine(spark):
     velocity_df = apply_velocity_rule(watermarked_df)
 
     query_velocity = velocity_df \
+        .withColumn("schema_version", lit(1)) \
         .withColumn("rule", lit("HIGH_VELOCITY")) \
         .selectExpr("CAST(account_id AS STRING) AS key", "to_json(struct(*)) AS value") \
         .writeStream \
@@ -87,6 +89,7 @@ def start_fraud_engine(spark):
     structuring_df = apply_structuring_rule(watermarked_df)
 
     query_structuring = structuring_df \
+        .withColumn("schema_version", lit(1)) \
         .withColumn("rule", lit("STRUCTURING_SUSPICION")) \
         .selectExpr("CAST(account_id AS STRING) AS key", "to_json(struct(*)) AS value") \
         .writeStream \
@@ -115,6 +118,7 @@ def start_fraud_engine(spark):
     )
 
     query_shared_device = shared_device_df \
+        .withColumn("schema_version", lit(1)) \
         .selectExpr("CAST(account_id AS STRING) AS key", "to_json(struct(*)) AS value") \
         .writeStream \
         .outputMode("append") \

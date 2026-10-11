@@ -14,6 +14,7 @@ from typing import Any
 from kafka import KafkaProducer
 
 from datasets.readers import iter_source_rows, map_source_row
+from shared.contract_error import build_dlq_envelope
 
 
 def _send_json(producer: Any, topic: str, key: str, value: dict[str, Any]) -> Any:
@@ -57,12 +58,17 @@ def replay(
             ))
             published += 1
         except (KeyError, TypeError, ValueError) as exc:
-            pending.append(_send_json(producer, "benchmark-events-dlq", source_key, {
-                "schema_version": 1,
-                "dataset_id": dataset_id,
-                "source_row_id": str(row_number),
-                "error": str(exc),
-            }))
+            pending.append(_send_json(
+                producer,
+                "benchmark-events-dlq",
+                source_key,
+                build_dlq_envelope(
+                    exc,
+                    row,
+                    {"topic": "dataset-replay", "partition": None, "offset": row_number},
+                    contract="benchmark",
+                ),
+            ))
             rejected += 1
         if len(pending) >= max_in_flight:
             pending.popleft().get(timeout=30)

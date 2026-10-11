@@ -98,6 +98,7 @@ def test_payment_reaches_both_stores_and_fraud_topic():
                     fraud_found = fraud_found or any(
                         message.value.get("payment_id") == payment_id
                         and message.value.get("rule") == "LARGE_TRANSACTION"
+                        and message.value.get("schema_version") == 1
                         for message in messages
                     )
 

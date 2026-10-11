@@ -1,0 +1,1 @@
+{"schema_version":1,"event_id":"alert-1","trace_id":"trace-1","rule":"LARGE_TRANSACTION","risk_score":180,"risk_level":"HIGH","decision":"REVIEW"}

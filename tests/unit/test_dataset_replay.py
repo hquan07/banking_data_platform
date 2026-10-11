@@ -65,7 +65,10 @@ def test_replay_publishes_valid_rows_and_routes_invalid_rows_to_dlq(tmp_path):
     assert producer.messages[0][0] == "benchmark-events"
     assert producer.messages[0][1] == "ds1_creditcard:0"
     assert producer.messages[1][0] == "benchmark-events-dlq"
-    assert producer.messages[1][2]["source_row_id"] == "1"
+    assert producer.messages[1][2]["source"] == {
+        "topic": "dataset-replay", "partition": None, "offset": 1,
+    }
+    assert len(producer.messages[1][2]["payload_fingerprint"]) == 64
     assert all(future.awaited for future in producer.futures)
 
 

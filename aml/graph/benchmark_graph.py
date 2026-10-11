@@ -12,6 +12,7 @@ from kafka import KafkaConsumer, KafkaProducer, TopicPartition
 from kafka.structs import OffsetAndMetadata
 
 from shared.benchmark_contract import normalize_benchmark_event
+from shared.contract_error import build_dlq_envelope
 from shared.processor_heartbeat import ProcessorHeartbeat
 
 
@@ -51,6 +52,7 @@ def build_sequence_alert(transfer: dict[str, Any], cashout: dict[str, Any]) -> d
     digest = hashlib.sha256(":".join(source_ids).encode("utf-8")).hexdigest()
     sequence_id = f"ds3_paysim:rows:{transfer['source_row_number']}-{cashout['source_row_number']}"
     return {
+        "schema_version": 1,
         "event_id": f"benchmark-sequence:{digest}",
         "trace_id": cashout["trace_id"],
         "dataset_id": "ds3_paysim",
@@ -211,16 +213,27 @@ def run_consumer() -> None:
                 continue
             records = []
             offsets = {}
+            futures = []
             for topic_partition, messages in polled.items():
                 for message in messages:
-                    event = normalize_benchmark_event(json.loads(message.value.decode("utf-8")))
-                    record = graph_record(event)
-                    if record is not None:
-                        records.append(record)
+                    try:
+                        event = normalize_benchmark_event(json.loads(message.value.decode("utf-8")))
+                        record = graph_record(event)
+                        if record is not None:
+                            records.append(record)
+                    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                        futures.append(producer.send(
+                            "benchmark-events-dlq",
+                            value=json.dumps(build_dlq_envelope(
+                                exc,
+                                message.value,
+                                {"topic": message.topic, "partition": message.partition, "offset": message.offset},
+                                contract="benchmark",
+                            ), separators=(",", ":")).encode("utf-8"),
+                        ))
                 offsets[TopicPartition(topic_partition.topic, topic_partition.partition)] = (
                     OffsetAndMetadata(messages[-1].offset + 1, "")
                 )
-            futures = []
             for alert in graph.record_batch(records):
                 futures.append(producer.send(
                     "aml-events",

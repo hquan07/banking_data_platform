@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://banking.local/contracts/v1/dlq-envelope.json",
+  "title": "Dead-letter envelope v1",
+  "type": "object",
+  "required": [
+    "schema_version", "contract", "contract_version", "reason",
+    "trace_id", "payload_fingerprint", "source"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "contract": {"enum": ["payment", "transfer", "benchmark", "alert", "payment_retry"]},
+    "contract_version": {"type": "integer", "minimum": 1},
+    "reason": {"type": "string", "pattern": "^[a-z0-9_]+$", "maxLength": 120},
+    "trace_id": {"type": ["string", "null"], "maxLength": 120},
+    "payload_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source": {
+      "type": "object",
+      "required": ["topic", "partition", "offset"],
+      "properties": {
+        "topic": {"type": "string", "minLength": 1},
+        "partition": {"type": ["integer", "null"], "minimum": 0},
+        "offset": {"type": ["integer", "null"], "minimum": 0},
+        "timestamp": {"type": ["integer", "string", "null"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

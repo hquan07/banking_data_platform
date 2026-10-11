@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://banking.local/contracts/v1/benchmark-event.json",
+  "title": "Benchmark event v1",
+  "type": "object",
+  "required": [
+    "schema_version", "event_id", "trace_id", "dataset_id", "source_row_id",
+    "event_type", "event_time", "payload", "ground_truth", "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "trace_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "dataset_id": {"enum": ["ds1_creditcard", "ds3_paysim", "ds4_baf"]},
+    "source_row_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "event_type": {"enum": ["card_transaction", "mobile_money_transaction", "account_application"]},
+    "event_time": {
+      "type": "object",
+      "required": ["kind", "unit", "value", "origin"],
+      "properties": {
+        "kind": {"const": "relative"},
+        "unit": {"enum": ["seconds", "hours", "month_index"]},
+        "value": {"type": "number", "minimum": 0},
+        "origin": {"type": "null"}
+      },
+      "additionalProperties": true
+    },
+    "payload": {"type": "object", "minProperties": 1},
+    "ground_truth": {
+      "type": "object",
+      "required": ["is_fraud"],
+      "properties": {"is_fraud": {"type": "boolean"}},
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source_file", "source_kind"],
+      "properties": {
+        "source_file": {"type": "string"},
+        "source_kind": {"enum": ["anonymized_real", "synthetic_simulation", "privacy_preserving_synthetic"]}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

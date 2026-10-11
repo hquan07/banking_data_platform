@@ -1,0 +1,1 @@
+{"schema_version":1,"event_id":"event-1","trace_id":"trace-1","payment_id":"payment-1","customer_id":"customer-1","account_id":"account-1","merchant_id":"merchant-1","amount":12.34,"currency":"USD","payment_method":"CARD","channel":"ONLINE","location":"VN","device_id":"device-1","timestamp":"2026-10-07T05:00:00Z","status":"CREATED"}

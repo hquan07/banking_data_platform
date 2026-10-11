@@ -9,26 +9,28 @@ from kafka.structs import OffsetAndMetadata
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from shared.payment_contract import normalize_payment_event
+from shared.contract_error import ContractError, build_dlq_envelope
 
 
-def route_retry(payload: bytes) -> tuple[str, str | None, dict]:
+def route_retry(payload: bytes, source: dict | None = None) -> tuple[str, str | None, dict]:
     """Return destination topic, partition key and payload for one retry."""
     try:
         envelope = json.loads(payload)
         if not isinstance(envelope, dict) or envelope.get("schema_version") != 1:
-            raise ValueError("Unsupported retry envelope")
+            raise ContractError("payment_retry", 1, "unsupported_schema_version", envelope, "payment-events-retry")
         if envelope.get("approved") is not True or envelope.get("attempt") != 1:
-            raise ValueError("Retry requires explicit approval and first attempt")
+            raise ContractError("payment_retry", 1, "retry_not_approved", envelope, "payment-events-retry")
         if not isinstance(envelope.get("event"), dict):
-            raise ValueError("Retry event must be an object")
+            raise ContractError("payment_retry", 1, "invalid_retry_event", envelope, "payment-events-retry")
         event = normalize_payment_event(envelope.get("event"))
         return "payment-events", event["payment_id"], event
     except (ValueError, TypeError, KeyError, UnicodeDecodeError) as exc:
-        return "payment-events-dlq", None, {
-            "raw_value": payload.decode("utf-8", errors="replace"),
-            "validation_error": f"retry_rejected:{type(exc).__name__}",
-            "source_topic": "payment-events-retry",
-        }
+        return "payment-events-dlq", None, build_dlq_envelope(
+            exc,
+            payload,
+            source or {"topic": "payment-events-retry", "partition": None, "offset": None},
+            contract="payment_retry",
+        )
 
 
 def main():
@@ -44,7 +46,12 @@ def main():
     )
     try:
         for message in consumer:
-            topic, key, value = route_retry(message.value)
+            topic, key, value = route_retry(message.value, {
+                "topic": message.topic,
+                "partition": message.partition,
+                "offset": message.offset,
+                "timestamp": message.timestamp,
+            })
             # A replay after an acknowledgement but before this commit is safe:
             # event_id/payment_id are stable and the payment sinks are idempotent.
             producer.send(topic, key=key.encode() if key else None, value=value).get(timeout=15)

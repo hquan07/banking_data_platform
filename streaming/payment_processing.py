@@ -88,8 +88,22 @@ def process_stream(spark, heartbeat):
     parsed_df = parse_payment_stream(df)
     
     valid_df = parsed_df.filter(col("validation_error").isNull())
+    from pyspark.sql import functions as F
+
     dlq_df = parsed_df.filter(col("validation_error").isNotNull()).select(
-        to_json(struct("raw_value", "validation_error", "source_topic", "source_partition", "source_offset")).alias("value")
+        to_json(struct(
+            F.lit(1).alias("schema_version"),
+            F.lit("payment").alias("contract"),
+            F.lit(1).alias("contract_version"),
+            col("validation_error").alias("reason"),
+            col("trace_id"),
+            F.sha2(col("raw_value"), 256).alias("payload_fingerprint"),
+            struct(
+                col("source_topic").alias("topic"),
+                col("source_partition").alias("partition"),
+                col("source_offset").alias("offset"),
+            ).alias("source"),
+        )).alias("value")
     )
     
     # Write malformed events to DLQ topic

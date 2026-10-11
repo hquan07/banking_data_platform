@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://banking.local/contracts/v1/payment-event.json",
+  "title": "Payment event v1",
+  "type": "object",
+  "required": [
+    "schema_version", "event_id", "trace_id", "payment_id", "customer_id",
+    "account_id", "amount", "currency", "payment_method", "channel",
+    "timestamp", "status"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "trace_id": {"type": "string", "minLength": 1, "maxLength": 50},
+    "payment_id": {"type": "string", "minLength": 1, "maxLength": 50},
+    "customer_id": {"type": "string", "minLength": 1, "maxLength": 50},
+    "account_id": {"type": "string", "minLength": 1, "maxLength": 50},
+    "merchant_id": {"type": ["string", "null"], "maxLength": 50},
+    "amount": {"type": "number", "exclusiveMinimum": 0, "maximum": 99999999999.99, "multipleOf": 0.01},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "payment_method": {"enum": ["CARD", "BANK_TRANSFER", "QR"]},
+    "channel": {"enum": ["POS", "ONLINE", "ATM"]},
+    "location": {"type": ["string", "null"], "maxLength": 100},
+    "device_id": {"type": ["string", "null"], "maxLength": 50},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["CREATED", "PENDING", "SUCCESS", "FAILED"]}
+  },
+  "additionalProperties": true
+}

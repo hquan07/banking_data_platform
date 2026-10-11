@@ -10,6 +10,7 @@ from kafka.structs import OffsetAndMetadata
 from neo4j import GraphDatabase
 
 from shared.transfer_contract import normalize_transfer_event
+from shared.contract_error import build_dlq_envelope
 from shared.processor_heartbeat import ProcessorHeartbeat
 
 
@@ -35,6 +36,7 @@ class BankingGraph:
             ids = sorted([event["event_id"], *path["event_ids"]])
             cycle_id = "graph-" + hashlib.sha256(":/".join(ids).encode()).hexdigest()
             alerts.append({
+                "schema_version": 1,
                 "event_id": cycle_id, "trace_id": event["trace_id"],
                 "account_id": event["from_account_id"], "rule": "CIRCULAR_TRANSFER",
                 "amount": round(float(event["amount"]) + path["path_amount"], 2),
@@ -98,11 +100,13 @@ def run_consumer():
             try:
                 event = normalize_transfer_event(json.loads(message.value.decode("utf-8")))
             except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                payload = {"raw_value": message.value.decode("utf-8", errors="replace"),
-                           "validation_error": str(exc), "source": source}
+                payload = build_dlq_envelope(
+                    exc, message.value, source, contract="transfer",
+                )
                 producer.send("transfer-events-dlq", value=json.dumps(payload).encode()).get(timeout=20)
                 print(json.dumps({"event": "transfer_rejected", "source": source,
-                                  "reason": str(exc)}), flush=True)
+                                  "reason": payload["reason"],
+                                  "payload_fingerprint": payload["payload_fingerprint"]}), flush=True)
             else:
                 alerts = graph.record_transaction(event, source)
                 for alert in alerts:

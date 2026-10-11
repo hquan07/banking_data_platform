@@ -13,6 +13,7 @@ from kafka.structs import OffsetAndMetadata
 
 from fraud.rules.benchmark_rules import EVALUATOR_VERSION, evaluate_benchmark_payload
 from shared.benchmark_contract import normalize_benchmark_event
+from shared.contract_error import build_dlq_envelope
 from shared.processor_heartbeat import ProcessorHeartbeat
 
 
@@ -29,6 +30,7 @@ def build_alert(event: dict[str, Any], signal: dict[str, Any]) -> dict[str, Any]
         amount = 0
         account_id = None
     return {
+        "schema_version": 1,
         "event_id": event["event_id"],
         "trace_id": event["trace_id"],
         "dataset_id": event["dataset_id"],
@@ -118,10 +120,12 @@ def run_consumer() -> None:
                     ).get(timeout=30)
             except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
                 connection.rollback()
-                producer.send("benchmark-events-dlq", value=json.dumps({
-                    "source": source,
-                    "error": str(exc),
-                }).encode("utf-8")).get(timeout=30)
+                producer.send(
+                    "benchmark-events-dlq",
+                    value=json.dumps(build_dlq_envelope(
+                        exc, message.value, source, contract="benchmark",
+                    ), separators=(",", ":")).encode("utf-8"),
+                ).get(timeout=30)
             consumer.commit({
                 TopicPartition(message.topic, message.partition):
                     OffsetAndMetadata(message.offset + 1, "")

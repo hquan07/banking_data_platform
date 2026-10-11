@@ -30,3 +30,13 @@ def test_invalid_alert_remains_a_retryable_error():
         decode_message("fraud-events", b"not-json")
     with pytest.raises(ValueError, match="JSON object"):
         decode_message("aml-events", b"[]")
+    with pytest.raises(ValueError, match="unsupported_schema_version"):
+        decode_message("fraud-events", b'{"event_id":"a-1"}')
+
+
+def test_versioned_alert_is_validated():
+    alert = {
+        "schema_version": 1, "event_id": "a-1", "trace_id": "t-1",
+        "rule": "LARGE_TRANSACTION", "risk_score": 80,
+    }
+    assert decode_message("fraud-events", json.dumps(alert).encode()) == alert

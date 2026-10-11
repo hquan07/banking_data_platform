@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://banking.local/contracts/v1/alert-envelope.json",
+  "title": "Fraud and AML alert envelope v1",
+  "type": "object",
+  "required": ["schema_version", "event_id", "rule", "risk_score"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 160},
+    "trace_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 120},
+    "dataset_id": {"type": ["string", "null"]},
+    "payment_id": {"type": ["string", "null"]},
+    "account_id": {"type": ["string", "null"]},
+    "entity_id": {"type": ["string", "null"]},
+    "entity_type": {"type": ["string", "null"]},
+    "rule": {"type": "string", "minLength": 1, "maxLength": 160},
+    "amount": {"type": ["number", "null"]},
+    "risk_score": {"type": "number", "minimum": 0, "maximum": 100},
+    "risk_level": {"enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL", null]},
+    "decision": {"enum": ["ALLOW", "MONITOR", "REVIEW", "BLOCK", null]},
+    "timestamp": {"type": ["string", "null"], "format": "date-time"},
+    "evidence": {"type": ["object", "null"]}
+  },
+  "additionalProperties": true
+}

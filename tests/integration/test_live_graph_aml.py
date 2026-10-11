@@ -84,6 +84,7 @@ def test_cycles_and_low_amount_false_positive():
                 for messages in consumer.poll(timeout_ms=1000).values():
                     found = found or any(
                         message.value.get("rule") == "CIRCULAR_TRANSFER"
+                        and message.value.get("schema_version") == 1
                         and set(message.value.get("source_event_ids", [])) == ids
                         for message in messages
                     )

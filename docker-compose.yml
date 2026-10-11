@@ -522,8 +522,8 @@ services:
 
   dashboard_backend:
     build: 
-      context: ./dashboard/backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: dashboard/backend/Dockerfile
     container_name: banking_dashboard_backend
     restart: on-failure
     ports:

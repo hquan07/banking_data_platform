@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://banking.local/contracts/v1/transfer-event.json",
+  "title": "Transfer event v1",
+  "type": "object",
+  "required": [
+    "schema_version", "event_id", "trace_id", "from_account_id",
+    "to_account_id", "amount", "currency", "timestamp"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "trace_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "from_account_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "to_account_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "amount": {
+      "oneOf": [
+        {"type": "number", "exclusiveMinimum": 0},
+        {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$"}
+      ]
+    },
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "timestamp": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": true
+}

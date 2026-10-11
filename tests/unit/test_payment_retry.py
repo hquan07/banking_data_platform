@@ -33,4 +33,6 @@ def test_unapproved_or_malformed_retry_goes_to_dlq():
                                               "event": valid_payment()}).encode()):
         topic, key, error = route_retry(payload)
         assert (topic, key) == ("payment-events-dlq", None)
-        assert error["source_topic"] == "payment-events-retry"
+        assert error["source"]["topic"] == "payment-events-retry"
+        assert len(error["payload_fingerprint"]) == 64
+        assert "raw_value" not in error

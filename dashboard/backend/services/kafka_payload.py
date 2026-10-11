@@ -2,6 +2,8 @@
 
 import json
 
+from shared.alert_contract import normalize_alert_event
+
 
 def decode_message(topic: str, payload: bytes) -> dict | None:
     """Skip invalid stream telemetry; alert parse failures remain retryable errors."""
@@ -20,4 +22,6 @@ def decode_message(topic: str, payload: bytes) -> dict | None:
         return None
     if topic == "benchmark-events" and (not data.get("event_id") or not data.get("dataset_id")):
         return None
+    if topic in {"fraud-events", "aml-events"}:
+        return normalize_alert_event(data, topic)
     return data

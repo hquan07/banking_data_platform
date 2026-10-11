@@ -115,10 +115,17 @@ def dlq_source_snapshot(tail_per_partition):
                         continue
                     try:
                         value = json.loads(record.value)
+                        source = value.get("source")
+                        if source is None:
+                            source = {
+                                "topic": value["source_topic"],
+                                "partition": value["source_partition"],
+                                "offset": value["source_offset"],
+                            }
                         identity = (
-                            value["source_topic"],
-                            int(value["source_partition"]),
-                            int(value["source_offset"]),
+                            source["topic"],
+                            int(source["partition"]),
+                            int(source["offset"]),
                         )
                     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                         continue
