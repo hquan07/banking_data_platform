@@ -33,6 +33,20 @@ LAST_EVENT_TIMESTAMP = Gauge(
 )
 
 
+def initialize_metric_labels() -> None:
+    """Expose zero-valued bounded series before the first live event arrives."""
+    for event_type in ("payment", "transfer"):
+        for outcome in ("accepted", "validation_error", "kafka_error"):
+            INGEST_EVENTS.labels(event_type, outcome)
+        VALIDATION_FAILURES.labels(event_type)
+        KAFKA_FAILURES.labels(event_type)
+        PUBLISH_LATENCY.labels(event_type)
+        LAST_EVENT_TIMESTAMP.labels(event_type)
+
+
+initialize_metric_labels()
+
+
 class SourceState:
     def __init__(self) -> None:
         self.last_event_at: dict[str, str] = {}

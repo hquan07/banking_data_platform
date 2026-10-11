@@ -16,6 +16,15 @@ REQUIRED_PROCESSORS = (
 )
 
 
+def timestamp_seconds(value: str | None) -> float | None:
+    if not value:
+        return None
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("metric timestamp must include a timezone")
+    return parsed.astimezone(timezone.utc).timestamp()
+
+
 def processor_health_payload(
     rows: list[tuple[Any, ...]],
     *,

@@ -25,6 +25,7 @@ from services.kafka_client import (
     kafka_ready,
     manager,
 )
+from services.processor_health import load_processor_health, timestamp_seconds
 
 # API Routers
 from api.auth import router as auth_router
@@ -159,6 +160,89 @@ ALERT_CASES = Gauge("alert_cases", "Alert cases by rule, status and severity", (
 SPARK_BATCH_ROWS = Gauge("spark_last_batch_rows", "Rows in latest Spark batch", ("job",))
 SPARK_BATCH_DURATION = Gauge("spark_last_batch_duration_seconds", "Latest Spark batch duration", ("job",))
 SPARK_BATCH_COMPLETED = Gauge("spark_last_batch_completed_timestamp_seconds", "Latest Spark batch completion time", ("job",))
+PROCESSOR_UP = Gauge(
+    "banking_processor_up",
+    "Whether the latest processor instance has a current running heartbeat",
+    ("processor",),
+)
+PROCESSOR_FAILED = Gauge(
+    "banking_processor_failed",
+    "Whether the latest processor instance reports a failure",
+    ("processor",),
+)
+PROCESSOR_HEARTBEAT_AGE = Gauge(
+    "banking_processor_heartbeat_age_seconds",
+    "Age of the latest durable processor heartbeat",
+    ("processor",),
+)
+PROCESSOR_ROWS = Gauge(
+    "banking_processor_processed_rows",
+    "Rows processed by the latest processor instance",
+    ("processor",),
+)
+PROCESSOR_LAST_BATCH = Gauge(
+    "banking_processor_last_batch_timestamp_seconds",
+    "Timestamp of the latest completed processor batch or event",
+    ("processor",),
+)
+PROCESSOR_LAST_SUCCESS = Gauge(
+    "banking_processor_last_success_timestamp_seconds",
+    "Timestamp of the latest successful processor batch or event",
+    ("processor",),
+)
+PROCESSOR_CHECKPOINT_AGE = Gauge(
+    "banking_processor_checkpoint_age_seconds",
+    "Latest reported processor checkpoint age",
+    ("processor",),
+)
+DATASET_INGEST_AGE = Gauge(
+    "banking_dataset_ingest_age_seconds",
+    "Age of the most recently ingested benchmark row",
+    ("dataset",),
+)
+
+
+def refresh_processor_metrics():
+    payload = load_processor_health(pg_conn)
+    for metric in (
+        PROCESSOR_UP, PROCESSOR_FAILED, PROCESSOR_HEARTBEAT_AGE,
+        PROCESSOR_ROWS, PROCESSOR_LAST_BATCH, PROCESSOR_LAST_SUCCESS,
+        PROCESSOR_CHECKPOINT_AGE,
+    ):
+        metric.clear()
+    for processor in payload["processors"]:
+        name = processor["processor_name"]
+        status = processor["status"]
+        PROCESSOR_UP.labels(name).set(int(status == "running"))
+        PROCESSOR_FAILED.labels(name).set(int(status == "failed"))
+        PROCESSOR_ROWS.labels(name).set(processor["processed_rows"])
+        if processor["heartbeat_age_seconds"] is not None:
+            PROCESSOR_HEARTBEAT_AGE.labels(name).set(processor["heartbeat_age_seconds"])
+        last_batch = timestamp_seconds(processor.get("last_batch_at"))
+        if last_batch is not None:
+            PROCESSOR_LAST_BATCH.labels(name).set(last_batch)
+        last_success = timestamp_seconds(processor.get("last_success_at"))
+        if last_success is not None:
+            PROCESSOR_LAST_SUCCESS.labels(name).set(last_success)
+        if processor["checkpoint_age_seconds"] is not None:
+            PROCESSOR_CHECKPOINT_AGE.labels(name).set(processor["checkpoint_age_seconds"])
+
+
+def refresh_dataset_freshness_metrics():
+    with pg_conn.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT dataset_id,
+                   EXTRACT(EPOCH FROM (NOW() - MAX(ingested_at)))::double precision
+            FROM benchmark_events
+            WHERE dataset_id IN ('ds1_creditcard', 'ds3_paysim', 'ds4_baf')
+            GROUP BY dataset_id
+            """
+        )
+        rows = cursor.fetchall()
+    DATASET_INGEST_AGE.clear()
+    for dataset_id, age_seconds in rows:
+        DATASET_INGEST_AGE.labels(dataset_id).set(max(0, age_seconds))
 
 
 @app.middleware("http")
@@ -189,6 +273,11 @@ async def refresh_dq_metrics(request: Request, call_next):
                 ALERT_CASES.labels(rule, status, risk_level).set(count)
         except Exception:
             logger.exception("Could not refresh DQ metrics")
+        try:
+            refresh_processor_metrics()
+            refresh_dataset_freshness_metrics()
+        except Exception:
+            logger.exception("Could not refresh processor/freshness metrics")
         if redis_client is not None:
             try:
                 for job in ("payment_processor", "fraud_velocity"):

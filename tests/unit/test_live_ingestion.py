@@ -53,6 +53,11 @@ def test_gateway_normalizes_and_routes_canonical_events(monkeypatch):
     source_health = route_endpoint(app, "/health/source")()
     assert source_health["status"] == "streaming"
     assert source_health["event_types_seen"] == ["payment", "transfer"]
+    metrics = route_endpoint(app, "/metrics")().body.decode()
+    assert 'live_ingest_events_total{event_type="payment",status="accepted"}' in metrics
+    assert 'live_ingest_events_total{event_type="transfer",status="accepted"}' in metrics
+    assert 'live_ingest_last_event_timestamp_seconds{event_type="payment"}' in metrics
+    assert 'live_ingest_last_event_timestamp_seconds{event_type="transfer"}' in metrics
 
 
 def test_gateway_rejects_invalid_contract_before_publish(monkeypatch):
