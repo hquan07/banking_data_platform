@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir \
     kafka-python-ng==2.2.2 \
     psycopg2-binary==2.9.9 \
     clickhouse-driver==0.2.6 \
+    neo4j==5.14.1 \
     python-dotenv==1.0.1
 
 COPY scripts ./scripts
