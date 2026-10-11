@@ -103,6 +103,8 @@ test('authenticated analytics and architecture views render end to end', async (
   await expect(page.getByText('Grafana')).toBeVisible();
   await expect(page.getByText('Debezium Connect')).toBeVisible();
   await expect(page.getByText('Apache Superset')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Metrics explorer' })).toHaveAttribute('href', 'http://localhost:9090');
+  await expect(page.getByRole('link', { name: 'Operations charts' })).toHaveAttribute('href', 'http://localhost:3000');
   await expect(page.getByTestId('rf__node-live-ingestion').getByText('Live ingestion gateway', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Toàn bộ' }).click();

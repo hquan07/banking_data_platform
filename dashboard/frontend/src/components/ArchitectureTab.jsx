@@ -96,6 +96,8 @@ export default function ArchitectureTab() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const base = window._env_?.API_URL || 'http://localhost:8000';
+  const prometheusUrl = window._env_?.PROMETHEUS_URL || 'http://localhost:9090';
+  const grafanaUrl = window._env_?.GRAFANA_URL || 'http://localhost:3000';
 
   const checkHealth = useCallback(async () => {
     setLoading(true);
@@ -152,7 +154,7 @@ export default function ArchitectureTab() {
       <ArchitectureDiagram health={health} liveSource={health.live_source} lastChecked={lastChecked} />
     </Panel>
 
-    <Panel className="col-span-8" title="Runtime dependencies" subtitle="Các trạng thái bên dưới lấy trực tiếp từ /api/health/ready" action={<Badge tone={overall === 'ready' ? 'green' : 'red'}>{overall}</Badge>}>
+    <Panel className="col-span-8" title="Runtime dependencies" subtitle="Các trạng thái bên dưới lấy trực tiếp từ /api/health/ready" action={<div className="health-panel-actions"><a href={prometheusUrl} target="_blank" rel="noreferrer">Metrics explorer</a><a href={grafanaUrl} target="_blank" rel="noreferrer">Operations charts</a><Badge tone={overall === 'ready' ? 'green' : 'red'}>{overall}</Badge></div>}>
       {error && <StateMessage type="error">{error}</StateMessage>}
       <div className="service-health-grid">
         {services.map(service => {

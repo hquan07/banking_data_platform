@@ -36,3 +36,57 @@ groups:
         for: 5m
         labels: {severity: warning}
         annotations: {summary: "API 5xx rate exceeds 5 percent"}
+      - alert: SparkWorkerMissing
+        expr: banking_spark_alive_workers < 1
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Spark master reports no alive worker"
+          runbook: "docs/runbooks/pipeline-degraded.md#spark-worker-or-application-missing"
+      - alert: SparkApplicationMissing
+        expr: banking_spark_required_application_up == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Required Spark application is not active"
+          runbook: "docs/runbooks/pipeline-degraded.md#spark-worker-or-application-missing"
+      - alert: ProcessorHeartbeatStale
+        expr: banking_processor_up == 0 and banking_processor_failed == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Processor heartbeat is missing or stale"
+          runbook: "docs/runbooks/pipeline-degraded.md#processor-heartbeat-stale-or-failed"
+      - alert: ProcessorFailed
+        expr: banking_processor_failed == 1
+        for: 30s
+        labels: {severity: critical}
+        annotations:
+          summary: "Processor reported a terminal failure"
+          runbook: "docs/runbooks/pipeline-degraded.md#processor-heartbeat-stale-or-failed"
+      - alert: ProcessorCheckpointStale
+        expr: banking_processor_checkpoint_age_seconds > 300
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Processor checkpoint age exceeds five minutes"
+          runbook: "docs/runbooks/pipeline-degraded.md#checkpoint-age"
+      - alert: ProcessorRestartObserved
+        expr: changes(banking_processor_instances[15m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "A new processor instance was observed"
+          runbook: "docs/runbooks/pipeline-degraded.md#processor-restart"
+      - alert: KafkaDlqGrowth
+        expr: sum by (topic) (increase(kafka_topic_partition_current_offset{topic=~".*-dlq"}[5m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "A dead-letter topic received new records"
+          runbook: "docs/runbooks/pipeline-degraded.md#dlq-growth"
+      - alert: LiveSourceStalledAfterActivity
+        expr: sum(increase(live_ingest_events_total{status="accepted"}[30m])) > 0 and sum(increase(live_ingest_events_total{status="accepted"}[5m])) == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Recently active live source stopped delivering accepted events"
+          runbook: "docs/runbooks/pipeline-degraded.md#live-source-stalled-after-activity"

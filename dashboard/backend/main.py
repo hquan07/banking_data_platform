@@ -200,6 +200,35 @@ DATASET_INGEST_AGE = Gauge(
     "Age of the most recently ingested benchmark row",
     ("dataset",),
 )
+PROCESSOR_INSTANCES = Gauge(
+    "banking_processor_instances",
+    "Durable processor instances observed since heartbeat tracking began",
+    ("processor",),
+)
+SPARK_ALIVE_WORKERS = Gauge(
+    "banking_spark_alive_workers",
+    "Workers currently reported alive by the Spark master",
+)
+SPARK_REQUIRED_APP_UP = Gauge(
+    "banking_spark_required_application_up",
+    "Whether a required Spark streaming application is active",
+    ("application",),
+)
+REQUIRED_SPARK_APPS = ("PaymentStreamingProcessor", "FraudDetectionEngine")
+
+
+def fetch_spark_runtime():
+    spark_url = os.environ["SPARK_MASTER_STATUS_URL"]
+    with urlopen(spark_url, timeout=3) as response:
+        spark_payload = json.loads(response.read())
+    active_apps = sorted(
+        item.get("name") for item in spark_payload.get("activeapps", []) if item.get("name")
+    )
+    return {
+        "status": spark_payload.get("status", "unknown"),
+        "alive_workers": int(spark_payload.get("aliveworkers", 0)),
+        "active_apps": active_apps,
+    }
 
 
 def refresh_processor_metrics():
@@ -207,7 +236,7 @@ def refresh_processor_metrics():
     for metric in (
         PROCESSOR_UP, PROCESSOR_FAILED, PROCESSOR_HEARTBEAT_AGE,
         PROCESSOR_ROWS, PROCESSOR_LAST_BATCH, PROCESSOR_LAST_SUCCESS,
-        PROCESSOR_CHECKPOINT_AGE,
+        PROCESSOR_CHECKPOINT_AGE, PROCESSOR_INSTANCES,
     ):
         metric.clear()
     for processor in payload["processors"]:
@@ -226,6 +255,25 @@ def refresh_processor_metrics():
             PROCESSOR_LAST_SUCCESS.labels(name).set(last_success)
         if processor["checkpoint_age_seconds"] is not None:
             PROCESSOR_CHECKPOINT_AGE.labels(name).set(processor["checkpoint_age_seconds"])
+    with pg_conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT processor_name, count(*) FROM processor_heartbeats GROUP BY processor_name"
+        )
+        instance_rows = cursor.fetchall()
+    for processor_name, instance_count in instance_rows:
+        PROCESSOR_INSTANCES.labels(processor_name).set(instance_count)
+
+
+def refresh_spark_runtime_metrics():
+    try:
+        runtime = fetch_spark_runtime()
+    except Exception:
+        runtime = {"alive_workers": 0, "active_apps": []}
+    SPARK_ALIVE_WORKERS.set(runtime["alive_workers"])
+    SPARK_REQUIRED_APP_UP.clear()
+    active_apps = set(runtime["active_apps"])
+    for application in REQUIRED_SPARK_APPS:
+        SPARK_REQUIRED_APP_UP.labels(application).set(int(application in active_apps))
 
 
 def refresh_dataset_freshness_metrics():
@@ -276,6 +324,7 @@ async def refresh_dq_metrics(request: Request, call_next):
         try:
             refresh_processor_metrics()
             refresh_dataset_freshness_metrics()
+            refresh_spark_runtime_metrics()
         except Exception:
             logger.exception("Could not refresh processor/freshness metrics")
         if redis_client is not None:
@@ -366,22 +415,12 @@ def readiness_check():
     })
     spark_runtime = {"status": "unavailable", "alive_workers": 0, "active_apps": []}
     try:
-        spark_url = os.environ["SPARK_MASTER_STATUS_URL"]
-        with urlopen(spark_url, timeout=3) as response:
-            spark_payload = json.loads(response.read())
-        active_apps = sorted(
-            app.get("name") for app in spark_payload.get("activeapps", []) if app.get("name")
-        )
-        spark_runtime = {
-            "status": spark_payload.get("status", "unknown"),
-            "alive_workers": int(spark_payload.get("aliveworkers", 0)),
-            "active_apps": active_apps,
-        }
-        required_apps = {"PaymentStreamingProcessor", "FraudDetectionEngine"}
+        spark_runtime = fetch_spark_runtime()
+        active_apps = set(spark_runtime["active_apps"])
         dependencies["spark"] = (
             spark_runtime["status"] == "ALIVE"
             and spark_runtime["alive_workers"] > 0
-            and required_apps.issubset(active_apps)
+            and set(REQUIRED_SPARK_APPS).issubset(active_apps)
         )
     except Exception:
         dependencies["spark"] = False

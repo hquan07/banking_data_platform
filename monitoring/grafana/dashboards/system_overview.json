@@ -270,6 +270,46 @@
       "datasource": "Prometheus",
       "targets": [{"expr": "histogram_quantile(0.95, sum(rate(case_database_query_seconds_bucket[5m])) by (operation, le))", "legendFormat": "{{operation}}", "refId": "A"}],
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40}
+    },
+    {
+      "id": 12,
+      "title": "Live Gateway Accepted Rate",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(rate(live_ingest_events_total{status=\"accepted\"}[5m])) by (event_type)", "legendFormat": "{{event_type}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 48}
+    },
+    {
+      "id": 13,
+      "title": "Processor Heartbeat Age",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "banking_processor_heartbeat_age_seconds", "legendFormat": "{{processor}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 48}
+    },
+    {
+      "id": 14,
+      "title": "Dataset Ingest Age",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "banking_dataset_ingest_age_seconds", "legendFormat": "{{dataset}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 56}
+    },
+    {
+      "id": 15,
+      "title": "Processor Restarts Observed",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "clamp_min(banking_processor_instances - 1, 0)", "legendFormat": "{{processor}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 56}
+    },
+    {
+      "id": 16,
+      "title": "DLQ Growth (5m)",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (topic) (increase(kafka_topic_partition_current_offset{topic=~\".*-dlq\"}[5m]))", "legendFormat": "{{topic}}", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 64}
     }
   ],
   "refresh": "5s",
