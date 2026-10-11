@@ -5,6 +5,7 @@ from datetime import timezone
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, struct, to_json
 from payment_schema import parse_payment_stream
+from shared.processor_heartbeat import ProcessorHeartbeat
 
 CLICKHOUSE_PAYMENT_DDL = """
 CREATE TABLE IF NOT EXISTS payment_events (
@@ -65,7 +66,7 @@ def create_spark_session():
         .config("spark.sql.session.timeZone", "UTC") \
         .getOrCreate()
 
-def process_stream(spark):
+def process_stream(spark, heartbeat):
     client = clickhouse_client()
     try:
         client.execute(CLICKHOUSE_PAYMENT_DDL)
@@ -178,6 +179,11 @@ def process_stream(spark):
         finally:
             read_conn.close()
         duration = time.monotonic() - started
+        heartbeat.record_success(
+            processed_rows=processed_rows,
+            batch_id=batch_id,
+            metadata={"query": "canonical_payment"},
+        )
         print(json.dumps({"event": "spark_batch_completed", "job": "payment_processor",
                           "batch_id": batch_id, "rows": processed_rows,
                           "duration_seconds": round(duration, 3)}))
@@ -205,6 +211,13 @@ def process_stream(spark):
     spark.streams.awaitAnyTermination()
 
 if __name__ == "__main__":
-    spark = create_spark_session()
-    spark.sparkContext.setLogLevel("WARN")
-    process_stream(spark)
+    processor_heartbeat = ProcessorHeartbeat("payment_processor").start()
+    try:
+        spark = create_spark_session()
+        spark.sparkContext.setLogLevel("WARN")
+        process_stream(spark, processor_heartbeat)
+    except BaseException as exc:
+        processor_heartbeat.record_failure(exc)
+        raise
+    finally:
+        processor_heartbeat.stop()

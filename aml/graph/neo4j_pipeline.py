@@ -10,6 +10,7 @@ from kafka.structs import OffsetAndMetadata
 from neo4j import GraphDatabase
 
 from shared.transfer_contract import normalize_transfer_event
+from shared.processor_heartbeat import ProcessorHeartbeat
 
 
 class BankingGraph:
@@ -90,6 +91,7 @@ def run_consumer():
         enable_auto_commit=False, auto_offset_reset="earliest",
     )
     producer = KafkaProducer(bootstrap_servers=bootstrap, acks="all", retries=10)
+    heartbeat = ProcessorHeartbeat("live_graph_processor").start()
     try:
         for message in consumer:
             source = {"topic": message.topic, "partition": message.partition, "offset": message.offset}
@@ -113,7 +115,16 @@ def run_consumer():
                                   "alert_count": len(alerts)}), flush=True)
             consumer.commit({TopicPartition(message.topic, message.partition):
                              OffsetAndMetadata(message.offset + 1, "")})
+            heartbeat.record_success(
+                processed_rows=1,
+                batch_id=f"{message.topic}:{message.partition}:{message.offset}",
+                metadata={"consumer_group": "neo4j-aml-v1"},
+            )
+    except BaseException as exc:
+        heartbeat.record_failure(exc)
+        raise
     finally:
+        heartbeat.stop()
         producer.close()
         consumer.close()
         graph.close()

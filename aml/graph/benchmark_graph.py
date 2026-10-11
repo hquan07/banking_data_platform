@@ -12,6 +12,7 @@ from kafka import KafkaConsumer, KafkaProducer, TopicPartition
 from kafka.structs import OffsetAndMetadata
 
 from shared.benchmark_contract import normalize_benchmark_event
+from shared.processor_heartbeat import ProcessorHeartbeat
 
 
 def graph_record(event: dict[str, Any]) -> dict[str, Any] | None:
@@ -202,6 +203,7 @@ def run_consumer() -> None:
     batch_size = int(os.environ.get("BENCHMARK_GRAPH_BATCH_SIZE", "500"))
     if batch_size <= 0:
         raise ValueError("BENCHMARK_GRAPH_BATCH_SIZE must be positive")
+    heartbeat = ProcessorHeartbeat("benchmark_graph_processor").start()
     try:
         while True:
             polled = consumer.poll(timeout_ms=1000, max_records=batch_size)
@@ -228,7 +230,16 @@ def run_consumer() -> None:
             for future in futures:
                 future.get(timeout=30)
             consumer.commit(offsets)
+            heartbeat.record_success(
+                processed_rows=sum(len(messages) for messages in polled.values()),
+                batch_id=max(item.offset for messages in polled.values() for item in messages),
+                metadata={"consumer_group": "benchmark-graph-v1"},
+            )
+    except BaseException as exc:
+        heartbeat.record_failure(exc)
+        raise
     finally:
+        heartbeat.stop()
         producer.close()
         consumer.close()
         graph.close()

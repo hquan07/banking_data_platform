@@ -13,6 +13,7 @@ from kafka.structs import OffsetAndMetadata
 
 from fraud.rules.benchmark_rules import EVALUATOR_VERSION, evaluate_benchmark_payload
 from shared.benchmark_contract import normalize_benchmark_event
+from shared.processor_heartbeat import ProcessorHeartbeat
 
 
 def build_alert(event: dict[str, Any], signal: dict[str, Any]) -> dict[str, Any]:
@@ -99,6 +100,7 @@ def run_consumer() -> None:
         auto_offset_reset="earliest",
     )
     producer = KafkaProducer(bootstrap_servers=bootstrap, acks="all", retries=10)
+    heartbeat = ProcessorHeartbeat("benchmark_processor").start()
     try:
         for message in consumer:
             source = {"topic": message.topic, "partition": message.partition, "offset": message.offset}
@@ -124,7 +126,16 @@ def run_consumer() -> None:
                 TopicPartition(message.topic, message.partition):
                     OffsetAndMetadata(message.offset + 1, "")
             })
+            heartbeat.record_success(
+                processed_rows=1,
+                batch_id=f"{message.topic}:{message.partition}:{message.offset}",
+                metadata={"consumer_group": "benchmark-processor-v2"},
+            )
+    except BaseException as exc:
+        heartbeat.record_failure(exc)
+        raise
     finally:
+        heartbeat.stop()
         producer.close()
         consumer.close()
         connection.close()

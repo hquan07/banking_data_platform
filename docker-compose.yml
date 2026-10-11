@@ -401,6 +401,11 @@ services:
       - NEO4J_URI=bolt://banking_neo4j:7687
       - NEO4J_USER=${NEO4J_USER}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - POSTGRES_HOST=banking_postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - BENCHMARK_GRAPH_BATCH_SIZE=${BENCHMARK_GRAPH_BATCH_SIZE:-500}
       - GRAPH_MIN_TRANSFER_AMOUNT=1000
     depends_on:
@@ -408,6 +413,8 @@ services:
         condition: service_completed_successfully
       neo4j:
         condition: service_healthy
+      dashboard_backend:
+        condition: service_started
     networks:
       - data_network
 
@@ -444,11 +451,18 @@ services:
       - NEO4J_URI=bolt://banking_neo4j:7687
       - NEO4J_USER=${NEO4J_USER}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - POSTGRES_HOST=banking_postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     depends_on:
       kafka_topics_init:
         condition: service_completed_successfully
       neo4j:
         condition: service_healthy
+      dashboard_backend:
+        condition: service_started
     networks:
       - data_network
 
@@ -577,6 +591,8 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+      dashboard_backend:
+        condition: service_started
     networks:
       backend_network:
         aliases:
@@ -660,6 +676,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      dashboard_backend:
+        condition: service_started
     networks:
       backend_network:
         aliases:

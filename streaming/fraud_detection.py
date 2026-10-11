@@ -3,6 +3,7 @@ import sys
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, to_json, struct
 from payment_schema import parse_payment_stream
+from shared.processor_heartbeat import ProcessorHeartbeat
 
 # Ensure modules in other folders can be imported
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -12,6 +13,17 @@ from fraud.rules.velocity import apply_velocity_rule
 from fraud.rules.velocity_redis import process_velocity_with_redis
 from fraud.rules.shared_device import apply_shared_device_rule
 from aml.rules.structuring import apply_structuring_rule
+
+_processor_heartbeat = None
+
+
+def process_velocity_batch(df, epoch_id):
+    process_velocity_with_redis(df, epoch_id)
+    if _processor_heartbeat is not None:
+        _processor_heartbeat.record_success(
+            batch_id=epoch_id,
+            metadata={"query": "redis_velocity"},
+        )
 
 def create_spark_session():
     return SparkSession.builder \
@@ -91,7 +103,7 @@ def start_fraud_engine(spark):
     query_redis = parsed_df \
         .writeStream \
         .outputMode("update") \
-        .foreachBatch(process_velocity_with_redis) \
+        .foreachBatch(process_velocity_batch) \
         .option("checkpointLocation", os.environ.get("SPARK_CHECKPOINT_DIR", "/checkpoints/fraud-engine") + "/redis_velocity") \
         .start()
 
@@ -115,6 +127,13 @@ def start_fraud_engine(spark):
     spark.streams.awaitAnyTermination()
 
 if __name__ == "__main__":
-    spark = create_spark_session()
-    spark.sparkContext.setLogLevel("WARN")
-    start_fraud_engine(spark)
+    _processor_heartbeat = ProcessorHeartbeat("fraud_engine").start()
+    try:
+        spark = create_spark_session()
+        spark.sparkContext.setLogLevel("WARN")
+        start_fraud_engine(spark)
+    except BaseException as exc:
+        _processor_heartbeat.record_failure(exc)
+        raise
+    finally:
+        _processor_heartbeat.stop()
