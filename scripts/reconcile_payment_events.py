@@ -27,6 +27,21 @@ def compare_records(events, postgres_rows, clickhouse_rows):
     }
 
 
+def partition_quarantined_events(events, dlq_sources):
+    """Separate contract-valid events only when DLQ source evidence matches."""
+    materialized, quarantined = [], []
+    for event in events:
+        source = event.get("_source")
+        identity = None if source is None else (
+            source.get("topic"), source.get("partition"), source.get("offset"),
+        )
+        if identity in dlq_sources:
+            quarantined.append(event)
+        else:
+            materialized.append(event)
+    return materialized, quarantined
+
+
 def kafka_snapshot(tail_per_partition):
     from kafka import KafkaConsumer, TopicPartition
 
@@ -56,10 +71,60 @@ def kafka_snapshot(tail_per_partition):
                     if record.offset >= ends[partition]:
                         continue
                     try:
-                        events.append(normalize_payment_event(json.loads(record.value)))
+                        event = normalize_payment_event(json.loads(record.value))
+                        event["_source"] = {
+                            "topic": record.topic,
+                            "partition": record.partition,
+                            "offset": record.offset,
+                        }
+                        events.append(event)
                     except (ValueError, TypeError):
                         invalid += 1
         return events, invalid
+    finally:
+        consumer.close()
+
+
+def dlq_source_snapshot(tail_per_partition):
+    """Return exact payment-events source offsets proven quarantined by Spark."""
+    from kafka import KafkaConsumer, TopicPartition
+
+    consumer = KafkaConsumer(
+        bootstrap_servers=os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9094"),
+        enable_auto_commit=False,
+        group_id=None,
+        consumer_timeout_ms=5000,
+    )
+    try:
+        partitions = consumer.partitions_for_topic("payment-events-dlq")
+        if not partitions:
+            raise RuntimeError("payment-events-dlq topic does not exist")
+        assigned = [TopicPartition("payment-events-dlq", number) for number in sorted(partitions)]
+        consumer.assign(assigned)
+        ends = consumer.end_offsets(assigned)
+        for partition in assigned:
+            consumer.seek(partition, max(0, ends[partition] - tail_per_partition))
+        sources = set()
+        deadline = time.monotonic() + 30
+        while any(consumer.position(partition) < ends[partition] for partition in assigned):
+            if time.monotonic() > deadline:
+                raise TimeoutError("Could not read payment DLQ snapshot within 30 seconds")
+            for partition, records in consumer.poll(timeout_ms=1000).items():
+                for record in records:
+                    if record.offset >= ends[partition]:
+                        continue
+                    try:
+                        value = json.loads(record.value)
+                        identity = (
+                            value["source_topic"],
+                            int(value["source_partition"]),
+                            int(value["source_offset"]),
+                        )
+                    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                        continue
+                    if identity[0] == "payment-events":
+                        sources.add(identity)
+        return sources
     finally:
         consumer.close()
 
@@ -118,10 +183,14 @@ def main():
     from dotenv import load_dotenv
     load_dotenv()
     events, invalid = kafka_snapshot(args.tail_per_partition)
-    payment_ids = sorted({event["payment_id"] for event in events})
+    dlq_sources = dlq_source_snapshot(args.tail_per_partition)
+    materialized, quarantined = partition_quarantined_events(events, dlq_sources)
+    payment_ids = sorted({event["payment_id"] for event in materialized})
     pg_rows, ch_rows = query_stores(payment_ids) if payment_ids else ([], [])
-    differences = compare_records(events, pg_rows, ch_rows)
+    differences = compare_records(materialized, pg_rows, ch_rows)
     print(json.dumps({"sampled_valid_events": len(events), "sampled_invalid_events": invalid,
+                      "quarantined_events": len(quarantined),
+                      "materialization_expected": len(materialized),
                       "unique_payments": len(payment_ids), **differences}, indent=2))
     if any(differences.values()):
         raise SystemExit(1)
