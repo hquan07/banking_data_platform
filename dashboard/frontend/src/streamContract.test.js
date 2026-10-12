@@ -24,13 +24,17 @@ test('accepts source-scoped benchmark events', () => {
 });
 
 test('describes live and benchmark activity without a misleading zero benchmark rate', () => {
-  assert.deepEqual(describeStreamStatus({ datasetId: 'live', isConnected: true, liveRate: 0 }), {
-    connection: 'Live channel connected', activity: '0 live events/s', state: 'connected',
-  });
-  assert.deepEqual(describeStreamStatus({ datasetId: 'ds1_creditcard', isConnected: true, now: 5000 }), {
-    connection: 'Benchmark channel connected', activity: 'Replay inactive', state: 'idle',
-  });
+  const live = describeStreamStatus({ datasetId: 'live', isConnected: true, liveRate: 0 });
+  assert.equal(live.state, 'idle');
+  assert.equal(live.activity, '0 live events/s');
+  assert.equal(live.reason, 'connected_no_events_in_current_window');
+  const benchmark = describeStreamStatus({ datasetId: 'ds1_creditcard', isConnected: true, now: 5000 });
+  assert.equal(benchmark.state, 'idle');
+  assert.equal(benchmark.activity, 'Replay inactive');
   assert.equal(describeStreamStatus({
     datasetId: 'ds1_creditcard', isConnected: true, benchmarkRate: 50, lastBenchmarkAt: 4900, now: 5000,
   }).activity, '50 benchmark events/s');
+  assert.equal(describeStreamStatus({
+    datasetId: 'ds1_creditcard', isConnected: true, benchmarkRate: 50, lastBenchmarkAt: 4900, now: 5000,
+  }).state, 'running');
 });

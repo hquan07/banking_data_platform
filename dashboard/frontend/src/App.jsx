@@ -3,8 +3,11 @@ import { BarChart3, Database, History, LayoutDashboard, LogOut, Network, Radio, 
 import Login from './components/Login';
 import { AuthContext, AuthProvider } from './components/AuthContext';
 import DatasetContextBar from './components/DatasetContextBar';
+import TabErrorBoundary from './components/TabErrorBoundary';
+import { RuntimeStatus } from './components/ui';
 import { DatasetProvider, useDatasetContext } from './components/DatasetContext';
 import { fixedDatasetForTab } from './datasetContextContract';
+import { formatDataAge, humanizeRuntimeReason } from './runtimeStatus';
 import { describeStreamStatus, parseStreamMessage } from './streamContract';
 import './index.css';
 
@@ -39,6 +42,8 @@ function MainApp() {
   const liveEventsThisSecond = useRef(0);
   const benchmarkEventsThisSecond = useRef({});
   const benchmarkLastSeen = useRef({});
+  const liveLastSeen = useRef(0);
+  const [lastLiveAt, setLastLiveAt] = useState(0);
   const [totalValue, setTotalValue] = useState(0);
   const [sessionEvents, setSessionEvents] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
@@ -83,6 +88,7 @@ function MainApp() {
       const message = parseStreamMessage(event.data);
       if (!message) return;
       if (message.topic === 'payment-events') {
+        liveLastSeen.current = Date.now();
         liveEventsThisSecond.current += 1;
         setSessionEvents(value => value + 1);
         setTotalValue(value => value + message.data.amount);
@@ -101,6 +107,7 @@ function MainApp() {
       setLiveTps(liveEventsThisSecond.current);
       setBenchmarkTps({ ...benchmarkEventsThisSecond.current });
       setLastBenchmarkAt({ ...benchmarkLastSeen.current });
+      setLastLiveAt(liveLastSeen.current);
       liveEventsThisSecond.current = 0;
       benchmarkEventsThisSecond.current = {};
       setStreamClock(Date.now());
@@ -112,6 +119,7 @@ function MainApp() {
     datasetId,
     isConnected,
     liveRate: liveTps,
+    lastLiveAt,
     benchmarkRate: benchmarkTps[datasetId] || 0,
     lastBenchmarkAt: lastBenchmarkAt[datasetId] || 0,
     now: streamClock,
@@ -139,11 +147,11 @@ function MainApp() {
     </nav>
     <div className="main-content">
       <header className="header">
-        <div className="status-indicators" aria-live="polite"><span className={`status-dot ${streamStatus.state === 'offline' ? 'disconnected' : streamStatus.state === 'idle' ? 'idle' : ''}`} /><span>{streamStatus.connection}</span><span className="header-divider" /><Radio size={15} /><span className={streamStatus.state === 'idle' ? 'stream-rate-idle' : ''}>{streamStatus.activity}</span></div>
+        <div className="status-indicators" aria-live="polite"><RuntimeStatus status={streamStatus.state} compact /><span>{streamStatus.connection}</span><span className="header-divider" /><Radio size={15} /><span>{streamStatus.activity}</span><span className="header-stream-meta">Last event {streamStatus.lastSuccessAt ? new Date(streamStatus.lastSuccessAt).toLocaleTimeString('vi-VN') : 'not observed'} · {formatDataAge(streamStatus.ageSeconds)}{streamStatus.reason ? ` · ${humanizeRuntimeReason(streamStatus.reason)}` : ''}</span></div>
         <div className="user-profile"><span className="user-avatar">{user?.username?.slice(0, 2).toUpperCase()}</span><div><strong>{user?.username}</strong><small>{user?.role}</small></div><button className="icon-button" onClick={logout} aria-label="Đăng xuất"><LogOut size={17} /></button></div>
       </header>
       {!fixedDatasetId && <DatasetContextBar />}
-      <main className="dashboard-container">{manifestError && <div className="capability-boundary capability-warning" role="alert">{manifestError}. Đang dùng capability fallback an toàn.</div>}<Suspense fallback={<div className="state-message">Đang tải nội dung…</div>}>
+      <main className="dashboard-container">{manifestError && <div className="capability-boundary capability-warning" role="alert">{manifestError}. Đang dùng capability fallback an toàn.</div>}<TabErrorBoundary key={`${activeTab}:${datasetId}`}><Suspense fallback={<div className="state-message">Đang tải nội dung…</div>}>
         {manifestLoading ? <div className="capability-boundary" role="status">Đang xác minh dashboard capabilities…</div> : fixedDatasetId && fixedDatasetId !== datasetId ? <div className="state-message">Đang áp dụng phạm vi DS3…</div> : <>
           {activeTab === 'overview' && <CommandCenterTab data={chartData} tps={liveTps} totalValue={totalValue} sessionEvents={sessionEvents} isConnected={isConnected} />}
           {activeTab === 'fraud' && <FraudMonitoringTab />}
@@ -155,7 +163,7 @@ function MainApp() {
           {activeTab === 'rules' && <RulesManagementTab />}
           {activeTab === 'architecture' && <ArchitectureTab />}
         </>}
-      </Suspense></main>
+      </Suspense></TabErrorBoundary></main>
     </div>
   </div>;
 }

@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, AlertCircle, Archive, Boxes, CheckCircle2, Clock3, Database,
   GitBranch, HardDrive, Radio, RefreshCw, Server, ShieldCheck, Waves, Zap,
 } from 'lucide-react';
 import ArchitectureDiagram from './ArchitectureDiagram';
-import { Badge, MetricCard, PageHeader, Panel, StateMessage } from './ui';
+import { MetricCard, PageHeader, Panel, RuntimeStatus, StateMessage } from './ui';
 
 const services = [
   { key: 'api', name: 'FastAPI', role: 'Auth, cases & analytics API', group: 'Serving', icon: Server },
@@ -95,15 +95,19 @@ export default function ArchitectureTab() {
   const [lastChecked, setLastChecked] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const healthController = useRef(null);
   const base = window._env_?.API_URL || 'http://localhost:8000';
   const prometheusUrl = window._env_?.PROMETHEUS_URL || 'http://localhost:9090';
   const grafanaUrl = window._env_?.GRAFANA_URL || 'http://localhost:3000';
 
   const checkHealth = useCallback(async () => {
+    healthController.current?.abort();
+    const controller = new AbortController();
+    healthController.current = controller;
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${base}/api/health/ready`, { cache: 'no-store' });
+      const response = await fetch(`${base}/api/health/ready`, { cache: 'no-store', signal: controller.signal });
       const body = await response.json();
       const probes = body.detail || body;
       const next = { api: true };
@@ -114,19 +118,22 @@ export default function ArchitectureTab() {
       setHealth(next);
       setOverall(response.ok && probes.status === 'ready' ? 'ready' : 'degraded');
     } catch (healthError) {
+      if (healthError.name === 'AbortError') return;
       setHealth({ api: false });
-      setOverall('offline');
+      setOverall('failed');
       setError(`Readiness endpoint unavailable: ${healthError.message}`);
     } finally {
-      setLastChecked(new Date());
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLastChecked(new Date());
+        setLoading(false);
+      }
     }
   }, [base]);
 
   useEffect(() => {
     checkHealth();
     const timer = window.setInterval(checkHealth, 30000);
-    return () => window.clearInterval(timer);
+    return () => { window.clearInterval(timer); healthController.current?.abort(); };
   }, [checkHealth]);
 
   const summary = useMemo(() => {
@@ -145,7 +152,7 @@ export default function ArchitectureTab() {
       description="Sơ đồ kiến trúc tương tác, readiness theo thời gian thực và data-flow map của nền tảng banking data."
       actions={<button className="secondary-button" onClick={checkHealth} disabled={loading}><RefreshCw className={loading ? 'spin' : ''} size={14}/> Run probes</button>}
     />
-    <MetricCard icon={overall === 'ready' ? <CheckCircle2 size={17}/> : <AlertCircle size={17}/>} label="Platform status" value={overall === 'ready' ? 'Ready' : overall === 'checking' ? 'Checking' : overall === 'offline' ? 'Offline' : 'Degraded'} detail="FastAPI readiness contract" tone={overall === 'ready' ? 'green' : 'red'} />
+    <MetricCard icon={overall === 'ready' ? <CheckCircle2 size={17}/> : <AlertCircle size={17}/>} label="Platform status" value={<RuntimeStatus status={overall === 'checking' ? 'running' : overall} compact />} detail="FastAPI readiness contract" tone={overall === 'ready' ? 'green' : 'red'} />
     <MetricCard icon={<Activity size={17}/>} label="Passing probes" value={`${summary.passing}/${summary.probed || services.length}`} detail="Runtime dependencies responding" tone="green" />
     <MetricCard icon={<ShieldCheck size={17}/>} label="Failed probes" value={summary.failing} detail={summary.failing ? 'Needs operator attention' : 'No dependency failures'} tone={summary.failing ? 'red' : 'blue'} />
     <MetricCard icon={<Clock3 size={17}/>} label="Probe interval" value="30s" detail={lastChecked ? `Checked ${lastChecked.toLocaleTimeString('vi-VN')}` : 'First probe pending'} tone="violet" />
@@ -154,28 +161,30 @@ export default function ArchitectureTab() {
       <ArchitectureDiagram health={health} liveSource={health.live_source} lastChecked={lastChecked} />
     </Panel>
 
-    <Panel className="col-span-8" title="Runtime dependencies" subtitle="Các trạng thái bên dưới lấy trực tiếp từ /api/health/ready" action={<div className="health-panel-actions"><a href={prometheusUrl} target="_blank" rel="noreferrer">Metrics explorer</a><a href={grafanaUrl} target="_blank" rel="noreferrer">Operations charts</a><Badge tone={overall === 'ready' ? 'green' : 'red'}>{overall}</Badge></div>}>
+    <Panel className="col-span-8" title="Runtime dependencies" subtitle="Các trạng thái bên dưới lấy trực tiếp từ /api/health/ready" action={<div className="health-panel-actions"><a href={prometheusUrl} target="_blank" rel="noreferrer">Metrics explorer</a><a href={grafanaUrl} target="_blank" rel="noreferrer">Operations charts</a><RuntimeStatus status={overall === 'checking' ? 'running' : overall} compact /></div>}>
       {error && <StateMessage type="error">{error}</StateMessage>}
       <div className="service-health-grid">
         {services.map(service => {
           const Icon = service.icon;
           const state = health[service.key] === true ? 'healthy' : health[service.key] === false ? 'unhealthy' : 'unknown';
+          const runtimeState = state === 'healthy' ? 'ready' : state === 'unhealthy' ? 'failed' : 'not_applicable';
           return <article className={`service-health-card state-${state}`} key={service.key}>
             <span className="service-health-icon"><Icon size={16}/></span>
             <div><strong>{service.name}</strong><span>{service.role}</span></div>
-            <span className="service-health-status"><i aria-hidden="true" />{service.key === 'api' && state === 'healthy' ? 'Reachable' : stateLabel[state]}</span>
+            <RuntimeStatus status={runtimeState} ageSeconds={lastChecked ? 0 : null} lastSuccessAt={state === 'healthy' ? lastChecked?.toISOString() : null} reason={state === 'unhealthy' ? 'readiness_probe_failed' : state === 'unknown' ? 'probe_not_available' : null} detail={service.key === 'api' && state === 'healthy' ? 'Reachable' : stateLabel[state]} />
           </article>;
         })}
       </div>
     </Panel>
 
-    <Panel className="col-span-4" title="Health contract" subtitle="Ý nghĩa của từng trạng thái trong tab này">
+    <Panel className="col-span-4" title="Health contract" subtitle="Một từ vựng chung cho toàn dashboard">
       <div className="health-contract-list">
-        <div><i className="status-healthy"/><span><strong>Ready</strong><small>Probe thực thi thành công ngay lúc kiểm tra.</small></span></div>
-        <div><i className="status-unhealthy"/><span><strong>Probe failed</strong><small>Dependency được cấu hình nhưng không sẵn sàng.</small></span></div>
-        <div><i className="status-documented"/><span><strong>No direct probe</strong><small>Thành phần có trong topology nhưng readiness API chưa đo.</small></span></div>
-        <div><i className="status-planned"/><span><strong>Not integrated</strong><small>Nguồn live bên ngoài chưa được kết nối.</small></span></div>
-        <div><i style={{ background: '#60a5fa' }}/><span><strong>Configured · idle</strong><small>Gateway sẵn sàng nhưng chưa có event trong active window.</small></span></div>
+        {[
+          ['ready', 'Probe thành công và dữ liệu nằm trong SLA.'], ['idle', 'Đã kết nối nhưng không có event trong active window.'],
+          ['running', 'Đang xử lý hoặc replay dữ liệu.'], ['stale', 'Lần thành công cuối đã vượt freshness SLA.'],
+          ['degraded', 'Một phần kiểm tra hoặc reconciliation không đạt.'], ['failed', 'Probe hoặc processor thất bại.'],
+          ['not_applicable', 'Không áp dụng hoặc chưa có probe trực tiếp.'],
+        ].map(([status, copy]) => <div key={status}><RuntimeStatus status={status} compact /><span><strong>{status.replaceAll('_', ' ')}</strong><small>{copy}</small></span></div>)}
       </div>
       <div className="health-boundary-note"><Waves size={15}/><p>Gateway đã được tích hợp. Trạng thái hiện tại: {health.live_source?.status || 'awaiting probe'}; platform readiness không đồng nghĩa live events đang chảy.</p></div>
     </Panel>

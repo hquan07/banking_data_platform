@@ -14,9 +14,9 @@ test('freshness distinguishes successful, stale, partial and failed runs', () =>
     status: 'COMPLETED',
     quality: { status: 'completed', data_age_seconds: 10, sla_threshold_seconds: 30, reconciliation_checks: 2, reconciliation_completeness: 1 },
   };
-  assert.equal(describeRunFreshness(complete, 0).status, 'completed');
+  assert.equal(describeRunFreshness(complete, 0).status, 'ready');
   assert.equal(describeRunFreshness({ ...complete, quality: { ...complete.quality, data_age_seconds: 31 } }, 0).status, 'stale');
-  assert.equal(describeRunFreshness({ ...complete, quality: { ...complete.quality, reconciliation_completeness: .5 } }, 0).status, 'partial');
+  assert.equal(describeRunFreshness({ ...complete, quality: { ...complete.quality, reconciliation_completeness: .5 } }, 0).status, 'degraded');
   assert.equal(describeRunFreshness({ ...complete, status: 'FAILED' }, 0).status, 'failed');
 });
 
@@ -24,4 +24,3 @@ test('reconciliation copy never presents an empty result as healthy', () => {
   assert.equal(reconciliationLabel({ reconciliation_checks: 0, reconciliation_completeness: 0 }), 'Not run');
   assert.equal(reconciliationLabel({ reconciliation_checks: 4, reconciliation_completeness: .75 }), '75% · 4 checks');
 });
-

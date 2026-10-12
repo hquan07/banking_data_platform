@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, BadgeCheck, Clock3, DatabaseZap, LockKeyhole, Pencil,
   Power, RefreshCw, Save, ShieldCheck, SlidersHorizontal, X,
@@ -33,26 +33,30 @@ export default function RulesManagementTab() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const requestController = useRef(null);
   const base = window._env_?.API_URL || 'http://localhost:8000';
 
   const fetchRules = useCallback(async () => {
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(base + '/api/rules', { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch(base + '/api/rules', { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
       if (!response.ok) throw new Error((await response.json()).detail || `Không tải được rules (${response.status})`);
       const data = await response.json();
       const nextRules = Array.isArray(data) ? data : [];
       setRules(nextRules);
       setSelectedId(current => nextRules.some(rule => rule.rule_id === current) ? current : nextRules[0]?.rule_id ?? null);
     } catch (fetchError) {
-      setError(fetchError.message);
+      if (fetchError.name !== 'AbortError') setError(fetchError.message);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [base, token]);
 
-  useEffect(() => { fetchRules(); }, [fetchRules]);
+  useEffect(() => { fetchRules(); return () => requestController.current?.abort(); }, [fetchRules]);
 
   const selectedRule = useMemo(
     () => rules.find(rule => rule.rule_id === selectedId) || null,

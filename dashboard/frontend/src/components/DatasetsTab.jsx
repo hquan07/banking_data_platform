@@ -3,7 +3,7 @@ import { Activity, Database, Fingerprint, Layers3 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AuthContext } from './AuthContext';
 import { DATASET_DEFINITIONS, useDatasetContext } from './DatasetContext';
-import { Badge, formatNumber, formatPercent, MetricCard, PageHeader, Panel, StateMessage } from './ui';
+import { Badge, formatNumber, formatPercent, MetricCard, PageHeader, Panel, RuntimeStatus, StateMessage } from './ui';
 import { useDatasetAnalytics } from './useDatasetAnalytics';
 import DataRunsSection from './DataRunsSection';
 
@@ -12,7 +12,7 @@ const SOURCE_LABELS = {
   privacy_preserving_synthetic: 'Privacy-preserving synthetic',
 };
 
-const EMPTY = { status: [], performance: [], rules: [], models: [], balance: null, account: null, behavior: null };
+const EMPTY = { status: [], freshness: [], performance: [], rules: [], models: [], balance: null, account: null, behavior: null };
 
 export default function DatasetsTab() {
   const { token } = useContext(AuthContext);
@@ -27,7 +27,7 @@ export default function DatasetsTab() {
     const controller = new AbortController();
     const base = window._env_?.API_URL || 'http://localhost:8000';
     const paths = {
-      status: '/api/datasets/status', performance: '/api/datasets/performance',
+      status: '/api/datasets/status', freshness: '/api/datasets/freshness', performance: '/api/datasets/performance',
       rules: '/api/datasets/rule-hits', models: '/api/datasets/model-candidates',
       ...(datasetId === 'ds3_paysim' ? { balance: '/api/datasets/balance-anomalies' } : {}),
       ...(datasetId === 'ds4_baf' ? { account: '/api/datasets/account-risk', behavior: '/api/datasets/behavior-distributions' } : {}),
@@ -72,7 +72,9 @@ export default function DatasetsTab() {
     <Panel className="col-span-12" title="Dataset catalog" subtitle="Trạng thái nạp và ranh giới provenance">
       {loading && !data.status.length ? <StateMessage type="loading">Đang đọc data catalog…</StateMessage> : <div className="dataset-status-grid">{data.status.map(item => {
         const definition = DATASET_DEFINITIONS[item.dataset_id];
-        return <article className={`dataset-card ${item.status === 'loaded' ? 'loaded' : ''}`} key={item.dataset_id}><div className="dataset-card-title"><Database size={16} /><strong>{definition?.shortLabel || item.dataset_id}</strong><Badge tone={item.status === 'loaded' ? 'green' : 'neutral'}>{item.status}</Badge></div><span className="dataset-kind">{SOURCE_LABELS[item.source_kind] || item.source_kind}</span><p>{definition?.description}</p><dl><div><dt>Records</dt><dd>{formatNumber(item.event_count)}</dd></div><div><dt>Ground truth</dt><dd>{groundTruthVisible ? formatNumber(item.fraud_count) : 'Hidden'}</dd></div><div><dt>Last ingest</dt><dd>{item.last_ingested_at ? new Date(item.last_ingested_at).toLocaleString('vi-VN') : '—'}</dd></div></dl></article>;
+        const freshness = data.freshness.find(entry => entry.dataset_id === item.dataset_id);
+        const runtimeStatus = freshness?.status || 'not_applicable';
+        return <article className={`dataset-card ${item.status === 'loaded' ? 'loaded' : ''}`} key={item.dataset_id}><div className="dataset-card-title"><Database size={16} /><strong>{definition?.shortLabel || item.dataset_id}</strong><RuntimeStatus status={runtimeStatus} compact /></div><span className="dataset-kind">{SOURCE_LABELS[item.source_kind] || item.source_kind}</span><p>{definition?.description}</p><RuntimeStatus status={runtimeStatus} ageSeconds={freshness?.data_age_seconds} lastSuccessAt={freshness?.last_success_at || item.last_ingested_at} reason={freshness?.reason || 'freshness_not_observed'} detail={`${formatNumber(freshness?.event_count ?? item.event_count)} events`} /><dl><div><dt>Records</dt><dd>{formatNumber(item.event_count)}</dd></div><div><dt>Ground truth</dt><dd>{groundTruthVisible ? formatNumber(item.fraud_count) : 'Hidden'}</dd></div><div><dt>Last ingest</dt><dd>{item.last_ingested_at ? new Date(item.last_ingested_at).toLocaleString('vi-VN') : '—'}</dd></div></dl></article>;
       })}</div>}
     </Panel>
 

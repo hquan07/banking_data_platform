@@ -54,6 +54,26 @@ const runFixtures = [
     updated_at: '2026-10-12T01:05:00Z', progress: { processed: 400, total: 1000, percent: 40, lag: 600, partitions: 2 },
     quality: { status: 'idle', reason: null, data_age_seconds: 30, sla_threshold_seconds: 300, reconciliation_checks: 4, reconciliation_completeness: .5 },
   },
+  {
+    run_id: '55555555-5555-4555-8555-555555555555', status: 'RUNNING', version: 1,
+    owner_user_id: 1, owner_username: 'admin', source_kind: 'BENCHMARK_REPLAY',
+    dataset_id: 'ds1_creditcard', dataset_version: 'card-v1', requested_rate: 20,
+    updated_at: '2026-10-12T01:06:00Z', progress: { processed: 20, total: 100, percent: 20, lag: 80, partitions: 1 },
+    quality: { status: 'running', reason: null, data_age_seconds: 10, sla_threshold_seconds: 300, reconciliation_checks: 1, reconciliation_completeness: 1 },
+  },
+  {
+    run_id: '66666666-6666-4666-8666-666666666666', status: 'PAUSED', version: 1,
+    owner_user_id: 1, owner_username: 'admin', source_kind: 'BENCHMARK_REPLAY',
+    dataset_id: 'ds3_paysim', dataset_version: 'paysim-v2', requested_rate: 0,
+    updated_at: '2026-10-12T01:07:00Z', progress: { processed: 10, total: 100, percent: 10, lag: 90, partitions: 1 },
+    quality: { status: 'idle', reason: 'operator_paused', data_age_seconds: 20, sla_threshold_seconds: 300, reconciliation_checks: 1, reconciliation_completeness: 1 },
+  },
+  {
+    run_id: '77777777-7777-4777-8777-777777777777', status: 'CREATED', version: 1,
+    owner_user_id: 1, owner_username: 'admin', source_kind: 'MANUAL_REPLAY',
+    dataset_id: 'ds4_baf', dataset_version: 'baf-v1', requested_rate: 0,
+    updated_at: '2026-10-12T01:08:00Z', progress: null, quality: {},
+  },
 ];
 
 function capabilityFixture() {
@@ -83,6 +103,13 @@ async function mockRunWorkspace(page, role = 'ADMIN', transitions = [], manifest
   }));
   await page.route('**/api/capabilities*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(manifest) }));
   await page.route('**/api/datasets/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route('**/api/health/ready', route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({
+      status: 'ready', kafka: true, postgres: true, redis: true, neo4j: false,
+      clickhouse: true, minio: true, live_ingestion: true,
+      live_source: { status: 'idle', event_types_seen: [], last_event_at: null },
+    }),
+  }));
   await page.route('**/api/runs**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -219,20 +246,34 @@ test('authenticated analytics and architecture views render end to end', async (
   await expect(page.getByText(/Toàn bộ topology; dùng các view chuyên biệt/)).toBeVisible();
   await expect(page.getByText(/Đường nối thể hiện integration contract trong code/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Runtime dependencies', level: 2 })).toBeVisible();
-  await expect(page.getByText('Live Ingestion', { exact: true })).toBeVisible();
+  await expect(page.locator('.service-health-card').filter({ hasText: 'Live Ingestion' })).toBeVisible();
 });
 
-test('Data Runs exposes complete, stale, failed and detailed reconciliation states', async ({ page }) => {
+test('Data Runs exposes the shared runtime vocabulary and detailed reconciliation states', async ({ page }) => {
   await mockRunWorkspace(page);
-  await expect(page.getByText('Complete', { exact: true })).toBeVisible();
-  await expect(page.getByText('Stale', { exact: true })).toBeVisible();
-  await expect(page.getByText('Failed', { exact: true })).toBeVisible();
-  await expect(page.getByText('Partial', { exact: true })).toBeVisible();
+  for (const status of ['ready', 'idle', 'running', 'stale', 'degraded', 'failed', 'not_applicable']) {
+    const indicator = page.locator(`[data-runtime-status="${status}"]`).first();
+    await expect(indicator).toBeVisible();
+    await expect(indicator).toHaveAttribute('aria-label', /.+/);
+  }
   await page.locator('.run-id-button').first().click();
   await expect(page.getByRole('heading', { name: 'Offsets', level: 3 })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Count flow', level: 3 })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Reconciliation evidence', level: 3 })).toBeVisible();
   await expect(page.getByText('event-7')).toBeVisible();
+});
+
+test('dashboard navigation and status controls are keyboard reachable', async ({ page }) => {
+  await mockRunWorkspace(page);
+  const architecture = page.getByRole('button', { name: 'Architecture Map' });
+  await architecture.focus();
+  await expect(architecture).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Kiến trúc Banking Data Platform', level: 1 })).toBeVisible();
+  const probes = page.getByRole('button', { name: 'Run probes' });
+  await probes.focus();
+  await expect(probes).toBeFocused();
+  await expect(page.locator('[data-runtime-status="failed"]').first()).toHaveAttribute('role', 'status');
 });
 
 test('Data Runs applies pause, resume and confirmed cancel transitions for admins', async ({ page }) => {

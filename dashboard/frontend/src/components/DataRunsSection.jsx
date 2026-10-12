@@ -1,8 +1,8 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Pause, Play, RefreshCw, XCircle } from 'lucide-react';
 import { AuthContext } from './AuthContext';
 import { DATASET_DEFINITIONS } from './DatasetContext';
-import { Badge, formatNumber, Panel, StateMessage } from './ui';
+import { Badge, formatNumber, Panel, RuntimeStatus, StateMessage } from './ui';
 import {
   RUN_STATUS_TONES, allowedRunActions, describeRunFreshness, reconciliationLabel,
 } from '../runControlContract';
@@ -13,13 +13,6 @@ const ACTION_ICONS = { pause: Pause, resume: Play, cancel: XCircle };
 function apiBase() { return window._env_?.API_URL || 'http://localhost:8000'; }
 function compactId(value) { return value ? `${value.slice(0, 8)}…${value.slice(-4)}` : '—'; }
 function displayDate(value) { return value ? new Date(value).toLocaleString('vi-VN') : '—'; }
-function displayAge(seconds) {
-  if (seconds === null || seconds === undefined) return 'Not observed';
-  if (seconds < 60) return `${Math.round(seconds)}s ago`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
-  return `${Math.round(seconds / 3600)}h ago`;
-}
-
 function ProgressCell({ progress }) {
   const percent = progress?.percent;
   if (percent === null || percent === undefined) return <span className="run-muted">No offset window</span>;
@@ -43,45 +36,53 @@ export default function DataRunsSection() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionId, setActionId] = useState(null);
   const [notice, setNotice] = useState('');
+  const listController = useRef(null);
+  const detailController = useRef(null);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   const loadRuns = useCallback(async ({ quiet = false } = {}) => {
     if (!token) return;
+    listController.current?.abort();
+    const controller = new AbortController();
+    listController.current = controller;
     if (!quiet) setLoading(true);
     setError('');
     const query = new URLSearchParams({ limit: '20', page: String(page) });
     if (statusFilter) query.set('status', statusFilter);
     if (datasetFilter) query.set('dataset_id', datasetFilter);
     try {
-      const response = await fetch(`${apiBase()}/api/runs?${query}`, { headers });
+      const response = await fetch(`${apiBase()}/api/runs?${query}`, { headers, signal: controller.signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
       setRuns(payload.data || []);
       setTotal(payload.total || 0);
     } catch (fetchError) {
-      setError(`Không thể tải Data Runs: ${fetchError.message}`);
+      if (fetchError.name !== 'AbortError') setError(`Không thể tải Data Runs: ${fetchError.message}`);
     } finally {
-      if (!quiet) setLoading(false);
+      if (!quiet && !controller.signal.aborted) setLoading(false);
     }
   }, [datasetFilter, headers, page, statusFilter, token]);
 
   const loadDetail = useCallback(async runId => {
     if (!runId) return;
+    detailController.current?.abort();
+    const controller = new AbortController();
+    detailController.current = controller;
     setDetailLoading(true); setDetail(null); setError('');
     try {
-      const response = await fetch(`${apiBase()}/api/runs/${runId}`, { headers });
+      const response = await fetch(`${apiBase()}/api/runs/${runId}`, { headers, signal: controller.signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setDetail(await response.json());
     } catch (fetchError) {
-      setError(`Không thể tải run detail: ${fetchError.message}`);
-    } finally { setDetailLoading(false); }
+      if (fetchError.name !== 'AbortError') setError(`Không thể tải run detail: ${fetchError.message}`);
+    } finally { if (!controller.signal.aborted) setDetailLoading(false); }
   }, [headers]);
 
   useEffect(() => {
     loadRuns();
     const interval = window.setInterval(() => loadRuns({ quiet: true }), 15000);
-    return () => window.clearInterval(interval);
+    return () => { window.clearInterval(interval); listController.current?.abort(); detailController.current?.abort(); };
   }, [loadRuns]);
 
   const toggleDetail = runId => {
@@ -130,7 +131,7 @@ export default function DataRunsSection() {
         <td><strong>{DATASET_DEFINITIONS[run.dataset_id]?.shortLabel || run.dataset_id}</strong><small>{run.dataset_version}</small></td>
         <td><ProgressCell progress={run.progress} /></td>
         <td><strong>{formatNumber(run.requested_rate, 2)}</strong><small>events/s</small></td>
-        <td><Badge tone={freshness.tone}>{freshness.label}</Badge><small>{displayAge(run.quality?.data_age_seconds)}</small></td>
+        <td><RuntimeStatus status={freshness.status} ageSeconds={run.quality?.data_age_seconds} lastSuccessAt={run.quality?.last_success_at} reason={freshness.reason || run.quality?.reason} detail={`${formatNumber(run.requested_rate, 2)} events/s`} /></td>
         <td><strong>{reconciliationLabel(run.quality)}</strong><small>{run.quality?.reason?.replaceAll('_', ' ') || 'No discrepancy'}</small></td>
         <td>{displayDate(run.updated_at)}</td>
         <td><div className="run-actions">{actions.map(action => {
@@ -145,8 +146,10 @@ export default function DataRunsSection() {
 function RunDetail({ detail }) {
   const counters = detail.counters || [];
   const reconciliations = detail.reconciliation || [];
+  const freshness = describeRunFreshness(detail);
   return <div className="run-detail" aria-label={`Run detail ${detail.run_id}`}>
     <div className="run-detail-summary">
+      <div><span>Operational status</span><RuntimeStatus status={freshness.status} ageSeconds={detail.quality?.data_age_seconds} lastSuccessAt={detail.quality?.last_success_at} reason={freshness.reason || detail.quality?.reason} detail={`${formatNumber(detail.requested_rate, 2)} events/s`} /></div>
       <div><span>Run ID</span><strong>{detail.run_id}</strong></div>
       <div><span>Contract / evaluator</span><strong>v{detail.contract_version} · {detail.evaluator_version}</strong></div>
       <div><span>Offset window</span><strong>{detail.requested_start_offset ?? '—'} → {detail.requested_end_offset ?? 'open'}</strong></div>

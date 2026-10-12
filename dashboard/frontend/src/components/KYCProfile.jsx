@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext, useRef } from 'react';
 import { AuthContext } from './AuthContext';
 import ForceGraph2D from 'react-force-graph-2d';
 import { X, Smartphone, Globe, TrendingUp, AlertTriangle } from 'lucide-react';
+import { requestJson } from '../requestContract';
 
 export default function KYCProfile({ accountId, onClose }) {
   const { token } = useContext(AuthContext);
@@ -11,19 +12,21 @@ export default function KYCProfile({ accountId, onClose }) {
 
   useEffect(() => {
     if (!accountId || !token) return;
+    const controller = new AbortController();
     setLoading(true);
-    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/accounts/${accountId}/kyc`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+    requestJson(`${window._env_?.API_URL || 'http://localhost:8000'}/api/accounts/${accountId}/kyc`, {
+      headers: { 'Authorization': `Bearer ${token}` }, signal: controller.signal,
     })
-      .then(res => res.json())
       .then(data => {
         setProfile(data);
         setLoading(false);
       })
       .catch(err => {
+        if (err.name === 'AbortError') return;
         console.error(err);
         setLoading(false);
       });
+    return () => controller.abort();
   }, [accountId, token]);
 
   if (!accountId) return null;

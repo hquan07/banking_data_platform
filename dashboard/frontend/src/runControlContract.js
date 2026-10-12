@@ -36,18 +36,18 @@ export function describeRunFreshness(run) {
     return { status: 'degraded', label: 'Degraded', tone: 'red' };
   }
   if (checks > 0 && Number.isFinite(completeness) && completeness < 1) {
-    return { status: 'partial', label: 'Partial', tone: 'amber' };
+    return { status: 'degraded', label: 'Degraded', tone: 'amber', reason: 'reconciliation_incomplete' };
   }
   if (Number.isFinite(age) && Number.isFinite(threshold) && threshold >= 0 && age > threshold) {
     return { status: 'stale', label: 'Stale', tone: 'amber' };
   }
   if (run?.status === 'COMPLETED' && quality.status === 'completed') {
-    return { status: 'completed', label: 'Complete', tone: 'green' };
+    return { status: 'ready', label: 'Ready', tone: 'green' };
   }
   if (quality.status === 'running') {
     return { status: 'running', label: 'Active', tone: 'blue' };
   }
-  return { status: quality.status || 'idle', label: quality.status === 'idle' ? 'Idle' : 'Not measured', tone: 'neutral' };
+  return { status: quality.status || 'not_applicable', label: quality.status === 'idle' ? 'Idle' : 'Not applicable', tone: 'neutral' };
 }
 
 export function reconciliationLabel(quality) {

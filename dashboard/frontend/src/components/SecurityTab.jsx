@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, Search, ShieldAlert } from 'lucide-react';
 import { AuthContext } from './AuthContext';
 import { useDatasetContext } from './DatasetContext';
@@ -26,21 +26,25 @@ export default function SecurityTab() {
 
   useEffect(() => { const timeout = setTimeout(() => { setPage(1); setQuery(search.trim()); }, 300); return () => clearTimeout(timeout); }, [search]);
 
-  const loadAlerts = () => {
+  const loadAlerts = useCallback((signal = undefined) => {
     const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
     params.set('dataset_id', datasetId);
     if (query) params.set('search', query);
     if (status) params.set('status', status);
     if (risk) params.set('risk_level', risk);
     setLoading(true); setError('');
-    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts?${params}`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/alerts?${params}`, { headers: { Authorization: `Bearer ${token}` }, signal })
       .then(async response => { if (!response.ok) throw new Error((await response.json()).detail || `Không tải được alerts (${response.status})`); return response.json(); })
       .then(payload => { setAlerts(payload.data || []); setTotal(payload.total || 0); })
-      .catch(fetchError => setError(fetchError.message))
-      .finally(() => setLoading(false));
-  };
+      .catch(fetchError => { if (fetchError.name !== 'AbortError') setError(fetchError.message); })
+      .finally(() => { if (!signal?.aborted) setLoading(false); });
+  }, [datasetId, page, query, risk, status, token]);
 
-  useEffect(loadAlerts, [datasetId, page, query, risk, status, token]);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadAlerts(controller.signal);
+    return () => controller.abort();
+  }, [loadAlerts]);
 
   const counts = useMemo(() => alerts.reduce((acc, item) => { acc[item.status] = (acc[item.status] || 0) + 1; return acc; }, {}), [alerts]);
   const updateStatus = async (item, nextStatus) => {

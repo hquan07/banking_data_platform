@@ -27,22 +27,34 @@ export function parseStreamMessage(raw) {
   return message;
 }
 
-export function describeStreamStatus({ datasetId, isConnected, liveRate = 0, benchmarkRate = 0, lastBenchmarkAt = 0, now = Date.now() }) {
+export function describeStreamStatus({ datasetId, isConnected, liveRate = 0, benchmarkRate = 0, lastLiveAt = 0, lastBenchmarkAt = 0, now = Date.now() }) {
   const isBenchmark = datasetId !== 'live';
   if (!isConnected) {
     return {
       connection: 'Stream channel offline',
       activity: isBenchmark ? 'Replay unavailable' : '0 live events/s',
-      state: 'offline',
+      state: 'failed',
+      reason: 'stream_channel_disconnected',
+      ageSeconds: null,
     };
   }
   if (!isBenchmark) {
-    return { connection: 'Live channel connected', activity: `${liveRate} live events/s`, state: 'connected' };
+    return {
+      connection: 'Live channel connected',
+      activity: `${liveRate} live events/s`,
+      state: liveRate > 0 ? 'running' : 'idle',
+      reason: liveRate > 0 ? null : 'connected_no_events_in_current_window',
+      ageSeconds: lastLiveAt > 0 ? Math.max(0, (now - lastLiveAt) / 1000) : null,
+      lastSuccessAt: lastLiveAt > 0 ? new Date(lastLiveAt).toISOString() : null,
+    };
   }
   const replayActive = lastBenchmarkAt > 0 && now - lastBenchmarkAt < 2500;
   return {
     connection: 'Benchmark channel connected',
     activity: benchmarkRate > 0 ? `${benchmarkRate} benchmark events/s` : replayActive ? 'Replay active · waiting' : 'Replay inactive',
-    state: replayActive ? 'active' : 'idle',
+    state: replayActive ? 'running' : 'idle',
+    reason: replayActive ? null : 'no_active_replay',
+    ageSeconds: lastBenchmarkAt > 0 ? Math.max(0, (now - lastBenchmarkAt) / 1000) : null,
+    lastSuccessAt: lastBenchmarkAt > 0 ? new Date(lastBenchmarkAt).toISOString() : null,
   };
 }
