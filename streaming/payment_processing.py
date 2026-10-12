@@ -43,7 +43,7 @@ def clickhouse_client():
         port=int(os.environ.get("CLICKHOUSE_PORT", "9000")),
         database=os.environ["CLICKHOUSE_DB"],
         user=os.environ["CLICKHOUSE_USER"],
-        password=os.environ["CLICKHOUSE_PASSWORD"],
+        password=get_secret("CLICKHOUSE_PASSWORD", required=True),
         send_receive_timeout=10,
     )
 
@@ -68,11 +68,12 @@ def create_spark_session():
         .getOrCreate()
 
 def process_stream(spark, heartbeat):
-    client = clickhouse_client()
-    try:
-        client.execute(CLICKHOUSE_PAYMENT_DDL)
-    finally:
-        client.disconnect()
+    if os.environ.get("RUN_CLICKHOUSE_MIGRATIONS", "true").lower() == "true":
+        client = clickhouse_client()
+        try:
+            client.execute(CLICKHOUSE_PAYMENT_DDL)
+        finally:
+            client.disconnect()
 
     # Read from Kafka
     df = spark \

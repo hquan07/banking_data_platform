@@ -42,7 +42,10 @@ def test_missing_required_secret_fails_closed(monkeypatch):
 
 def test_bootstrap_preserves_dedicated_secrets_until_rotation(tmp_path):
     env_file = tmp_path / ".env"
-    env_file.write_text("POSTGRES_PASSWORD=admin-only-value\n")
+    env_file.write_text(
+        "POSTGRES_PASSWORD=admin-only-value\n"
+        "CLICKHOUSE_PASSWORD=clickhouse-admin-only-value\n"
+    )
     directory = tmp_path / "secrets"
     first = BOOTSTRAP.bootstrap(directory, env_file)
     original = (directory / "postgres_api_password").read_text()

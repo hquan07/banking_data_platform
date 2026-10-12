@@ -211,7 +211,7 @@ class RetentionRuntime:
                 host=os.environ.get("CLICKHOUSE_HOST", "localhost"),
                 port=int(os.environ.get("CLICKHOUSE_PORT", "9002")),
                 database=os.environ["CLICKHOUSE_DB"], user=os.environ["CLICKHOUSE_USER"],
-                password=os.environ["CLICKHOUSE_PASSWORD"], send_receive_timeout=15,
+                password=get_secret("CLICKHOUSE_PASSWORD", required=True), send_receive_timeout=15,
             )
         except ImportError:
             import clickhouse_connect
@@ -220,7 +220,7 @@ class RetentionRuntime:
                 host=os.environ.get("CLICKHOUSE_HOST", "localhost"),
                 port=int(os.environ.get("CLICKHOUSE_HTTP_PORT", "8123")),
                 database=os.environ["CLICKHOUSE_DB"], username=os.environ["CLICKHOUSE_USER"],
-                password=os.environ["CLICKHOUSE_PASSWORD"], connect_timeout=10,
+                password=get_secret("CLICKHOUSE_PASSWORD", required=True), connect_timeout=10,
             )
             clickhouse = _ClickHouseConnectAdapter(http_client)
         s3 = boto3.client(

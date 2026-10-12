@@ -19,6 +19,11 @@ GENERATED = (
     "postgres_migration_password",
     "postgres_backup_password",
     "postgres_monitor_password",
+    "clickhouse_api_password",
+    "clickhouse_processor_password",
+    "clickhouse_migration_password",
+    "clickhouse_backup_password",
+    "clickhouse_monitor_password",
 )
 
 
@@ -42,18 +47,19 @@ def _write_secret(path: Path, value: str, *, overwrite: bool) -> bool:
 
 def bootstrap(directory: Path, env_file: Path, *, rotate: bool = False) -> list[str]:
     values = dotenv_values(env_file)
-    admin_password = values.get("POSTGRES_PASSWORD")
-    if not admin_password:
-        raise RuntimeError(f"POSTGRES_PASSWORD is missing from {env_file}")
+    admin_secrets = {
+        "postgres_admin_password": values.get("POSTGRES_PASSWORD"),
+        "clickhouse_admin_password": values.get("CLICKHOUSE_PASSWORD"),
+    }
+    missing = [name for name, value in admin_secrets.items() if not value]
+    if missing:
+        raise RuntimeError(f"Admin credentials are missing from {env_file}: {', '.join(missing)}")
     directory.mkdir(parents=True, exist_ok=True)
     directory.chmod(0o700)
     changed = []
-    if _write_secret(
-        directory / "postgres_admin_password",
-        str(admin_password),
-        overwrite=True,
-    ):
-        changed.append("postgres_admin_password")
+    for name, value in admin_secrets.items():
+        if _write_secret(directory / name, str(value), overwrite=True):
+            changed.append(name)
     for name in GENERATED:
         if _write_secret(
             directory / name,

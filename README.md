@@ -115,8 +115,9 @@ python3 scripts/security/bootstrap_local_secrets.py
 docker compose -f docker-compose.yml -f docker-compose.secure.yml up -d --build
 ```
 
-See [`docs/p2-postgres-identities.md`](docs/p2-postgres-identities.md) for the
-permission matrix, verification, and rotation procedure. The base command
+See [`docs/p2-postgres-identities.md`](docs/p2-postgres-identities.md) and
+[`docs/p2-clickhouse-identities.md`](docs/p2-clickhouse-identities.md) for the
+permission matrices, verification, and rotation procedures. The base command
 above remains available as a compatibility path for local diagnosis.
 
 For local integration testing, Compose builds MinIO Community and `mc` from

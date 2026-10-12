@@ -11,6 +11,18 @@ secrets:
     file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/postgres_backup_password
   postgres_monitor_password:
     file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/postgres_monitor_password
+  clickhouse_admin_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/clickhouse_admin_password
+  clickhouse_api_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/clickhouse_api_password
+  clickhouse_processor_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/clickhouse_processor_password
+  clickhouse_migration_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/clickhouse_migration_password
+  clickhouse_backup_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/clickhouse_backup_password
+  clickhouse_monitor_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/clickhouse_monitor_password
 
 x-postgres-api: &postgres-api
   POSTGRES_USER: ${POSTGRES_API_USER:-banking_api}
@@ -21,6 +33,16 @@ x-postgres-processor: &postgres-processor
   POSTGRES_USER: ${POSTGRES_PROCESSOR_USER:-banking_processor}
   POSTGRES_PASSWORD: ""
   POSTGRES_PASSWORD_FILE: /run/secrets/postgres_processor_password
+
+x-clickhouse-api: &clickhouse-api
+  CLICKHOUSE_USER: ${CLICKHOUSE_API_USER:-banking_ch_api}
+  CLICKHOUSE_PASSWORD: ""
+  CLICKHOUSE_PASSWORD_FILE: /run/secrets/clickhouse_api_password
+
+x-clickhouse-processor: &clickhouse-processor
+  CLICKHOUSE_USER: ${CLICKHOUSE_PROCESSOR_USER:-banking_ch_processor}
+  CLICKHOUSE_PASSWORD: ""
+  CLICKHOUSE_PASSWORD_FILE: /run/secrets/clickhouse_processor_password
 
 services:
   postgres:
@@ -79,14 +101,67 @@ services:
     networks:
       - data_network
 
+  clickhouse:
+    environment:
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_PASSWORD_FILE: /run/secrets/clickhouse_admin_password
+    secrets:
+      - clickhouse_admin_password
+
+  clickhouse_identity_init:
+    image: clickhouse/clickhouse-server@sha256:5d6b622bbb109f40d12333187e44ae80864cf72aa71ae9a4704a53496615e941
+    entrypoint: ["bash", "/security/bootstrap-clickhouse-identities.sh"]
+    environment:
+      CLICKHOUSE_ADMIN_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+      CLICKHOUSE_API_USER: ${CLICKHOUSE_API_USER:-banking_ch_api}
+      CLICKHOUSE_PROCESSOR_USER: ${CLICKHOUSE_PROCESSOR_USER:-banking_ch_processor}
+      CLICKHOUSE_MIGRATION_USER: ${CLICKHOUSE_MIGRATION_USER:-banking_ch_migration}
+      CLICKHOUSE_BACKUP_USER: ${CLICKHOUSE_BACKUP_USER:-banking_ch_backup}
+      CLICKHOUSE_MONITOR_USER: ${CLICKHOUSE_MONITOR_USER:-banking_ch_monitor}
+    volumes:
+      - ./docker/security/bootstrap-clickhouse-identities.sh:/security/bootstrap-clickhouse-identities.sh:ro
+    secrets:
+      - clickhouse_admin_password
+      - clickhouse_api_password
+      - clickhouse_processor_password
+      - clickhouse_migration_password
+      - clickhouse_backup_password
+      - clickhouse_monitor_password
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - data_network
+
+  clickhouse_migrate:
+    image: clickhouse/clickhouse-server@sha256:5d6b622bbb109f40d12333187e44ae80864cf72aa71ae9a4704a53496615e941
+    entrypoint: ["bash", "/security/migrate-clickhouse.sh"]
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+      CLICKHOUSE_MIGRATION_USER: ${CLICKHOUSE_MIGRATION_USER:-banking_ch_migration}
+    volumes:
+      - ./docker/security/migrate-clickhouse.sh:/security/migrate-clickhouse.sh:ro
+      - ./docker/clickhouse/init.sql:/migrations/init.sql:ro
+    secrets:
+      - clickhouse_migration_password
+    depends_on:
+      clickhouse_identity_init:
+        condition: service_completed_successfully
+    networks:
+      - data_network
+
   dashboard_backend:
     environment:
-      <<: *postgres-api
+      <<: [*postgres-api, *clickhouse-api]
       RUN_DB_MIGRATIONS: "false"
     secrets:
       - postgres_api_password
+      - clickhouse_api_password
     depends_on:
       postgres_migrate:
+        condition: service_completed_successfully
+      clickhouse_migrate:
         condition: service_completed_successfully
 
   dataset_replay:
@@ -97,8 +172,9 @@ services:
         condition: service_completed_successfully
 
   reconciliation:
-    environment: *postgres-processor
-    secrets: [postgres_processor_password]
+    environment:
+      <<: [*postgres-processor, *clickhouse-processor]
+    secrets: [postgres_processor_password, clickhouse_processor_password]
     depends_on:
       postgres_migrate:
         condition: service_completed_successfully
@@ -125,8 +201,10 @@ services:
         condition: service_completed_successfully
 
   payment_processor:
-    environment: *postgres-processor
-    secrets: [postgres_processor_password]
+    environment:
+      <<: [*postgres-processor, *clickhouse-processor]
+      RUN_CLICKHOUSE_MIGRATIONS: "false"
+    secrets: [postgres_processor_password, clickhouse_processor_password]
     depends_on:
       postgres_migrate:
         condition: service_completed_successfully
@@ -140,9 +218,9 @@ services:
 
   airflow:
     environment:
-      <<: *postgres-processor
+      <<: [*postgres-processor, *clickhouse-processor]
       PYTHONPATH: /opt/airflow
-    secrets: [postgres_processor_password]
+    secrets: [postgres_processor_password, clickhouse_processor_password]
     volumes:
       - ./shared:/opt/airflow/shared:ro
     depends_on:

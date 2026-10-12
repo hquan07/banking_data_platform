@@ -71,7 +71,7 @@ def run_pipeline(spark):
     )
     clickhouse_properties = {
         "user": os.environ.get("CLICKHOUSE_USER", ""),
-        "password": os.environ.get("CLICKHOUSE_PASSWORD", ""),
+        "password": get_secret("CLICKHOUSE_PASSWORD"),
         "driver": "com.clickhouse.jdbc.ClickHouseDriver"
     }
     

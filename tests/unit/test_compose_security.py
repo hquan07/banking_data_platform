@@ -35,3 +35,15 @@ def test_secure_overlay_separates_postgres_identities_and_uses_secret_files():
     assert "postgres_admin_password" in services["postgres"]["secrets"]
     assert "postgres_backup_password" in services["postgres"]["secrets"]
     assert "postgres_monitor_password" in compose["secrets"]
+
+
+def test_secure_overlay_separates_clickhouse_identities_and_uses_secret_files():
+    compose = yaml.safe_load(SECURE_COMPOSE_PATH.read_text())
+    services = compose["services"]
+    assert services["clickhouse"]["environment"]["CLICKHOUSE_PASSWORD"] == ""
+    assert services["clickhouse"]["environment"]["CLICKHOUSE_PASSWORD_FILE"] == "/run/secrets/clickhouse_admin_password"
+    assert services["dashboard_backend"]["environment"]["CLICKHOUSE_USER"] == "${CLICKHOUSE_API_USER:-banking_ch_api}"
+    assert services["payment_processor"]["environment"]["CLICKHOUSE_USER"] == "${CLICKHOUSE_PROCESSOR_USER:-banking_ch_processor}"
+    assert services["payment_processor"]["environment"]["RUN_CLICKHOUSE_MIGRATIONS"] == "false"
+    assert "clickhouse_api_password" in services["dashboard_backend"]["secrets"]
+    assert "clickhouse_processor_password" in services["payment_processor"]["secrets"]

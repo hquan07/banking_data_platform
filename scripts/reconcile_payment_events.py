@@ -133,7 +133,7 @@ def query_stores(payment_ids):
             port=int(os.environ.get("CLICKHOUSE_PORT", "9002")),
             database=os.environ["CLICKHOUSE_DB"],
             user=os.environ["CLICKHOUSE_USER"],
-            password=os.environ["CLICKHOUSE_PASSWORD"],
+            password=get_secret("CLICKHOUSE_PASSWORD", required=True),
             send_receive_timeout=10,
         )
     except Exception:

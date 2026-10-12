@@ -173,8 +173,16 @@ def rehearse_postgresql(temp_dir: Path, token: str) -> dict[str, Any]:
 class ClickHouseClient:
     def __init__(self) -> None:
         self.url = os.environ.get("CLICKHOUSE_HTTP_URL", "http://127.0.0.1:8123/")
-        self.user = os.environ["CLICKHOUSE_USER"]
-        self.password = os.environ["CLICKHOUSE_PASSWORD"]
+        from shared.runtime_secrets import get_secret
+
+        self.user = os.environ.get(
+            "CLICKHOUSE_BACKUP_USER", os.environ["CLICKHOUSE_USER"],
+        )
+        self.password = get_secret(
+            "CLICKHOUSE_BACKUP_PASSWORD",
+            default=get_secret("CLICKHOUSE_PASSWORD"),
+            required=True,
+        )
 
     def query(self, sql: str, data: bytes | None = None) -> bytes:
         body = sql.encode() if data is None else sql.encode() + b"\n" + data
@@ -195,15 +203,27 @@ def _clickhouse_tables(client: ClickHouseClient, database: str) -> list[str]:
 def rehearse_clickhouse(temp_dir: Path, token: str) -> dict[str, Any]:
     client = ClickHouseClient()
     source_db = _safe_name(os.environ["CLICKHOUSE_DB"], "ClickHouse database")
-    target_db = _safe_name(f"recovery_{token.lower()}_{os.getpid()}", "ClickHouse database")
+    configured_target = os.environ.get("CLICKHOUSE_RECOVERY_DB")
+    target_db = _safe_name(
+        configured_target or f"recovery_{token.lower()}_{os.getpid()}",
+        "ClickHouse database",
+    )
+    fixed_target = configured_target is not None
     tables = _clickhouse_tables(client, source_db)
     if not tables:
         raise RuntimeError(f"ClickHouse database {source_db!r} has no tables")
 
     artifacts: list[dict[str, Any]] = []
     counts: dict[str, dict[str, int]] = {}
-    client.query(f"DROP DATABASE IF EXISTS `{target_db}` SYNC")
-    client.query(f"CREATE DATABASE `{target_db}`")
+    if fixed_target:
+        existing = _clickhouse_tables(client, target_db)
+        if existing:
+            raise RuntimeError(
+                f"Dedicated ClickHouse recovery database is not empty: {existing}"
+            )
+    else:
+        client.query(f"DROP DATABASE IF EXISTS `{target_db}` SYNC")
+        client.query(f"CREATE DATABASE `{target_db}`")
     try:
         for table in tables:
             table = _safe_name(table, "ClickHouse table")
@@ -253,7 +273,11 @@ def rehearse_clickhouse(temp_dir: Path, token: str) -> dict[str, Any]:
             "temporary_database_removed": True,
         }
     finally:
-        client.query(f"DROP DATABASE IF EXISTS `{target_db}` SYNC")
+        if fixed_target:
+            for table in _clickhouse_tables(client, target_db):
+                client.query(f"DROP TABLE IF EXISTS `{target_db}`.`{table}` SYNC")
+        else:
+            client.query(f"DROP DATABASE IF EXISTS `{target_db}` SYNC")
 
 
 def _neo4j_commit(

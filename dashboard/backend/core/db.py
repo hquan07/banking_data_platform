@@ -49,7 +49,7 @@ try:
         host=os.environ.get("CLICKHOUSE_HOST", "banking_clickhouse"),
         port=int(os.environ.get("CLICKHOUSE_PORT", 9000)),
         user=os.environ.get("CLICKHOUSE_USER", ""),
-        password=os.environ.get("CLICKHOUSE_PASSWORD", ""),
+        password=get_secret("CLICKHOUSE_PASSWORD"),
         database=os.environ.get("CLICKHOUSE_DB", "banking_warehouse"),
     )
 except Exception as e:
@@ -92,7 +92,7 @@ def get_s3_client():
             "s3",
             endpoint_url=os.environ.get("MINIO_ENDPOINT", "http://banking_minio:9000"),
             aws_access_key_id=os.environ.get("MINIO_ROOT_USER", ""),
-            aws_secret_access_key=os.environ.get("MINIO_ROOT_PASSWORD", ""),
+            aws_secret_access_key=get_secret("MINIO_ROOT_PASSWORD"),
             config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
             region_name="us-east-1",
         )
