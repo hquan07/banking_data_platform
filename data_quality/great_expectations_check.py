@@ -2,6 +2,7 @@
 
 import json
 import os
+from shared.runtime_secrets import get_secret
 import re
 import uuid
 from datetime import datetime, timezone
@@ -30,7 +31,7 @@ def postgres_connection():
         port=int(os.environ.get("POSTGRES_PORT", "5433")),
         dbname=os.environ["POSTGRES_DB"],
         user=os.environ["POSTGRES_USER"],
-        password=os.environ["POSTGRES_PASSWORD"],
+        password=get_secret("POSTGRES_PASSWORD", required=True),
     )
 
 

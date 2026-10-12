@@ -1,4 +1,5 @@
 import os
+from shared.runtime_secrets import get_secret
 
 
 def read_silver(spark, path):
@@ -86,7 +87,7 @@ def run_pipeline(spark):
     )
     postgres_properties = {
         "user": os.environ.get("POSTGRES_USER", ""),
-        "password": os.environ.get("POSTGRES_PASSWORD", ""),
+        "password": get_secret("POSTGRES_PASSWORD"),
         "driver": "org.postgresql.Driver",
     }
     postgres_customer_df = silver_df.select(

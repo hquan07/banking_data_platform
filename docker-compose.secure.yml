@@ -1,0 +1,150 @@
+secrets:
+  postgres_admin_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/postgres_admin_password
+  postgres_api_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/postgres_api_password
+  postgres_processor_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/postgres_processor_password
+  postgres_migration_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/postgres_migration_password
+  postgres_backup_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/postgres_backup_password
+  postgres_monitor_password:
+    file: ${LOCAL_SECRET_DIR:-.runtime/secrets}/postgres_monitor_password
+
+x-postgres-api: &postgres-api
+  POSTGRES_USER: ${POSTGRES_API_USER:-banking_api}
+  POSTGRES_PASSWORD: ""
+  POSTGRES_PASSWORD_FILE: /run/secrets/postgres_api_password
+
+x-postgres-processor: &postgres-processor
+  POSTGRES_USER: ${POSTGRES_PROCESSOR_USER:-banking_processor}
+  POSTGRES_PASSWORD: ""
+  POSTGRES_PASSWORD_FILE: /run/secrets/postgres_processor_password
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ""
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+      POSTGRES_BACKUP_USER: ${POSTGRES_BACKUP_USER:-banking_backup}
+      POSTGRES_BACKUP_PASSWORD_FILE: /run/secrets/postgres_backup_password
+    secrets:
+      - postgres_admin_password
+      - postgres_backup_password
+
+  postgres_identity_init:
+    image: postgres@sha256:7e2070cf6ad06fb3cbbd141b1bafbb7fd5bb63e2b6001e6daf34448eb555e4b3
+    environment:
+      POSTGRES_ADMIN_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_API_USER: ${POSTGRES_API_USER:-banking_api}
+      POSTGRES_PROCESSOR_USER: ${POSTGRES_PROCESSOR_USER:-banking_processor}
+      POSTGRES_MIGRATION_USER: ${POSTGRES_MIGRATION_USER:-banking_migration}
+      POSTGRES_BACKUP_USER: ${POSTGRES_BACKUP_USER:-banking_backup}
+      POSTGRES_MONITOR_USER: ${POSTGRES_MONITOR_USER:-banking_monitor}
+    command: ["bash", "/security/bootstrap-postgres-identities.sh"]
+    volumes:
+      - ./docker/security/bootstrap-postgres-identities.sh:/security/bootstrap-postgres-identities.sh:ro
+    secrets:
+      - postgres_admin_password
+      - postgres_api_password
+      - postgres_processor_password
+      - postgres_migration_password
+      - postgres_backup_password
+      - postgres_monitor_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - data_network
+
+  postgres_migrate:
+    build:
+      context: .
+      dockerfile: dashboard/backend/Dockerfile
+    command: ["python", "migrate.py"]
+    environment:
+      POSTGRES_HOST: banking_postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_MIGRATION_USER:-banking_migration}
+      POSTGRES_PASSWORD: ""
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_migration_password
+    secrets:
+      - postgres_migration_password
+    depends_on:
+      postgres_identity_init:
+        condition: service_completed_successfully
+    networks:
+      - data_network
+
+  dashboard_backend:
+    environment:
+      <<: *postgres-api
+      RUN_DB_MIGRATIONS: "false"
+    secrets:
+      - postgres_api_password
+    depends_on:
+      postgres_migrate:
+        condition: service_completed_successfully
+
+  dataset_replay:
+    environment: *postgres-processor
+    secrets: [postgres_processor_password]
+    depends_on:
+      postgres_migrate:
+        condition: service_completed_successfully
+
+  reconciliation:
+    environment: *postgres-processor
+    secrets: [postgres_processor_password]
+    depends_on:
+      postgres_migrate:
+        condition: service_completed_successfully
+
+  graph_processor:
+    environment: *postgres-processor
+    secrets: [postgres_processor_password]
+    depends_on:
+      postgres_migrate:
+        condition: service_completed_successfully
+
+  benchmark_processor:
+    environment: *postgres-processor
+    secrets: [postgres_processor_password]
+    depends_on:
+      postgres_migrate:
+        condition: service_completed_successfully
+
+  benchmark_graph_processor:
+    environment: *postgres-processor
+    secrets: [postgres_processor_password]
+    depends_on:
+      postgres_migrate:
+        condition: service_completed_successfully
+
+  payment_processor:
+    environment: *postgres-processor
+    secrets: [postgres_processor_password]
+    depends_on:
+      postgres_migrate:
+        condition: service_completed_successfully
+
+  fraud_engine:
+    environment: *postgres-processor
+    secrets: [postgres_processor_password]
+    depends_on:
+      postgres_migrate:
+        condition: service_completed_successfully
+
+  airflow:
+    environment:
+      <<: *postgres-processor
+      PYTHONPATH: /opt/airflow
+    secrets: [postgres_processor_password]
+    volumes:
+      - ./shared:/opt/airflow/shared:ro
+    depends_on:
+      postgres_migrate:
+        condition: service_completed_successfully

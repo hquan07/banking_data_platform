@@ -8,8 +8,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from passlib.context import CryptContext
 import jwt
+from shared.runtime_secrets import get_secret
 
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "")
+SECRET_KEY = get_secret("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 

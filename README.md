@@ -79,7 +79,7 @@ The system utilizes a modern technology stack fully containerized with Docker.
 * **Monitoring & Observability**:
   * **Prometheus**: Time-series database for scraping system metrics (Kafka, Spark, DBs).
   * **Grafana**: Visualization dashboard for infrastructure and application health.
-* **Security**: Centralized `.env` secrets management, RBAC for Postgres/ClickHouse, and PySpark-based Data Masking.
+* **Security**: File-backed runtime secrets, least-privilege PostgreSQL identities, dashboard RBAC, and PySpark-based Data Masking.
 
 ## 🚀 Setup & Installation
 
@@ -104,6 +104,20 @@ do not widen datastore ports directly to a LAN or the internet.
 ```bash
 docker compose up -d
 ```
+
+For the hardened demo path, generate the git-ignored local secret files and
+apply the secure overlay. This separates PostgreSQL API, processor, migration,
+monitoring, and backup identities and removes their passwords from container
+environment variables:
+
+```bash
+python3 scripts/security/bootstrap_local_secrets.py
+docker compose -f docker-compose.yml -f docker-compose.secure.yml up -d --build
+```
+
+See [`docs/p2-postgres-identities.md`](docs/p2-postgres-identities.md) for the
+permission matrix, verification, and rotation procedure. The base command
+above remains available as a compatibility path for local diagnosis.
 
 For local integration testing, Compose builds MinIO Community and `mc` from
 pinned upstream source revisions in `docker/minio/Dockerfile`. This replaces

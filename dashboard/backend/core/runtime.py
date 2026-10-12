@@ -2,6 +2,8 @@
 
 import os
 
+from shared.runtime_secrets import get_secret
+
 
 APP_MODE = os.environ.get("APP_MODE", "integration").lower()
 if APP_MODE not in {"integration", "production"}:
@@ -20,6 +22,14 @@ def validate_runtime_config() -> None:
         "MINIO_ENDPOINT", "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD",
         "LIVE_INGESTION_URL",
     )
-    missing = [name for name in required if not os.environ.get(name) or os.environ[name].startswith("replace-with-")]
+    missing = []
+    for name in required:
+        value = os.environ.get(name, "")
+        if name.endswith(("PASSWORD", "SECRET_KEY")):
+            value = get_secret(name)
+            if not value or value.startswith("replace-with-"):
+                missing.append(name)
+        elif not value or value.startswith("replace-with-"):
+            missing.append(name)
     if missing:
         raise RuntimeError(f"Missing or placeholder configuration: {', '.join(missing)}")

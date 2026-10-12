@@ -1,5 +1,6 @@
 import requests
 import os
+from shared.runtime_secrets import get_secret
 import json
 import time
 
@@ -13,7 +14,7 @@ CONNECTOR_CONFIG = {
         "database.hostname": "banking_postgres",
         "database.port": "5432",
         "database.user": os.environ.get("POSTGRES_USER", ""),
-        "database.password": os.environ.get("POSTGRES_PASSWORD", ""),
+        "database.password": get_secret("POSTGRES_PASSWORD"),
         "database.dbname": os.environ.get("POSTGRES_DB", ""),
         "database.server.name": "banking_cdc",
         "plugin.name": "pgoutput",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from shared.runtime_secrets import get_secret
 import time
 import uuid
 from collections import defaultdict
@@ -38,7 +39,7 @@ class ReplayRunControl:
             port=int(os.environ.get("POSTGRES_PORT", "5432")),
             dbname=os.environ["POSTGRES_DB"],
             user=os.environ["POSTGRES_USER"],
-            password=os.environ["POSTGRES_PASSWORD"],
+            password=get_secret("POSTGRES_PASSWORD", required=True),
             connect_timeout=10,
         )
         connection.autocommit = False

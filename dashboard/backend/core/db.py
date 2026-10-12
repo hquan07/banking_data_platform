@@ -5,6 +5,8 @@ Manages connections to PostgreSQL, Neo4j, ClickHouse, Redis, and MinIO.
 import os
 import json
 
+from shared.runtime_secrets import get_secret
+
 # =============================================
 # PostgreSQL
 # =============================================
@@ -16,7 +18,7 @@ try:
         port=int(os.environ.get("POSTGRES_PORT", 5432)),
         dbname=os.environ.get("POSTGRES_DB", "banking_data_platform"),
         user=os.environ.get("POSTGRES_USER", ""),
-        password=os.environ.get("POSTGRES_PASSWORD", ""),
+        password=get_secret("POSTGRES_PASSWORD"),
     )
     pg_conn.autocommit = True
 except Exception as e:

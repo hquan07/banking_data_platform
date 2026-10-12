@@ -41,6 +41,11 @@ END
 $$;
 SELECT table_name || '|' || row_total FROM pg_temp.project_table_counts();
 """
+PG_BACKUP_ENV = (
+    'user="${POSTGRES_BACKUP_USER:-$POSTGRES_USER}"; '
+    'if [ -n "${POSTGRES_BACKUP_PASSWORD_FILE:-}" ]; then '
+    'export PGPASSWORD="$(cat "$POSTGRES_BACKUP_PASSWORD_FILE")"; fi; '
+)
 
 
 def _validated_name(value: str, label: str) -> str:
@@ -103,7 +108,7 @@ def create_backup(container: str, backup_dir: Path, timestamp: str) -> Path:
     temporary = archive.with_suffix(".dump.part")
     command = _docker_shell(
         container,
-        'exec pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" '
+        PG_BACKUP_ENV + 'exec pg_dump -U "$user" "$POSTGRES_DB" '
         "--format=custom --no-owner --no-privileges",
     )
     with temporary.open("wb") as output:
@@ -151,14 +156,14 @@ def table_counts(container: str, database: str | None = None) -> dict[str, int]:
     if database is None:
         command = _docker_shell(
             container,
-            'exec psql -v ON_ERROR_STOP=1 -qAt -U "$POSTGRES_USER" '
+            PG_BACKUP_ENV + 'exec psql -v ON_ERROR_STOP=1 -qAt -U "$user" '
             '-d "$POSTGRES_DB" -c "$1"',
             TABLE_COUNTS_SQL,
         )
     else:
         command = _docker_shell(
             container,
-            'exec psql -v ON_ERROR_STOP=1 -qAt -U "$POSTGRES_USER" '
+            PG_BACKUP_ENV + 'exec psql -v ON_ERROR_STOP=1 -qAt -U "$user" '
             '-d "$1" -c "$2"',
             database,
             TABLE_COUNTS_SQL,
@@ -182,12 +187,12 @@ def compare_counts(source: dict[str, int], restored: dict[str, int]) -> list[dic
 def rehearse_restore(container: str, archive: Path, database: str) -> tuple[dict, dict]:
     create = _docker_shell(
         container,
-        'exec createdb -U "$POSTGRES_USER" "$1"',
+        PG_BACKUP_ENV + 'exec createdb -U "$user" "$1"',
         database,
     )
     drop = _docker_shell(
         container,
-        'exec dropdb -U "$POSTGRES_USER" --if-exists --force "$1"',
+        PG_BACKUP_ENV + 'exec dropdb -U "$user" --if-exists --force "$1"',
         database,
     )
     _run(drop)
@@ -196,8 +201,9 @@ def rehearse_restore(container: str, archive: Path, database: str) -> tuple[dict
         _run(
             _docker_shell(
                 container,
+                PG_BACKUP_ENV +
                 'exec pg_restore --exit-on-error --no-owner --no-privileges '
-                '-U "$POSTGRES_USER" -d "$1"',
+                '-U "$user" -d "$1"',
                 database,
                 interactive=True,
             ),

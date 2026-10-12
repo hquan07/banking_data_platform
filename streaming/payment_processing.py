@@ -1,4 +1,5 @@
 import os
+from shared.runtime_secrets import get_secret
 import json
 import time
 from datetime import timezone
@@ -141,7 +142,7 @@ def process_stream(spark, heartbeat):
             port=int(os.environ.get("POSTGRES_PORT", "5432")),
             dbname=os.environ["POSTGRES_DB"],
             user=os.environ["POSTGRES_USER"],
-            password=os.environ["POSTGRES_PASSWORD"],
+            password=get_secret("POSTGRES_PASSWORD", required=True),
             connect_timeout=10,
         )
         try:
@@ -167,7 +168,7 @@ def process_stream(spark, heartbeat):
             port=int(os.environ.get("POSTGRES_PORT", "5432")),
             dbname=os.environ["POSTGRES_DB"],
             user=os.environ["POSTGRES_USER"],
-            password=os.environ["POSTGRES_PASSWORD"],
+            password=get_secret("POSTGRES_PASSWORD", required=True),
             connect_timeout=10,
         )
         try:

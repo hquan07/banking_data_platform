@@ -16,6 +16,7 @@ from prometheus_client import Gauge
 from core.db import pg_conn, graph_driver, ch_client, redis_client, get_s3_client
 from core.security import get_password_hash
 from core.deps import resolve_user_token
+from core.migrations import apply_migrations
 from core.runtime import APP_MODE, validate_runtime_config
 from services.kafka_client import (
     benchmark_kafka_ready,
@@ -31,6 +32,7 @@ from services.security_controls import (
     record_security_event,
     refresh_active_session_metric,
 )
+from shared.runtime_secrets import get_secret
 
 # API Routers
 from api.auth import router as auth_router
@@ -87,20 +89,11 @@ async def lifespan(app: FastAPI):
     if get_s3_client() is None:
         raise RuntimeError("MinIO is required")
 
-    # --- Startup ---
-    # Run idempotent application migrations. This also repairs databases
-    # created before the dashboard schema was mounted by Compose.
-    if pg_conn:
+    # Local compatibility mode can still migrate at startup. The hardened
+    # Compose overlay disables this and runs migrations with a separate role.
+    if pg_conn and os.environ.get("RUN_DB_MIGRATIONS", "true").lower() == "true":
         try:
-            sql_dir = os.path.join(os.path.dirname(__file__), "sql")
-            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql", "p1_dq_results.sql", "p1_trace_context.sql", "dataset_benchmark.sql", "dataset_model_candidates.sql", "p2_runtime_observability.sql", "p2_run_control.sql", "p2_run_aware_replay.sql", "p2_reconciliation.sql", "p2_investigation_cases.sql", "p2_temporal_graph_evidence.sql", "p2_retention_controls.sql", "p2_security_controls.sql"):
-                migration_path = os.path.join(sql_dir, migration_name)
-                if not os.path.exists(migration_path):
-                    continue
-                with open(migration_path, "r", encoding="utf-8") as f:
-                    sql = f.read()
-                with pg_conn.cursor() as cur:
-                    cur.execute(sql)
+            for migration_name in apply_migrations(pg_conn):
                 print(f"Migration {migration_name} completed successfully.")
         except Exception as e:
             raise RuntimeError(f"Database migration failed: {e}") from e
@@ -111,8 +104,8 @@ async def lifespan(app: FastAPI):
             with pg_conn.cursor() as cur:
                 cur.execute("SELECT count(*) FROM users")
                 if cur.fetchone()[0] == 0:
-                    admin_password = os.environ.get("DASHBOARD_ADMIN_PASSWORD")
-                    analyst_password = os.environ.get("DASHBOARD_ANALYST_PASSWORD")
+                    admin_password = get_secret("DASHBOARD_ADMIN_PASSWORD")
+                    analyst_password = get_secret("DASHBOARD_ANALYST_PASSWORD")
                     if not admin_password or not analyst_password:
                         raise RuntimeError("Dashboard passwords must be configured")
                     admin_hash = get_password_hash(admin_password)

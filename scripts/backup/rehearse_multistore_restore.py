@@ -796,7 +796,8 @@ def run_reconciliation() -> dict[str, Any]:
 import json, os
 import psycopg2
 from shared.reconciliation.run import reconcile_benchmark_run
-connection = psycopg2.connect(host=os.environ["POSTGRES_HOST"], port=os.environ["POSTGRES_PORT"], dbname=os.environ["POSTGRES_DB"], user=os.environ["POSTGRES_USER"], password=os.environ["POSTGRES_PASSWORD"])
+from shared.runtime_secrets import get_secret
+connection = psycopg2.connect(host=os.environ["POSTGRES_HOST"], port=os.environ["POSTGRES_PORT"], dbname=os.environ["POSTGRES_DB"], user=os.environ["POSTGRES_USER"], password=get_secret("POSTGRES_PASSWORD", required=True))
 try:
     with connection.cursor() as cursor:
         cursor.execute("SELECT run_id FROM pipeline_runs WHERE status = 'COMPLETED' AND EXISTS (SELECT 1 FROM pipeline_run_offsets o WHERE o.run_id = pipeline_runs.run_id) ORDER BY completed_at DESC NULLS LAST LIMIT 1")

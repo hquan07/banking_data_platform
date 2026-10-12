@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+from shared.runtime_secrets import get_secret
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -123,7 +124,7 @@ def query_stores(payment_ids):
         port=int(os.environ.get("POSTGRES_PORT", "5433")),
         dbname=os.environ["POSTGRES_DB"],
         user=os.environ["POSTGRES_USER"],
-        password=os.environ["POSTGRES_PASSWORD"],
+        password=get_secret("POSTGRES_PASSWORD", required=True),
         connect_timeout=10,
     )
     try:
@@ -168,7 +169,7 @@ def persist_payment_results(
         host=os.environ.get("POSTGRES_HOST", "localhost"),
         port=int(os.environ.get("POSTGRES_PORT", "5433")),
         dbname=os.environ["POSTGRES_DB"], user=os.environ["POSTGRES_USER"],
-        password=os.environ["POSTGRES_PASSWORD"], connect_timeout=10,
+        password=get_secret("POSTGRES_PASSWORD", required=True), connect_timeout=10,
     )
     observed_at = datetime.now(timezone.utc)
     try:

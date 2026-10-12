@@ -1,4 +1,5 @@
 import os
+from shared.runtime_secrets import get_secret
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
@@ -30,7 +31,7 @@ def run_pipeline(spark):
     db_url = f"jdbc:postgresql://{host}:{port}/{db}"
     db_properties = {
         "user": os.environ.get("POSTGRES_USER", ""),
-        "password": os.environ.get("POSTGRES_PASSWORD", ""),
+        "password": get_secret("POSTGRES_PASSWORD"),
         "driver": "org.postgresql.Driver"
     }
     

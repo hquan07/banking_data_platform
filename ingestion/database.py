@@ -1,4 +1,5 @@
 import os
+from shared.runtime_secrets import get_secret
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
@@ -13,5 +14,5 @@ def get_connection():
         port=os.getenv("POSTGRES_PORT", "5432"),
         dbname=os.getenv("POSTGRES_DB", "banking_data_platform"),
         user=os.getenv("POSTGRES_USER", ""),
-        password=os.getenv("POSTGRES_PASSWORD", "")
+        password=get_secret("POSTGRES_PASSWORD")
     )

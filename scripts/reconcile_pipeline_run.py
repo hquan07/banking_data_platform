@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+from shared.runtime_secrets import get_secret
 import sys
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def main() -> int:
         host=os.environ.get("POSTGRES_HOST", "localhost"),
         port=int(os.environ.get("POSTGRES_PORT", "5433")),
         dbname=os.environ["POSTGRES_DB"], user=os.environ["POSTGRES_USER"],
-        password=os.environ["POSTGRES_PASSWORD"], connect_timeout=10,
+        password=get_secret("POSTGRES_PASSWORD", required=True), connect_timeout=10,
     )
     try:
         checks = reconcile_benchmark_run(
