@@ -25,8 +25,8 @@ function readActiveTab() {
   return [...WORKSPACE_TABS, ...ADMIN_TABS].includes(stored) ? stored : 'overview';
 }
 
-function NavButton({ id, active, onSelect, icon, children, badge }) {
-  return <button className={`nav-item ${active === id ? 'active' : ''}`} onClick={() => onSelect(id)}>{icon}<span>{children}</span>{badge > 0 && <span className="badge">{badge}</span>}</button>;
+function NavButton({ id, active, onSelect, icon, children, badge, disabled = false, reason = null }) {
+  return <button className={`nav-item ${active === id ? 'active' : ''}`} onClick={() => onSelect(id)} disabled={disabled} title={reason || undefined} aria-label={disabled && reason ? `${children}: ${reason}` : undefined}>{icon}<span>{children}</span>{badge > 0 && <span className="badge">{badge}</span>}</button>;
 }
 
 function MainApp() {
@@ -44,10 +44,17 @@ function MainApp() {
   const [isConnected, setIsConnected] = useState(false);
   const [chartData, setChartData] = useState([]);
   const { token, user, logout } = React.useContext(AuthContext);
-  const { datasetId, setDatasetId } = useDatasetContext();
-  const fixedDatasetId = fixedDatasetForTab(activeTab);
+  const {
+    datasetId, setDatasetId, manifest, manifestLoading, manifestError,
+    tabCapability: capabilityForTab,
+  } = useDatasetContext();
+  const fixedDatasetId = fixedDatasetForTab(activeTab, manifest);
+  const navigationCapability = tabId => {
+    const fixed = fixedDatasetForTab(tabId, manifest);
+    return capabilityForTab(tabId, fixed || datasetId);
+  };
   const selectTab = tab => {
-    const tabDatasetId = fixedDatasetForTab(tab);
+    const tabDatasetId = fixedDatasetForTab(tab, manifest);
     if (tabDatasetId && tabDatasetId !== datasetId) setDatasetId(tabDatasetId);
     setActiveTab(tab);
     sessionStorage.setItem('sentinel-active-tab', tab);
@@ -60,6 +67,12 @@ function MainApp() {
   useEffect(() => {
     if (fixedDatasetId && fixedDatasetId !== datasetId) setDatasetId(fixedDatasetId);
   }, [activeTab, datasetId, fixedDatasetId]);
+
+  useEffect(() => {
+    if (!WORKSPACE_TABS.includes(activeTab) || manifestLoading) return;
+    const targetDataset = fixedDatasetId || datasetId;
+    if (!capabilityForTab(activeTab, targetDataset).available) selectTab('datasets');
+  }, [activeTab, datasetId, fixedDatasetId, manifest, manifestLoading]);
 
   useEffect(() => {
     let mounted = true;
@@ -111,12 +124,12 @@ function MainApp() {
       <div className="sidebar-logo"><span className="brand-mark"><ShieldAlert size={22} /></span><div><h1>Sentinel</h1><small>Banking Intelligence</small></div></div>
       <div className="nav-section-label">Workspace</div>
       <div className="nav-menu">
-        <NavButton id="overview" active={activeTab} onSelect={selectTab} icon={<LayoutDashboard size={19} />}>Command Center</NavButton>
-        <NavButton id="fraud" active={activeTab} onSelect={selectTab} icon={<BarChart3 size={19} />}>Fraud Monitor</NavButton>
-        <NavButton id="security" active={activeTab} onSelect={selectTab} icon={<Search size={19} />} badge={alerts.length}>Investigations</NavButton>
-        <NavButton id="analytics" active={activeTab} onSelect={selectTab} icon={<Network size={19} />}>AML Network</NavButton>
-        <NavButton id="datasets" active={activeTab} onSelect={selectTab} icon={<Database size={19} />}>Data Sources</NavButton>
-        <NavButton id="history" active={activeTab} onSelect={selectTab} icon={<History size={19} />}>Historical Analytics</NavButton>
+        <NavButton id="overview" active={activeTab} onSelect={selectTab} icon={<LayoutDashboard size={19} />} disabled={!navigationCapability('overview').available} reason={navigationCapability('overview').reason}>Command Center</NavButton>
+        <NavButton id="fraud" active={activeTab} onSelect={selectTab} icon={<BarChart3 size={19} />} disabled={!navigationCapability('fraud').available} reason={navigationCapability('fraud').reason}>Fraud Monitor</NavButton>
+        <NavButton id="security" active={activeTab} onSelect={selectTab} icon={<Search size={19} />} badge={alerts.length} disabled={!navigationCapability('security').available} reason={navigationCapability('security').reason}>Investigations</NavButton>
+        <NavButton id="analytics" active={activeTab} onSelect={selectTab} icon={<Network size={19} />} disabled={!navigationCapability('analytics').available} reason={navigationCapability('analytics').reason}>AML Network</NavButton>
+        <NavButton id="datasets" active={activeTab} onSelect={selectTab} icon={<Database size={19} />} disabled={!navigationCapability('datasets').available} reason={navigationCapability('datasets').reason}>Data Sources</NavButton>
+        <NavButton id="history" active={activeTab} onSelect={selectTab} icon={<History size={19} />} disabled={!navigationCapability('history').available} reason={navigationCapability('history').reason}>Historical Analytics</NavButton>
       </div>
       {user?.role === 'ADMIN' && <><div className="nav-section-label nav-admin-label">Administration</div><div className="nav-menu">
         <NavButton id="users" active={activeTab} onSelect={selectTab} icon={<Users size={19} />}>Investigator KPIs</NavButton>
@@ -130,8 +143,8 @@ function MainApp() {
         <div className="user-profile"><span className="user-avatar">{user?.username?.slice(0, 2).toUpperCase()}</span><div><strong>{user?.username}</strong><small>{user?.role}</small></div><button className="icon-button" onClick={logout} aria-label="Đăng xuất"><LogOut size={17} /></button></div>
       </header>
       {!fixedDatasetId && <DatasetContextBar />}
-      <main className="dashboard-container"><Suspense fallback={<div className="state-message">Đang tải nội dung…</div>}>
-        {fixedDatasetId && fixedDatasetId !== datasetId ? <div className="state-message">Đang áp dụng phạm vi DS3…</div> : <>
+      <main className="dashboard-container">{manifestError && <div className="capability-boundary capability-warning" role="alert">{manifestError}. Đang dùng capability fallback an toàn.</div>}<Suspense fallback={<div className="state-message">Đang tải nội dung…</div>}>
+        {manifestLoading ? <div className="capability-boundary" role="status">Đang xác minh dashboard capabilities…</div> : fixedDatasetId && fixedDatasetId !== datasetId ? <div className="state-message">Đang áp dụng phạm vi DS3…</div> : <>
           {activeTab === 'overview' && <CommandCenterTab data={chartData} tps={liveTps} totalValue={totalValue} sessionEvents={sessionEvents} isConnected={isConnected} />}
           {activeTab === 'fraud' && <FraudMonitoringTab />}
           {activeTab === 'security' && <SecurityTab />}

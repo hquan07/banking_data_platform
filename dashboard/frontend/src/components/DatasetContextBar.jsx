@@ -4,8 +4,8 @@ import { DATASET_DEFINITIONS, DASHBOARD_MODES, useDatasetContext } from './Datas
 import { allowedModesForDataset } from '../datasetContextContract';
 
 export default function DatasetContextBar() {
-  const { datasetId, mode, dataset, modeDefinition, setDatasetId, setMode } = useDatasetContext();
-  const availableModes = allowedModesForDataset(datasetId).map(modeId => DASHBOARD_MODES[modeId]);
+  const { datasetId, mode, dataset, manifest, modeDefinition, setDatasetId, setMode } = useDatasetContext();
+  const availableModes = allowedModesForDataset(datasetId, manifest).map(modeId => DASHBOARD_MODES[modeId]);
 
   return (
     <section className="dataset-context-bar" aria-label="Dashboard data context">

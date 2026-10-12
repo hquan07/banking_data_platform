@@ -30,36 +30,75 @@ export const DASHBOARD_MODES = {
   benchmark: { id: 'benchmark', label: 'Benchmark / Evaluation', description: 'Đánh giá detection so với ground truth của dataset.' },
 };
 
-export const DATASET_MODE_MATRIX = {
-  live: ['operational'],
-  ds1_creditcard: ['benchmark'],
-  ds3_paysim: ['benchmark'],
-  ds4_baf: ['benchmark'],
-};
-
 export const DEFAULT_DASHBOARD_CONTEXT = Object.freeze({ datasetId: 'live', mode: 'operational' });
 
-export const FIXED_TAB_DATASETS = Object.freeze({
-  security: 'ds3_paysim',
-  analytics: 'ds3_paysim',
+const workspaceTabs = ['overview', 'fraud', 'security', 'analytics', 'datasets', 'history'];
+const bootstrapSupport = {
+  live: ['overview', 'fraud', 'datasets'],
+  ds1_creditcard: ['overview', 'fraud', 'datasets', 'history'],
+  ds3_paysim: workspaceTabs,
+  ds4_baf: ['overview', 'fraud', 'datasets', 'history'],
+};
+
+export const BOOTSTRAP_CAPABILITY_MANIFEST = Object.freeze({
+  manifest_version: 1,
+  source: 'bootstrap',
+  datasets: Object.keys(DATASET_DEFINITIONS).map(datasetId => ({
+    dataset_id: datasetId,
+    allowed_modes: [datasetId === 'live' ? 'operational' : 'benchmark'],
+    ground_truth_available: datasetId !== 'live',
+    graph_support: datasetId === 'ds3_paysim',
+    case_support: datasetId === 'ds3_paysim',
+    tab_availability: Object.fromEntries(workspaceTabs.map(tabId => {
+      const supported = bootstrapSupport[datasetId].includes(tabId);
+      return [tabId, {
+        supported, available: supported, required_dependencies: [], missing_dependencies: [],
+        reason: supported ? null : (['security', 'analytics'].includes(tabId) ? 'DS3 PaySim only' : 'Unsupported by dataset semantics'),
+      }];
+    })),
+  })),
 });
 
-export function fixedDatasetForTab(tabId) {
-  return FIXED_TAB_DATASETS[tabId] || null;
+export function validateCapabilityManifest(candidate) {
+  if (candidate?.manifest_version !== 1 || !Array.isArray(candidate?.datasets)) {
+    throw new Error('Unsupported dashboard capability manifest');
+  }
+  const ids = new Set(candidate.datasets.map(item => item.dataset_id));
+  if (!Object.keys(DATASET_DEFINITIONS).every(datasetId => ids.has(datasetId))) {
+    throw new Error('Capability manifest is missing a dashboard dataset');
+  }
+  return candidate;
 }
 
-export function allowedModesForDataset(datasetId) {
-  return DATASET_MODE_MATRIX[datasetId] || DATASET_MODE_MATRIX.live;
+export function datasetCapability(datasetId, manifest = BOOTSTRAP_CAPABILITY_MANIFEST) {
+  return manifest.datasets.find(item => item.dataset_id === datasetId)
+    || BOOTSTRAP_CAPABILITY_MANIFEST.datasets.find(item => item.dataset_id === datasetId)
+    || BOOTSTRAP_CAPABILITY_MANIFEST.datasets[0];
 }
 
-export function normalizeDashboardContext(candidate = {}) {
+export function tabCapability(datasetId, tabId, manifest = BOOTSTRAP_CAPABILITY_MANIFEST) {
+  return datasetCapability(datasetId, manifest).tab_availability?.[tabId]
+    || { supported: true, available: true, required_dependencies: [], missing_dependencies: [], reason: null };
+}
+
+export function fixedDatasetForTab(tabId, manifest = BOOTSTRAP_CAPABILITY_MANIFEST) {
+  const candidates = manifest.datasets.filter(item => item.tab_availability?.[tabId]?.supported);
+  return candidates.length === 1 ? candidates[0].dataset_id : null;
+}
+
+export function allowedModesForDataset(datasetId, manifest = BOOTSTRAP_CAPABILITY_MANIFEST) {
+  return datasetCapability(datasetId, manifest).allowed_modes;
+}
+
+export function normalizeDashboardContext(candidate = {}, manifest = BOOTSTRAP_CAPABILITY_MANIFEST) {
   const datasetId = DATASET_DEFINITIONS[candidate?.datasetId] ? candidate.datasetId : DEFAULT_DASHBOARD_CONTEXT.datasetId;
-  const allowedModes = allowedModesForDataset(datasetId);
+  const allowedModes = allowedModesForDataset(datasetId, manifest);
   const mode = allowedModes.includes(candidate?.mode) ? candidate.mode : allowedModes[0];
   return { datasetId, mode };
 }
 
-export function canShowGroundTruth(context) {
-  const normalized = normalizeDashboardContext(context);
-  return normalized.datasetId !== 'live' && normalized.mode === 'benchmark';
+export function canShowGroundTruth(context, manifest = BOOTSTRAP_CAPABILITY_MANIFEST) {
+  const normalized = normalizeDashboardContext(context, manifest);
+  return datasetCapability(normalized.datasetId, manifest).ground_truth_available
+    && normalized.mode === 'benchmark';
 }

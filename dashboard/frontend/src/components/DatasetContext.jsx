@@ -1,7 +1,10 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { AuthContext } from './AuthContext';
 import {
+  BOOTSTRAP_CAPABILITY_MANIFEST,
   canShowGroundTruth, DASHBOARD_MODES, DATASET_DEFINITIONS,
-  DEFAULT_DASHBOARD_CONTEXT, normalizeDashboardContext,
+  datasetCapability, DEFAULT_DASHBOARD_CONTEXT, normalizeDashboardContext,
+  tabCapability, validateCapabilityManifest,
 } from '../datasetContextContract';
 
 export { DASHBOARD_MODES, DATASET_DEFINITIONS } from '../datasetContextContract';
@@ -21,11 +24,50 @@ function readInitialContext() {
 const DatasetContext = createContext(null);
 
 export function DatasetProvider({ children }) {
+  const { token } = useContext(AuthContext);
   const [context, setContext] = useState(readInitialContext);
+  const [manifest, setManifest] = useState(BOOTSTRAP_CAPABILITY_MANIFEST);
+  const [manifestLoading, setManifestLoading] = useState(Boolean(token));
+  const [manifestError, setManifestError] = useState('');
+
+  useEffect(() => {
+    if (!token) {
+      setManifest(BOOTSTRAP_CAPABILITY_MANIFEST);
+      setManifestLoading(false);
+      setManifestError('');
+      return undefined;
+    }
+    const controller = new AbortController();
+    setManifestLoading(true); setManifestError('');
+    fetch(`${window._env_?.API_URL || 'http://localhost:8000'}/api/capabilities?version=1`, {
+      headers: { Authorization: `Bearer ${token}` }, signal: controller.signal,
+    })
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then(payload => {
+        const accepted = validateCapabilityManifest(payload);
+        setManifest(accepted);
+        setContext(previous => {
+          const normalized = normalizeDashboardContext(previous, accepted);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+          return normalized;
+        });
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          setManifest(BOOTSTRAP_CAPABILITY_MANIFEST);
+          setManifestError(`Capability manifest unavailable: ${error.message}`);
+        }
+      })
+      .finally(() => { if (!controller.signal.aborted) setManifestLoading(false); });
+    return () => controller.abort();
+  }, [token]);
 
   const updateContext = (nextContext) => {
     setContext(previous => {
-      const next = normalizeDashboardContext({ ...previous, ...nextContext });
+      const next = normalizeDashboardContext({ ...previous, ...nextContext }, manifest);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;
     });
@@ -34,11 +76,16 @@ export function DatasetProvider({ children }) {
   const value = useMemo(() => ({
     ...context,
     dataset: DATASET_DEFINITIONS[context.datasetId],
+    capability: datasetCapability(context.datasetId, manifest),
     modeDefinition: DASHBOARD_MODES[context.mode],
-    groundTruthVisible: canShowGroundTruth(context),
+    groundTruthVisible: canShowGroundTruth(context, manifest),
+    manifest,
+    manifestLoading,
+    manifestError,
+    tabCapability: (tabId, datasetId = context.datasetId) => tabCapability(datasetId, tabId, manifest),
     setDatasetId: datasetId => updateContext({ datasetId }),
     setMode: mode => updateContext({ mode }),
-  }), [context]);
+  }), [context, manifest, manifestError, manifestLoading]);
 
   return <DatasetContext.Provider value={value}>{children}</DatasetContext.Provider>;
 }

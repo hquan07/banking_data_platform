@@ -56,11 +56,32 @@ const runFixtures = [
   },
 ];
 
-async function mockRunWorkspace(page, role = 'ADMIN', transitions = []) {
+function capabilityFixture() {
+  const support = {
+    live: ['overview', 'fraud', 'datasets'],
+    ds1_creditcard: ['overview', 'fraud', 'datasets', 'history'],
+    ds3_paysim: ['overview', 'fraud', 'security', 'analytics', 'datasets', 'history'],
+    ds4_baf: ['overview', 'fraud', 'datasets', 'history'],
+  };
+  return {
+    manifest_version: 1, runtime_status: 'ready', dependencies: {},
+    datasets: Object.entries(support).map(([dataset_id, tabs]) => ({
+      dataset_id, allowed_modes: [dataset_id === 'live' ? 'operational' : 'benchmark'],
+      ground_truth_available: dataset_id !== 'live',
+      tab_availability: Object.fromEntries(['overview', 'fraud', 'security', 'analytics', 'datasets', 'history'].map(tab => [tab, {
+        supported: tabs.includes(tab), available: tabs.includes(tab), required_dependencies: [], missing_dependencies: [],
+        reason: tabs.includes(tab) ? null : (['security', 'analytics'].includes(tab) ? 'DS3 PaySim only' : 'Unsupported by dataset semantics'),
+      }])),
+    })),
+  };
+}
+
+async function mockRunWorkspace(page, role = 'ADMIN', transitions = [], manifest = capabilityFixture()) {
   await page.route('**/api/auth/login', route => route.fulfill({
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ access_token: browserToken(), role, username: role === 'ADMIN' ? 'admin' : 'analyst_1' }),
   }));
+  await page.route('**/api/capabilities*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(manifest) }));
   await page.route('**/api/datasets/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.route('**/api/runs**', async route => {
     const request = route.request();
@@ -106,17 +127,29 @@ test('source context enforces mode and provenance boundaries', async ({ page }) 
   await login(page);
   const source = page.getByLabel('Nguồn dữ liệu');
   const mode = page.getByLabel('Chế độ');
+  const historyNavigation = page.getByRole('button', { name: /Historical Analytics/ });
 
   await expect(source).toHaveValue('live');
   await expect(mode).toHaveValue('operational');
   await expect(mode).toBeDisabled();
   await expect(page.getByText('External source · not configured')).toBeVisible();
+  await expect(historyNavigation).toBeDisabled();
+  await expect(historyNavigation).toHaveAttribute('title', 'Unsupported by dataset semantics');
 
   await source.selectOption('ds3_paysim');
   await expect(mode).toHaveValue('benchmark');
   await expect(mode).toBeDisabled();
   await expect(page.getByText('Synthetic public simulation')).toBeVisible();
   await expect(page.getByText('Ground-truth fraud')).toBeVisible();
+  await expect(historyNavigation).toBeEnabled();
+
+  await source.selectOption('ds1_creditcard');
+  await expect(mode).toHaveValue('benchmark');
+  await expect(historyNavigation).toBeEnabled();
+  await source.selectOption('ds4_baf');
+  await expect(mode).toHaveValue('benchmark');
+  await expect(historyNavigation).toBeEnabled();
+  await source.selectOption('ds3_paysim');
 
   await page.reload();
   await expect(source).toHaveValue('ds3_paysim');
@@ -143,6 +176,7 @@ test('authenticated analytics and architecture views render end to end', async (
 
   await page.getByRole('button', { name: 'AML Network' }).click();
   await expect(page.getByRole('heading', { name: 'AML Network', level: 1 })).toBeVisible();
+  await expect(page.getByLabel('Nguồn dữ liệu')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Transaction network', level: 2 })).toBeVisible();
   await expect(page.getByText('Graph database unavailable')).toHaveCount(0);
 
@@ -219,4 +253,16 @@ test('Data Runs keeps run controls read-only for analysts', async ({ page }) => 
   await expect(page.getByRole('button', { name: /Pause run/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Resume run/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Cancel run/ })).toHaveCount(0);
+});
+
+test('capability runtime failure disables the affected fixed tab with a reason', async ({ page }) => {
+  const manifest = capabilityFixture();
+  const ds3 = manifest.datasets.find(item => item.dataset_id === 'ds3_paysim');
+  ds3.tab_availability.analytics.available = false;
+  ds3.tab_availability.analytics.reason = 'Unavailable dependencies: neo4j';
+  ds3.tab_availability.analytics.missing_dependencies = ['neo4j'];
+  await mockRunWorkspace(page, 'ANALYST', [], manifest);
+  const aml = page.getByRole('button', { name: /AML Network/ });
+  await expect(aml).toBeDisabled();
+  await expect(aml).toHaveAttribute('title', 'Unavailable dependencies: neo4j');
 });
