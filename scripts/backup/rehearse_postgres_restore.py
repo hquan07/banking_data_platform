@@ -9,6 +9,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -225,7 +226,14 @@ def main() -> int:
         "rehearsal database name",
     )
     started = time.monotonic()
-    archive = args.archive or create_backup(container, args.backup_dir, timestamp)
+    temporary_archive = None
+    if args.archive:
+        archive = args.archive
+        archive_reference = str(args.archive.resolve())
+    else:
+        temporary_archive = tempfile.TemporaryDirectory(prefix="banking-postgres-backup-")
+        archive = create_backup(container, Path(temporary_archive.name), timestamp)
+        archive_reference = "temporary://postgres-custom-archive"
     archive = archive.resolve()
     if not archive.is_file() or archive.stat().st_size == 0:
         raise FileNotFoundError(f"Archive is missing or empty: {archive}")
@@ -238,9 +246,10 @@ def main() -> int:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "duration_seconds": round(time.monotonic() - started, 3),
         "container": container,
-        "archive": str(archive),
+        "archive": archive_reference,
         "archive_bytes": archive.stat().st_size,
         "archive_sha256": _sha256(archive),
+        "raw_artifact_persisted": args.archive is not None,
         "restore_entries": restore_entries,
         "tables_checked": len(source_counts),
         "source_rows": sum(source_counts.values()),
@@ -252,6 +261,8 @@ def main() -> int:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps(report, indent=2, sort_keys=True))
+    if temporary_archive is not None:
+        temporary_archive.cleanup()
     if differences:
         raise RuntimeError(f"Restore count mismatch; see {report_path}")
     return 0

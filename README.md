@@ -135,19 +135,27 @@ Once all containers transition to the *Running* state, you can access the follow
 * **Grafana**: [http://localhost:3000](http://localhost:3000)
 * **Prometheus**: [http://localhost:9090](http://localhost:9090)
 
-### 4. Verify a PostgreSQL Backup
+### 4. Verify Recovery
 
-With the stack running, create a custom-format archive and rehearse its restore
-inside an isolated temporary database:
+With the stack running, rehearse the complete restore order across Kafka,
+PostgreSQL, MinIO, ClickHouse, Neo4j and Spark checkpoints, followed by the
+cross-store reconciliation gate:
+
+```bash
+python3 scripts/backup/rehearse_multistore_restore.py
+```
+
+For the PostgreSQL-only compatibility command:
 
 ```bash
 ./scripts/backup/backup_db.sh
 ```
 
-The command fails if the archive cannot be restored or any application table
-has a different row count. It never replaces the active database. Local dumps
-and JSON reports are written under `.runtime/backups`; see
-`docs/p1-postgres-recovery-rehearsal.md` for the operating boundary.
+Both commands fail closed on an integrity mismatch and never replace a live
+store. Raw backup artifacts are temporary; only JSON manifests and reports are
+written under `.runtime/backups`. See
+`docs/p2-multistore-recovery-rehearsal.md` for restore order, adapter coverage
+and the production boundary.
 
 ## 📁 Directory Structure
 
