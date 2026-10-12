@@ -113,3 +113,16 @@ def test_dataset_freshness_uses_shared_operational_contract():
         "ready", "idle", "running", "stale", "degraded", "failed",
         "completed", "not_applicable",
     } for row in rows)
+
+
+def test_capability_manifest_is_versioned_and_rejects_unknown_versions():
+    token = _login_token()
+    manifest = _get("/api/capabilities?version=1", token)
+    assert manifest["manifest_version"] == 1
+    datasets = {item["dataset_id"]: item for item in manifest["datasets"]}
+    assert datasets["ds3_paysim"]["tab_availability"]["analytics"]["supported"] is True
+    assert datasets["ds1_creditcard"]["tab_availability"]["analytics"]["supported"] is False
+
+    with pytest.raises(HTTPError) as unsupported:
+        _get("/api/capabilities?version=999", token)
+    assert unsupported.value.code == 406

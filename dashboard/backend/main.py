@@ -3,10 +3,8 @@ Banking Command Center API — Entry Point.
 This file only initializes the FastAPI app, registers routers, and starts background tasks.
 """
 import asyncio
-import json
 import os
 from contextlib import asynccontextmanager
-from urllib.request import urlopen
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi import Request
@@ -37,6 +35,12 @@ from api.config import router as config_router
 from api.datasets import router as datasets_router
 from api.operations import router as operations_router
 from api.runs import router as runs_router
+from api.capabilities import router as capabilities_router
+from services.runtime_readiness import (
+    REQUIRED_SPARK_APPS,
+    fetch_spark_runtime,
+    load_runtime_readiness,
+)
 
 import logging
 from pythonjsonlogger import jsonlogger
@@ -215,23 +219,6 @@ SPARK_REQUIRED_APP_UP = Gauge(
     "Whether a required Spark streaming application is active",
     ("application",),
 )
-REQUIRED_SPARK_APPS = ("PaymentStreamingProcessor", "FraudDetectionEngine")
-
-
-def fetch_spark_runtime():
-    spark_url = os.environ["SPARK_MASTER_STATUS_URL"]
-    with urlopen(spark_url, timeout=3) as response:
-        spark_payload = json.loads(response.read())
-    active_apps = sorted(
-        item.get("name") for item in spark_payload.get("activeapps", []) if item.get("name")
-    )
-    return {
-        "status": spark_payload.get("status", "unknown"),
-        "alive_workers": int(spark_payload.get("aliveworkers", 0)),
-        "active_apps": active_apps,
-    }
-
-
 def refresh_processor_metrics():
     payload = load_processor_health(pg_conn)
     for metric in (
@@ -353,6 +340,7 @@ app.include_router(config_router)
 app.include_router(datasets_router)
 app.include_router(operations_router)
 app.include_router(runs_router)
+app.include_router(capabilities_router)
 
 
 # =============================================
@@ -391,49 +379,7 @@ def liveness_check():
 @app.get("/api/health/ready")
 def readiness_check():
     from fastapi import HTTPException
-
-    def check(client, probe):
-        if client is None:
-            return False
-        try:
-            return probe() is not False
-        except Exception:
-            return False
-
-    def postgres_probe():
-        if pg_conn is None:
-            raise RuntimeError("PostgreSQL not connected")
-        with pg_conn.cursor() as cur:
-            cur.execute("SELECT 1")
-
-    dependencies = {"postgres": check(pg_conn, postgres_probe)}
-    s3_client = get_s3_client()
-    dependencies.update({
-        "kafka": kafka_ready.is_set() and benchmark_kafka_ready.is_set(),
-        "redis": check(redis_client, redis_client.ping if redis_client else None),
-        "neo4j": check(graph_driver, graph_driver.verify_connectivity if graph_driver else None),
-        "clickhouse": check(ch_client, lambda: ch_client.execute("EXISTS TABLE payment_events") == [(1,)]),
-        "minio": check(s3_client, lambda: s3_client.head_bucket(Bucket="evidence")),
-    })
-    spark_runtime = {"status": "unavailable", "alive_workers": 0, "active_apps": []}
-    try:
-        spark_runtime = fetch_spark_runtime()
-        active_apps = set(spark_runtime["active_apps"])
-        dependencies["spark"] = (
-            spark_runtime["status"] == "ALIVE"
-            and spark_runtime["alive_workers"] > 0
-            and set(REQUIRED_SPARK_APPS).issubset(active_apps)
-        )
-    except Exception:
-        dependencies["spark"] = False
-    live_source = {"status": "unavailable", "configured": True, "kafka": False, "last_event_at": None}
-    try:
-        source_url = os.environ["LIVE_INGESTION_URL"].rstrip("/")
-        with urlopen(f"{source_url}/health/source", timeout=3) as response:
-            live_source = json.loads(response.read())
-        dependencies["live_ingestion"] = live_source.get("kafka") is True
-    except Exception:
-        dependencies["live_ingestion"] = False
-    if not all(dependencies.values()):
-        raise HTTPException(status_code=503, detail={"status": "not_ready", **dependencies, "spark_runtime": spark_runtime, "live_source": live_source})
-    return {"status": "ready", "mode": APP_MODE, **dependencies, "spark_runtime": spark_runtime, "live_source": live_source}
+    payload = load_runtime_readiness()
+    if payload["status"] != "ready":
+        raise HTTPException(status_code=503, detail=payload)
+    return payload
