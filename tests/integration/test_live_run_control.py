@@ -87,8 +87,14 @@ def test_run_control_migration_and_api_contract():
                 )
 
         _, listing = _request("GET", "/runs?status=CREATED&dataset_id=ds3_paysim", analyst)
-        assert any(item["run_id"] == run_id for item in listing["data"])
+        listed = next(item for item in listing["data"] if item["run_id"] == run_id)
+        assert listed["owner_username"] == "admin"
+        assert listed["progress"] == {
+            "processed": 0, "total": 0, "percent": None, "lag": 0, "partitions": 0,
+        }
         _, detail = _request("GET", f"/runs/{run_id}", analyst)
+        assert detail["owner_username"] == "admin"
+        assert detail["progress"]["percent"] is None
         assert detail["offsets"] == []
         assert detail["counters"] == []
         assert detail["reconciliation"] == []

@@ -57,6 +57,29 @@ def _record(row: Any) -> dict[str, Any]:
     return dict(zip(RUN_COLUMNS, row))
 
 
+def summarize_offset_progress(rows: list[tuple[int, int | None, int | None]]) -> dict[str, Any]:
+    """Return bounded progress derived only from durable Kafka offset windows."""
+    processed = 0
+    total = 0
+    partitions = 0
+    for start_offset, end_offset, current_offset in rows:
+        if end_offset is None:
+            continue
+        partitions += 1
+        span = max(0, end_offset - start_offset)
+        current = start_offset if current_offset is None else current_offset
+        position = min(max(current, start_offset), end_offset)
+        total += span
+        processed += position - start_offset
+    return {
+        "processed": processed,
+        "total": total,
+        "percent": round(processed / total * 100, 2) if total else None,
+        "lag": max(0, total - processed),
+        "partitions": partitions,
+    }
+
+
 def create_run(connection: Any, values: dict[str, Any], owner_user_id: int) -> dict[str, Any]:
     """Create a run and its immutable CREATED audit event atomically."""
     with connection.cursor() as cursor:
@@ -119,6 +142,8 @@ def list_runs(
         run_records = [_record(row) for row in rows]
         run_ids = [record["run_id"] for record in run_records]
         quality_rows = []
+        owner_rows = []
+        offset_rows = []
         if run_ids:
             cursor.execute(
                 "SELECT checks.run_id, checks.check_id, results.classification, "
@@ -129,9 +154,25 @@ def list_runs(
                 (run_ids,),
             )
             quality_rows = cursor.fetchall()
+            owner_ids = sorted({record["owner_user_id"] for record in run_records})
+            cursor.execute(
+                "SELECT id, username FROM users WHERE id = ANY(%s::int[])",
+                (owner_ids,),
+            )
+            owner_rows = cursor.fetchall()
+            cursor.execute(
+                "SELECT run_id, start_offset, end_offset, current_offset "
+                "FROM pipeline_run_offsets WHERE run_id = ANY(%s::uuid[])",
+                (run_ids,),
+            )
+            offset_rows = cursor.fetchall()
     now = datetime.now(timezone.utc)
+    owners = dict(owner_rows)
     for record in run_records:
         rows_for_run = [row[1:] for row in quality_rows if row[0] == record["run_id"]]
+        progress_rows = [row[1:] for row in offset_rows if row[0] == record["run_id"]]
+        record["owner_username"] = owners.get(record["owner_user_id"])
+        record["progress"] = summarize_offset_progress(progress_rows)
         record["quality"] = run_quality_payload(record, rows_for_run, now=now)
     return total, run_records
 
@@ -146,15 +187,20 @@ def get_run(connection: Any, run_id: str) -> dict[str, Any]:
         if row is None:
             raise RunNotFoundError(run_id)
         run = _record(row)
+        cursor.execute("SELECT username FROM users WHERE id = %s", (run["owner_user_id"],))
+        owner = cursor.fetchone()
+        run["owner_username"] = owner[0] if owner else None
         cursor.execute(
             "SELECT topic, partition, start_offset, end_offset, current_offset, updated_at "
             "FROM pipeline_run_offsets WHERE run_id = %s ORDER BY topic, partition",
             (run_id,),
         )
+        offsets = cursor.fetchall()
         run["offsets"] = [
             dict(zip(("topic", "partition", "start_offset", "end_offset", "current_offset", "updated_at"), item))
-            for item in cursor.fetchall()
+            for item in offsets
         ]
+        run["progress"] = summarize_offset_progress([item[2:5] for item in offsets])
         cursor.execute(
             "SELECT counter_name, counter_value, updated_at FROM pipeline_run_counters "
             "WHERE run_id = %s ORDER BY counter_name",

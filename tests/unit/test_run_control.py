@@ -4,6 +4,7 @@ from dashboard.backend.services.run_control import (
     RUN_STATES,
     TERMINAL_STATES,
     RunTransitionError,
+    summarize_offset_progress,
     transition_allowed,
 )
 
@@ -32,3 +33,27 @@ def test_invalid_shortcuts_are_rejected():
 
 def test_transition_error_is_a_value_error():
     assert isinstance(RunTransitionError("invalid"), ValueError)
+
+
+def test_offset_progress_is_bounded_and_reports_lag():
+    assert summarize_offset_progress([
+        (10, 20, 16),
+        (30, 40, 50),
+        (50, None, None),
+    ]) == {
+        "processed": 16,
+        "total": 20,
+        "percent": 80.0,
+        "lag": 4,
+        "partitions": 2,
+    }
+
+
+def test_offset_progress_does_not_infer_completion_from_empty_windows():
+    assert summarize_offset_progress([]) == {
+        "processed": 0,
+        "total": 0,
+        "percent": None,
+        "lag": 0,
+        "partitions": 0,
+    }

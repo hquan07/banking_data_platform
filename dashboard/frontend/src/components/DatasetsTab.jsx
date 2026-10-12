@@ -5,6 +5,7 @@ import { AuthContext } from './AuthContext';
 import { DATASET_DEFINITIONS, useDatasetContext } from './DatasetContext';
 import { Badge, formatNumber, formatPercent, MetricCard, PageHeader, Panel, StateMessage } from './ui';
 import { useDatasetAnalytics } from './useDatasetAnalytics';
+import DataRunsSection from './DataRunsSection';
 
 const SOURCE_LABELS = {
   anonymized_real: 'Anonymized real-world', synthetic_simulation: 'Synthetic simulation',
@@ -67,6 +68,7 @@ export default function DatasetsTab() {
     <MetricCard icon={<Activity size={17} />} label="Evaluated" value={datasetId === 'live' ? 'N/A' : formatNumber(overview?.evaluated_count)} detail={datasetId === 'live' ? 'Streaming source' : `${formatNumber(overview?.predicted_fraud)} predicted fraud`} tone="green" />
 
     {warnings.length > 0 && <Panel className="col-span-12"><StateMessage type="error">Một số nguồn phụ chưa sẵn sàng: {warnings.join(' · ')}</StateMessage></Panel>}
+    <DataRunsSection />
     <Panel className="col-span-12" title="Dataset catalog" subtitle="Trạng thái nạp và ranh giới provenance">
       {loading && !data.status.length ? <StateMessage type="loading">Đang đọc data catalog…</StateMessage> : <div className="dataset-status-grid">{data.status.map(item => {
         const definition = DATASET_DEFINITIONS[item.dataset_id];
