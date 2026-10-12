@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
+
+try:
+    from services.quality_status import run_quality_payload
+except ModuleNotFoundError:  # Package import used by unit tests.
+    from .quality_status import run_quality_payload
 
 
 RUN_STATES = frozenset({
@@ -110,7 +116,24 @@ def list_runs(
             (*params, limit, offset),
         )
         rows = cursor.fetchall()
-    return total, [_record(row) for row in rows]
+        run_records = [_record(row) for row in rows]
+        run_ids = [record["run_id"] for record in run_records]
+        quality_rows = []
+        if run_ids:
+            cursor.execute(
+                "SELECT checks.run_id, checks.check_id, results.classification, "
+                "checks.observed_at, checks.freshness_sla_seconds "
+                "FROM pipeline_reconciliation_checks checks "
+                "JOIN pipeline_reconciliation_results results USING (check_id) "
+                "WHERE checks.run_id = ANY(%s::uuid[])",
+                (run_ids,),
+            )
+            quality_rows = cursor.fetchall()
+    now = datetime.now(timezone.utc)
+    for record in run_records:
+        rows_for_run = [row[1:] for row in quality_rows if row[0] == record["run_id"]]
+        record["quality"] = run_quality_payload(record, rows_for_run, now=now)
+    return total, run_records
 
 
 def get_run(connection: Any, run_id: str) -> dict[str, Any]:
@@ -150,6 +173,25 @@ def get_run(connection: Any, run_id: str) -> dict[str, Any]:
             dict(zip(("event_id", "event_type", "old_status", "new_status", "actor_user_id", "details", "created_at"), item))
             for item in cursor.fetchall()
         ]
+        cursor.execute(
+            "SELECT checks.check_id, results.classification, checks.observed_at, "
+            "checks.freshness_sla_seconds, checks.store, checks.metric, checks.window_key, "
+            "results.expected_count, results.actual_count, results.discrepancy_count, "
+            "results.sample_ids FROM pipeline_reconciliation_checks checks "
+            "JOIN pipeline_reconciliation_results results USING (check_id) "
+            "WHERE checks.run_id = %s ORDER BY checks.store, checks.metric, results.classification",
+            (run_id,),
+        )
+        reconciliation = cursor.fetchall()
+        run["reconciliation"] = [
+            dict(zip((
+                "check_id", "classification", "observed_at", "sla_threshold_seconds",
+                "store", "metric", "window_key", "expected_count", "actual_count",
+                "discrepancy_count", "sample_ids",
+            ), item))
+            for item in reconciliation
+        ]
+        run["quality"] = run_quality_payload(run, [item[:4] for item in reconciliation])
     return run
 
 

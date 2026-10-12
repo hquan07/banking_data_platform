@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core.db import pg_conn
 from core.deps import get_current_user
@@ -13,6 +15,8 @@ from services.dataset_status import (
     model_candidate_payload,
     status_payload,
 )
+from services.quality_status import dataset_freshness_payload, run_quality_payload
+from services.run_control import RUN_COLUMNS, RUN_SELECT
 
 
 router = APIRouter(prefix="/api/datasets", tags=["Datasets"])
@@ -48,6 +52,49 @@ def get_dataset_status(current_user: dict = Depends(get_current_user)):
         return status_payload(rows)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Dataset status unavailable") from exc
+
+
+@router.get("/freshness")
+def get_dataset_freshness(
+    sla_threshold_seconds: int = Query(3600, ge=1, le=604800),
+    current_user: dict = Depends(get_current_user),
+):
+    _database_required()
+    try:
+        now = datetime.now(timezone.utc)
+        response = []
+        with pg_conn.cursor() as cursor:
+            for dataset_id in sorted(SUPPORTED_DATASET_IDS):
+                cursor.execute(
+                    "SELECT count(*), max(ingested_at) FROM benchmark_events WHERE dataset_id = %s",
+                    (dataset_id,),
+                )
+                event_count, last_event_at = cursor.fetchone()
+                cursor.execute(
+                    f"SELECT {RUN_SELECT} FROM pipeline_runs "
+                    "WHERE dataset_id = %s ORDER BY created_at DESC LIMIT 1",
+                    (dataset_id,),
+                )
+                row = cursor.fetchone()
+                quality = None
+                if row:
+                    run = dict(zip(RUN_COLUMNS, row))
+                    cursor.execute(
+                        "SELECT checks.check_id, results.classification, checks.observed_at, "
+                        "checks.freshness_sla_seconds FROM pipeline_reconciliation_checks checks "
+                        "JOIN pipeline_reconciliation_results results USING (check_id) "
+                        "WHERE checks.run_id = %s",
+                        (run["run_id"],),
+                    )
+                    quality = run_quality_payload(run, cursor.fetchall(), now=now)
+                response.append(dataset_freshness_payload(
+                    dataset_id, event_count=event_count, last_event_at=last_event_at,
+                    latest_run_quality=quality, sla_threshold_seconds=sla_threshold_seconds,
+                    now=now,
+                ))
+        return response
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Dataset freshness unavailable") from exc
 
 
 @router.get("/performance")

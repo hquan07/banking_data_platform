@@ -97,3 +97,19 @@ def test_dataset_specific_diagnostics_keep_their_native_contracts():
     assert isinstance(_get("/api/datasets/performance", token), list)
     assert isinstance(_get("/api/datasets/rule-hits", token), list)
     assert isinstance(_get("/api/datasets/model-candidates", token), list)
+
+
+def test_dataset_freshness_uses_shared_operational_contract():
+    token = _login_token()
+    rows = _get("/api/datasets/freshness?sla_threshold_seconds=3600", token)
+    assert {row["dataset_id"] for row in rows} == set(DATASET_SEGMENTS)
+    required = {
+        "status", "reason", "observed_at", "last_success_at",
+        "data_age_seconds", "sla_threshold_seconds",
+        "reconciliation_completeness", "event_count",
+    }
+    assert all(required <= row.keys() for row in rows)
+    assert all(row["status"] in {
+        "ready", "idle", "running", "stale", "degraded", "failed",
+        "completed", "not_applicable",
+    } for row in rows)

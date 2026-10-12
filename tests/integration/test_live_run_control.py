@@ -91,6 +91,10 @@ def test_run_control_migration_and_api_contract():
         _, detail = _request("GET", f"/runs/{run_id}", analyst)
         assert detail["offsets"] == []
         assert detail["counters"] == []
+        assert detail["reconciliation"] == []
+        assert detail["quality"]["status"] == "idle"
+        assert detail["quality"]["observed_at"]
+        assert detail["quality"]["reconciliation_completeness"] == 0
         assert detail["events"][0]["event_type"] == "CREATED"
 
         _, running = _request("POST", f"/runs/{run_id}/transition", admin, {
