@@ -572,6 +572,10 @@ services:
       - MINIO_PUBLIC_ENDPOINT=http://localhost:9000
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - LOGIN_RATE_LIMIT=${LOGIN_RATE_LIMIT:-10}
+      - LOGIN_RATE_WINDOW_SECONDS=${LOGIN_RATE_WINDOW_SECONDS:-60}
+      - API_RATE_LIMIT=${API_RATE_LIMIT:-240}
+      - API_RATE_WINDOW_SECONDS=${API_RATE_WINDOW_SECONDS:-60}
     depends_on:
       postgres:
         condition: service_healthy

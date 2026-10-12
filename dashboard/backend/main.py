@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi import Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Gauge
@@ -24,6 +25,12 @@ from services.kafka_client import (
     manager,
 )
 from services.processor_health import load_processor_health, timestamp_seconds
+from services.security_controls import (
+    api_limit,
+    fingerprint,
+    record_security_event,
+    refresh_active_session_metric,
+)
 
 # API Routers
 from api.auth import router as auth_router
@@ -86,7 +93,7 @@ async def lifespan(app: FastAPI):
     if pg_conn:
         try:
             sql_dir = os.path.join(os.path.dirname(__file__), "sql")
-            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql", "p1_dq_results.sql", "p1_trace_context.sql", "dataset_benchmark.sql", "dataset_model_candidates.sql", "p2_runtime_observability.sql", "p2_run_control.sql", "p2_run_aware_replay.sql", "p2_reconciliation.sql", "p2_investigation_cases.sql", "p2_temporal_graph_evidence.sql", "p2_retention_controls.sql"):
+            for migration_name in ("app_schema.sql", "phase6_migration.sql", "payment_contract.sql", "p1_alert_lifecycle.sql", "p1_dq_results.sql", "p1_trace_context.sql", "dataset_benchmark.sql", "dataset_model_candidates.sql", "p2_runtime_observability.sql", "p2_run_control.sql", "p2_run_aware_replay.sql", "p2_reconciliation.sql", "p2_investigation_cases.sql", "p2_temporal_graph_evidence.sql", "p2_retention_controls.sql", "p2_security_controls.sql"):
                 migration_path = os.path.join(sql_dir, migration_name)
                 if not os.path.exists(migration_path):
                     continue
@@ -284,6 +291,42 @@ def refresh_dataset_freshness_metrics():
 
 
 @app.middleware("http")
+async def enforce_request_rate_limit(request: Request, call_next):
+    if (
+        not request.url.path.startswith("/api/")
+        or request.url.path.startswith("/api/health")
+        or request.url.path == "/api/auth/login"
+    ):
+        return await call_next(request)
+    if redis_client is None:
+        return JSONResponse(status_code=503, content={"detail": "Rate-limit store unavailable"})
+    authorization = request.headers.get("authorization", "")
+    source = request.client.host if request.client else "unknown"
+    identity = fingerprint(authorization) if authorization else fingerprint(source)
+    decision = api_limit(redis_client, identity)
+    if decision.allowed:
+        response = await call_next(request)
+        response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
+        return response
+    if pg_conn is not None:
+        try:
+            record_security_event(
+                pg_conn,
+                event_type="API_RATE_LIMIT",
+                outcome="RATE_LIMITED",
+                source=source,
+                details={"scope": "api"},
+            )
+        except Exception:
+            logger.exception("Could not persist API rate-limit event")
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "API rate limit exceeded"},
+        headers={"Retry-After": str(decision.retry_after_seconds)},
+    )
+
+
+@app.middleware("http")
 async def refresh_dq_metrics(request: Request, call_next):
     if request.url.path == "/metrics" and pg_conn is not None:
         try:
@@ -315,6 +358,7 @@ async def refresh_dq_metrics(request: Request, call_next):
             refresh_processor_metrics()
             refresh_dataset_freshness_metrics()
             refresh_spark_runtime_metrics()
+            refresh_active_session_metric(pg_conn)
         except Exception:
             logger.exception("Could not refresh processor/freshness metrics")
         if redis_client is not None:
