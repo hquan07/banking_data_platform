@@ -14,9 +14,19 @@ meet the v1 contract.
 PaySim replay uses a separate `BenchmarkAccount` label and
 `BENCHMARK_TRANSACTION` relationship. All five source transaction types are
 retained with relative hour steps; these nodes never merge into the platform's
-`Account` namespace. The benchmark graph flags a TRANSFER followed by a similar
-CASH_OUT from the recipient within 24 relative hours. Ground-truth labels are
-stored for evaluation but are not used by that query.
+`Account` namespace. The benchmark graph flags a TRANSFER followed immediately
+by a CASH_OUT source row in the same run when relative step and amount match.
+This is explicitly source-row evidence, not a claim that the two transactions
+share a participant. Ground-truth labels are stored for evaluation but are not
+used by that query.
+
+Every benchmark relationship carries its replay run, immutable source event and
+row IDs, source file and kind, relative-hour step, risk score, triggered rules,
+and evaluator version. `/api/graph/evidence` resolves one account or event into
+participant-linked paths of at most three hops. Queries are isolated to one run,
+limited to 100 paths, and may span at most 168 relative hours. The dashboard
+labels participant paths separately from source-row sequence evidence so the
+two evidence types cannot be mistaken for each other.
 
 Neo4j account edges are merged by source event ID and carry amount, currency,
 UTC event time, trace ID, Kafka topic/partition/offset. Customer, account and

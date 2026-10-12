@@ -20,13 +20,14 @@ def _event(tx_type="TRANSFER", label=False):
         "trace_id": "ds3_paysim:10",
         "dataset_id": "ds3_paysim",
         "source_row_id": "10",
-        "event_time": {"value": 7},
+        "event_time": {"kind": "relative", "unit": "hours", "value": 7, "origin": None},
         "payload": {
             "transaction_type": tx_type,
             "amount": 5000,
             "participant_ids": {"origin": "C1", "destination": "C2"},
         },
         "ground_truth": {"is_fraud": label},
+        "provenance": {"source_file": "paysim.csv", "source_kind": "synthetic_simulation"},
     }
 
 
@@ -35,7 +36,11 @@ def test_graph_record_uses_isolated_synthetic_account_ids():
     assert record["origin_id"] == f"{RUN_ID}:ds3_paysim:C1"
     assert record["destination_id"] == f"{RUN_ID}:ds3_paysim:C2"
     assert record["relative_step"] == 7
+    assert record["relative_time_unit"] == "hours"
     assert record["source_row_number"] == 10
+    assert record["source_file"] == "paysim.csv"
+    assert record["source_kind"] == "synthetic_simulation"
+    assert record["evaluator_version"] == "benchmark-rules-v2"
 
 
 def test_label_change_does_not_change_sequence_alert():
@@ -54,6 +59,7 @@ def test_label_change_does_not_change_sequence_alert():
     assert first["run_id"] == RUN_ID
     assert first["rule"] == "TRANSFER_CASHOUT_SEQUENCE"
     assert first["entity_type"] == "benchmark_sequence"
+    assert first["evidence"]["evidence_basis"] == "source_row_adjacency"
     assert first["evidence"]["participant_linked"] is False
 
 

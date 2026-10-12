@@ -150,6 +150,7 @@ async function mockInvestigationWorkspace(page) {
     dataset_id: 'ds3_paysim', run_id: '11111111-1111-4111-8111-111111111111',
     trace_id: 'trace-41', priority: 'P2', disposition: null, due_at: '2026-10-13T10:00:00Z',
     resolution_code: null, closed_at: null, closed_by: null, assignee_id: null,
+    source_event_ids: ['ds3-event-41'], graph_evidence: { evidence_basis: 'participant_path' },
     created_at: '2026-10-12T01:00:00Z', updated_at: '2026-10-12T01:00:00Z',
     xai_explanation: 'Adjacent transfer and cash-out rows require analyst review.',
     comments: [], evidence: [], audit: [],
@@ -210,6 +211,25 @@ async function mockInvestigationWorkspace(page) {
       const body = request.postDataJSON(); record.status = body.disposition === 'NO_ACTION' || body.disposition === 'DUPLICATE' ? 'IGNORED' : 'RESOLVED';
       record.disposition = body.disposition; record.resolution_code = body.resolution_code; record.version += 1;
       audit('CASE_DISPOSITION'); actions.push('resolve'); return json({ status: record.status, disposition: record.disposition, resolution_code: record.resolution_code, version: record.version });
+    }
+    if (url.pathname === '/api/graph/evidence') {
+      actions.push(`graph:${url.searchParams.get('hop_count')}`);
+      return json({
+      dataset_id: 'ds3_paysim', run_id: record.run_id, bounded: true,
+      anchor: { account_id: null, event_id: url.searchParams.get('event_id') },
+      bounds: { hop_count: Number(url.searchParams.get('hop_count')), limit: 40 },
+      paths: [{
+        path_id: 'ds3-event-41', evidence_basis: 'participant_path', participant_linked: true, path_length: 1,
+        nodes: [{ id: `${record.run_id}:ds3_paysim:C100041`, display_id: 'C100041' }, { id: `${record.run_id}:ds3_paysim:M200`, display_id: 'M200' }],
+        edges: [{
+          hop_index: 0, source: `${record.run_id}:ds3_paysim:C100041`, target: `${record.run_id}:ds3_paysim:M200`,
+          event_id: 'ds3-event-41', trace_id: 'trace-41', run_id: record.run_id, dataset_id: 'ds3_paysim',
+          transaction_type: 'TRANSFER', amount: 5400, relative_step: 12, relative_time_unit: 'hours',
+          source_row_number: 41, source_file: 'paysim.csv', source_kind: 'synthetic_simulation',
+          risk_score: 75, triggered_rules: ['BALANCE_MISMATCH'], evaluator_version: 'benchmark-rules-v2',
+        }],
+        }],
+      });
     }
     if (url.pathname === '/api/graph/benchmark') return json({ nodes: [{ id: 'C100041', name: 'C100041', group: 1 }, { id: 'M200', name: 'M200', group: 1 }], links: [{ source: 'C100041', target: 'M200', value: 5400 }] });
     if (url.pathname === '/api/graph/money-flow') return json([]);
@@ -425,7 +445,13 @@ test('investigation workspace completes an auditable case and recovers from conf
   await expect(page.locator('.case-hero-badges .ui-badge').filter({ hasText: 'RESOLVED' })).toBeVisible();
   await expect.poll(() => actions).toEqual(['conflict', 'metadata', 'assignment', 'investigate', 'comment', 'evidence', 'resolve']);
 
-  await page.getByRole('button', { name: 'Open relevant AML graph' }).click();
+  await page.getByRole('button', { name: 'Open temporal AML evidence' }).click();
   await expect(page).toHaveURL(/tab=analytics.*account=C100041.*event=ds3-event-41/);
   await expect(page.getByText(/Linked investigation evidence/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Participant path evidence', level: 2 })).toBeVisible();
+  await expect(page.getByText('participant_path')).toBeVisible();
+  await expect(page.getByText('paysim.csv')).toBeVisible();
+  await page.getByLabel('Hop count').selectOption('3');
+  await page.getByRole('button', { name: 'Apply graph bounds' }).click();
+  await expect.poll(() => actions).toContain('graph:3');
 });

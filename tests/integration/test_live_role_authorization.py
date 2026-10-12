@@ -57,6 +57,7 @@ def test_role_revocation_and_case_search():
     protected_analytics = [
         "/api/graph/circular",
         "/api/graph/benchmark",
+        "/api/graph/evidence?run_id=00000000-0000-0000-0000-000000000000&event_id=missing",
         "/api/graph/money-flow",
         "/api/graph/fraud-sequences",
         "/api/analytics/history",

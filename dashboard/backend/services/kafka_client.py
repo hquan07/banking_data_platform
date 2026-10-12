@@ -73,8 +73,9 @@ def persist_alert(data: dict) -> bool:
             INSERT INTO alerts
                 (run_id, event_id, trace_id, payment_id, account_id, entity_id,
                  entity_type, dataset_id, rule_name, amount, risk_score,
-                 risk_level, decision)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 risk_level, decision, source_event_ids, graph_evidence)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s::jsonb, %s::jsonb)
             ON CONFLICT {conflict_target} DO NOTHING
             RETURNING alert_id
             """.format(conflict_target=(
@@ -87,6 +88,8 @@ def persist_alert(data: dict) -> bool:
                 entity_id, data.get("entity_type", "account"), data.get("dataset_id"),
                 rule, amount, risk_score, data.get("risk_level", "MEDIUM"),
                 data.get("decision", "REVIEW"),
+                json.dumps(data.get("source_event_ids") or [event_id]),
+                json.dumps(data.get("evidence") or {}),
             ),
         )
         return cur.fetchone() is not None

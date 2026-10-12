@@ -11,6 +11,7 @@ from typing import Any
 from kafka import KafkaConsumer, KafkaProducer, TopicPartition
 from kafka.structs import OffsetAndMetadata
 
+from fraud.rules.benchmark_rules import EVALUATOR_VERSION, evaluate_benchmark_payload
 from shared.benchmark_contract import require_benchmark_run
 from shared.contract_error import build_dlq_envelope
 from shared.processor_heartbeat import ProcessorHeartbeat
@@ -31,6 +32,9 @@ def graph_record(event: dict[str, Any]) -> dict[str, Any] | None:
         raise ValueError("invalid_paysim_source_row") from None
     if source_row_number < 0:
         raise ValueError("invalid_paysim_source_row")
+    signals = evaluate_benchmark_payload(event["dataset_id"], payload)
+    provenance = event["provenance"]
+    event_time = event["event_time"]
     return {
         "run_id": event["run_id"],
         "event_id": event["event_id"],
@@ -43,7 +47,14 @@ def graph_record(event: dict[str, Any]) -> dict[str, Any] | None:
         "source_row_number": source_row_number,
         "transaction_type": payload["transaction_type"],
         "amount": float(payload["amount"]),
-        "relative_step": float(event["event_time"]["value"]),
+        "relative_step": float(event_time["value"]),
+        "relative_time_unit": event_time["unit"],
+        "event_time_kind": event_time["kind"],
+        "source_file": provenance["source_file"],
+        "source_kind": provenance["source_kind"],
+        "risk_score": max((signal["risk_score"] for signal in signals), default=0),
+        "triggered_rules": [signal["rule"] for signal in signals],
+        "evaluator_version": EVALUATOR_VERSION,
         "ground_truth_is_fraud": event["ground_truth"]["is_fraud"],
     }
 
@@ -73,12 +84,23 @@ def build_sequence_alert(transfer: dict[str, Any], cashout: dict[str, Any]) -> d
         "decision": "REVIEW",
         "source_event_ids": source_ids,
         "evidence": {
+            "evidence_basis": "source_row_adjacency",
             "match_basis": "adjacent_source_rows_same_step_and_amount",
-            "participant_linked": False,
+            "participant_linked": (
+                transfer["destination_display_id"] == cashout["origin_display_id"]
+            ),
+            "source_rows": [
+                transfer["source_row_number"], cashout["source_row_number"],
+            ],
+            "source_files": sorted({
+                transfer.get("source_file", ""), cashout.get("source_file", ""),
+            } - {""}),
+            "source_kind": transfer.get("source_kind", "synthetic_simulation"),
             "transfer_amount": transfer["amount"],
             "cashout_amount": cashout["amount"],
             "transfer_step": transfer["relative_step"],
             "cashout_step": cashout["relative_step"],
+            "relative_time_unit": transfer.get("relative_time_unit", "hours"),
         },
     }
 
@@ -113,9 +135,24 @@ class BenchmarkGraph:
                 "ON (event.transaction_type, event.source_row_number)"
             ).consume()
             session.run(
+                "CREATE INDEX benchmark_transaction_evidence_lookup IF NOT EXISTS "
+                "FOR ()-[event:BENCHMARK_TRANSACTION]-() "
+                "ON (event.run_id, event.relative_step, event.risk_score)"
+            ).consume()
+            session.run(
                 "MATCH ()-[event:BENCHMARK_TRANSACTION]->() "
                 "WHERE event.source_row_number IS NULL "
                 "SET event.source_row_number = toInteger(split(event.event_id, ':')[1])"
+            ).consume()
+            session.run(
+                "MATCH ()-[event:BENCHMARK_TRANSACTION]->() "
+                "SET event.dataset_id = coalesce(event.dataset_id, 'ds3_paysim'), "
+                "event.source_kind = coalesce(event.source_kind, 'synthetic_simulation'), "
+                "event.relative_time_unit = coalesce(event.relative_time_unit, 'hours'), "
+                "event.event_time_kind = coalesce(event.event_time_kind, 'relative'), "
+                "event.risk_score = coalesce(event.risk_score, 0), "
+                "event.triggered_rules = coalesce(event.triggered_rules, []), "
+                "event.evaluator_version = coalesce(event.evaluator_version, 'unknown_pre_p2_0503')"
             ).consume()
 
     def close(self) -> None:
@@ -142,17 +179,30 @@ class BenchmarkGraph:
             ON CREATE SET origin.display_id = record.origin_display_id,
                           origin.dataset_id = record.dataset_id,
                           origin.provenance = 'synthetic_simulation'
+            SET origin.run_id = record.run_id,
+                origin.source_kind = record.source_kind
             MERGE (destination:BenchmarkAccount {id: record.destination_id})
             ON CREATE SET destination.display_id = record.destination_display_id,
                           destination.dataset_id = record.dataset_id,
                           destination.provenance = 'synthetic_simulation'
+            SET destination.run_id = record.run_id,
+                destination.source_kind = record.source_kind
             MERGE (origin)-[event:BENCHMARK_TRANSACTION {event_id: record.event_id}]->(destination)
             SET event.trace_id = record.trace_id,
                 event.run_id = record.run_id,
+                event.dataset_id = record.dataset_id,
                 event.transaction_type = record.transaction_type,
                 event.amount = record.amount,
                 event.relative_step = record.relative_step,
+                event.relative_time_unit = record.relative_time_unit,
+                event.event_time_kind = record.event_time_kind,
                 event.source_row_number = record.source_row_number,
+                event.source_file = record.source_file,
+                event.source_kind = record.source_kind,
+                event.risk_score = record.risk_score,
+                event.triggered_rules = record.triggered_rules,
+                event.evaluator_version = record.evaluator_version,
+                event.processed_at = datetime(),
                 event.ground_truth_is_fraud = record.ground_truth_is_fraud
             """,
             records=records,
@@ -191,7 +241,13 @@ class BenchmarkGraph:
                        source_row_number: other.source_row_number,
                        transaction_type: other.transaction_type,
                        amount: other.amount,
-                       relative_step: other.relative_step
+                       relative_step: other.relative_step,
+                       relative_time_unit: other.relative_time_unit,
+                       source_file: other.source_file,
+                       source_kind: other.source_kind,
+                       risk_score: other.risk_score,
+                       triggered_rules: other.triggered_rules,
+                       evaluator_version: other.evaluator_version
                    } AS counterpart
             """,
             candidates=candidates,

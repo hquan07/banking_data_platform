@@ -68,7 +68,7 @@ function MainApp() {
     const params = new URLSearchParams(window.location.search);
     params.set('tab', tab);
     if (tab !== 'security') ['case', 'page', 'q', 'status', 'risk'].forEach(key => params.delete(key));
-    if (tab !== 'analytics') ['account', 'event'].forEach(key => params.delete(key));
+    if (tab !== 'analytics') ['account', 'event', 'run'].forEach(key => params.delete(key));
     const nextUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
     if (nextUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
       window.history.pushState({}, '', nextUrl);

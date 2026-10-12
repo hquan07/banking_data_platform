@@ -57,9 +57,10 @@ function openWorkspace(tab, context = {}) {
 }
 
 function SourceEvidence({ item, source, loading }) {
-  if (!item.event_id) return <StateMessage>Case này chưa liên kết source event.</StateMessage>;
+  const sourceEventIds = item.source_event_ids?.length ? item.source_event_ids : item.event_id ? [item.event_id] : [];
+  if (!sourceEventIds.length) return <StateMessage>Case này chưa liên kết source event.</StateMessage>;
   return <div className="source-evidence">
-    <div className="source-evidence-heading"><div><span className="detail-label">Benchmark source event</span><strong>{item.event_id}</strong></div><Badge tone="amber">{item.dataset_id || 'unknown'}</Badge></div>
+    <div className="source-evidence-heading"><div><span className="detail-label">Benchmark source events</span><strong>{sourceEventIds.join(' · ')}</strong></div><Badge tone="amber">{item.dataset_id || 'unknown'}</Badge></div>
     {loading ? <StateMessage type="loading">Đang tải source evidence…</StateMessage> : source ? <>
       <dl className="case-data-grid">
         <div><dt>Source row</dt><dd>{source.source_row_id}</dd></div>
@@ -71,7 +72,7 @@ function SourceEvidence({ item, source, loading }) {
       </dl>
       <details className="source-payload"><summary>Source payload</summary><pre>{JSON.stringify(source.payload, null, 2)}</pre></details>
     </> : <StateMessage type="error">Không tìm thấy source event cho run của case.</StateMessage>}
-    <button className="secondary-button" onClick={() => openWorkspace('analytics', { account: item.account_id, event: item.event_id })}><Network size={14} /> Open relevant AML graph</button>
+    <button className="secondary-button" onClick={() => openWorkspace('analytics', { account: item.account_id, event: sourceEventIds[0], run: item.run_id })}><Network size={14} /> Open temporal AML evidence</button>
   </div>;
 }
 
@@ -111,6 +112,7 @@ export default function SecurityTab() {
   const [disposition, setDisposition] = useState('FALSE_POSITIVE');
   const [resolutionCode, setResolutionCode] = useState('FALSE_POSITIVE');
   const [evidenceFile, setEvidenceFile] = useState(null);
+  const sourceEventId = caseDetail?.source_event_ids?.[0] || caseDetail?.event_id || null;
 
   useEffect(() => {
     const timeout = setTimeout(() => { setPage(1); setQuery(search.trim()); }, 300);
@@ -171,15 +173,15 @@ export default function SecurityTab() {
   }, [loadCase, selectedCaseId]);
 
   useEffect(() => {
-    if (!caseDetail?.event_id || !caseDetail?.dataset_id) { setSourceEvent(null); return undefined; }
+    if (!sourceEventId || !caseDetail?.dataset_id) { setSourceEvent(null); return undefined; }
     const controller = new AbortController();
     const params = new URLSearchParams(); if (caseDetail.run_id) params.set('run_id', caseDetail.run_id);
     setSourceLoading(true);
-    requestJson(`/api/datasets/${caseDetail.dataset_id}/events/${encodeURIComponent(caseDetail.event_id)}?${params}`, token, { signal: controller.signal })
+    requestJson(`/api/datasets/${caseDetail.dataset_id}/events/${encodeURIComponent(sourceEventId)}?${params}`, token, { signal: controller.signal })
       .then(setSourceEvent).catch(fetchError => { if (fetchError.name !== 'AbortError') setSourceEvent(null); })
       .finally(() => { if (!controller.signal.aborted) setSourceLoading(false); });
     return () => controller.abort();
-  }, [caseDetail?.dataset_id, caseDetail?.event_id, caseDetail?.run_id, token]);
+  }, [caseDetail?.dataset_id, caseDetail?.run_id, sourceEventId, token]);
 
   useEffect(() => {
     if (user?.role !== 'ADMIN') return undefined;
@@ -330,7 +332,7 @@ export default function SecurityTab() {
         {caseDetail.status === 'INVESTIGATING' && <section className="case-section case-disposition"><header><div><h3>Disposition</h3><p>Kết luận đóng case với resolution code bắt buộc.</p></div></header><div className="case-form-row"><label><span>Disposition</span><select value={disposition} onChange={event => setDisposition(event.target.value)}>{Object.keys(DISPOSITION_RESOLUTIONS).map(value => <option key={value} value={value}>{DISPOSITION_LABELS[value]}</option>)}</select></label><label><span>Resolution</span><select value={resolutionCode} onChange={event => setResolutionCode(event.target.value)}>{resolutions.map(value => <option key={value}>{value}</option>)}</select></label><button className="primary-button" disabled={!!busy} onClick={closeCase}><CheckCircle2 size={14} /> Close case</button></div></section>}
 
         <section className="case-section"><header><div><h3>Audit timeline</h3><p>Mọi mutation quan trọng được ghi cùng transaction.</p></div></header><CaseTimeline audit={caseDetail.audit} /></section>
-        <div className="case-links"><button className="text-button" onClick={() => openWorkspace('analytics', { account: caseDetail.account_id, event: caseDetail.event_id })}>AML subgraph <ExternalLink size={12} /></button></div>
+        <div className="case-links"><button className="text-button" onClick={() => openWorkspace('analytics', { account: caseDetail.account_id, event: sourceEventId, run: caseDetail.run_id })}>Temporal AML evidence <ExternalLink size={12} /></button></div>
       </div>}
     </Panel>
   </div>;

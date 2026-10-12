@@ -20,6 +20,7 @@ def test_fraud_sequence_payload_does_not_invent_participant_link():
 
     assert payload[0]["transfer_destination"] == "C2"
     assert payload[0]["cashout_origin"] == "C3"
+    assert payload[0]["evidence_basis"] == "source_row_adjacency"
     assert payload[0]["participant_linked"] is False
     assert payload[0]["transfer_amount"] == 100.0
     assert payload[0]["ground_truth_fraud"] is True

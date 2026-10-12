@@ -26,6 +26,7 @@ CASE_COLUMNS = (
     "risk_score", "risk_level", "decision", "status", "xai_explanation", "notes",
     "evidence_file_url", "assignee_id", "version", "trace_id", "dataset_id", "run_id",
     "priority", "disposition", "due_at", "resolution_code", "closed_at", "closed_by",
+    "source_event_ids", "graph_evidence",
     "created_at", "updated_at", "resolved_at",
 )
 CASE_SELECT = ", ".join(CASE_COLUMNS)
