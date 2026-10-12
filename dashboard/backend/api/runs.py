@@ -13,11 +13,13 @@ from core.deps import get_current_user
 from services.run_control import (
     RUN_STATES,
     RunNotFoundError,
+    RunLegalHoldError,
     RunTransitionError,
     RunVersionConflictError,
     create_run,
     get_run,
     list_runs,
+    set_legal_hold,
     transition_run,
 )
 
@@ -59,6 +61,18 @@ class RunTransition(BaseModel):
     def require_failure_reason(self):
         if self.status == "FAILED" and not (self.reason and self.reason.strip()):
             raise ValueError("reason is required when status is FAILED")
+        return self
+
+
+class RunLegalHold(BaseModel):
+    enabled: bool
+    version: int = Field(..., ge=1)
+    reason: str | None = Field(None, max_length=500)
+
+    @model_validator(mode="after")
+    def require_hold_reason(self):
+        if self.enabled and not (self.reason and self.reason.strip()):
+            raise ValueError("reason is required when enabling legal hold")
         return self
 
 
@@ -124,4 +138,27 @@ def post_run_transition(
             status_code=409, detail="Pipeline run changed; refresh before updating",
         ) from exc
     except RunTransitionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{run_id}/legal-hold")
+def post_run_legal_hold(
+    run_id: UUID,
+    payload: RunLegalHold,
+    current_user: dict = Depends(get_current_user),
+):
+    require_admin(current_user)
+    try:
+        return set_legal_hold(
+            _connection(), str(run_id), expected_version=payload.version,
+            enabled=payload.enabled, reason=payload.reason,
+            actor_user_id=current_user["id"],
+        )
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Pipeline run not found") from exc
+    except RunVersionConflictError as exc:
+        raise HTTPException(
+            status_code=409, detail="Pipeline run changed; refresh before updating",
+        ) from exc
+    except RunLegalHoldError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

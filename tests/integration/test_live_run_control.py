@@ -128,6 +128,38 @@ def test_run_control_migration_and_api_contract():
         assert len(final_detail["events"]) == 7
         assert final_detail["events"][-1]["new_status"] == "CANCELLED"
 
+        with pytest.raises(HTTPError) as hold_denied:
+            _request("POST", f"/runs/{run_id}/legal-hold", analyst, {
+                "enabled": True, "version": version, "reason": "E2E compliance review",
+            })
+        assert hold_denied.value.code == 403
+
+        _, held = _request("POST", f"/runs/{run_id}/legal-hold", admin, {
+            "enabled": True, "version": version, "reason": "E2E compliance review",
+        })
+        version += 1
+        assert held["legal_hold"] is True
+        assert held["legal_hold_reason"] == "E2E compliance review"
+
+        with pytest.raises(HTTPError) as stale_hold:
+            _request("POST", f"/runs/{run_id}/legal-hold", admin, {
+                "enabled": False, "version": version - 1,
+            })
+        assert stale_hold.value.code == 409
+
+        _, released = _request("POST", f"/runs/{run_id}/legal-hold", admin, {
+            "enabled": False, "version": version,
+        })
+        version += 1
+        assert released["legal_hold"] is False
+        assert released["legal_hold_reason"] is None
+
+        _, retention = _request("GET", "/retention/executions?limit=1", admin)
+        assert retention["limit"] == 1
+        with pytest.raises(HTTPError) as retention_denied:
+            _request("GET", "/retention/executions?limit=1", analyst)
+        assert retention_denied.value.code == 403
+
         with pytest.raises(HTTPError) as terminal:
             _request("POST", f"/runs/{run_id}/transition", admin, {
                 "status": "RUNNING", "version": version,

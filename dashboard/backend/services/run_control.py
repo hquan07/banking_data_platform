@@ -33,6 +33,8 @@ RUN_COLUMNS = (
     "evaluator_version", "requested_rate", "requested_start_offset",
     "requested_end_offset", "created_at", "updated_at", "started_at",
     "paused_at", "cancelled_at", "completed_at", "failed_at", "failure_reason",
+    "legal_hold", "legal_hold_reason", "legal_hold_at", "legal_hold_by",
+    "retention_purged_at", "retention_execution_id",
 )
 RUN_SELECT = ", ".join(RUN_COLUMNS)
 
@@ -49,8 +51,62 @@ class RunTransitionError(ValueError):
     pass
 
 
+class RunLegalHoldError(ValueError):
+    pass
+
+
 def transition_allowed(old_status: str, new_status: str) -> bool:
     return new_status in TRANSITIONS.get(old_status, frozenset())
+
+
+def set_legal_hold(
+    connection: Any,
+    run_id: str,
+    *,
+    expected_version: int,
+    enabled: bool,
+    reason: str | None,
+    actor_user_id: int,
+) -> dict[str, Any]:
+    """Apply or release a legal hold with optimistic locking and audit."""
+    normalized_reason = reason.strip() if reason else None
+    if enabled and not normalized_reason:
+        raise RunLegalHoldError("reason is required when enabling legal hold")
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            WITH changed AS (
+                UPDATE pipeline_runs
+                SET legal_hold = %s,
+                    legal_hold_reason = %s,
+                    legal_hold_at = CASE WHEN %s THEN NOW() ELSE NULL END,
+                    legal_hold_by = CASE WHEN %s THEN %s ELSE NULL END,
+                    version = version + 1,
+                    updated_at = NOW()
+                WHERE run_id = %s AND version = %s
+                RETURNING {RUN_SELECT}
+            ), audit AS (
+                INSERT INTO pipeline_run_events
+                    (run_id, event_type, old_status, new_status, actor_user_id, details)
+                SELECT run_id, 'LEGAL_HOLD', status, status, %s, %s::jsonb FROM changed
+                RETURNING run_id
+            )
+            SELECT {', '.join('changed.' + item for item in RUN_COLUMNS)}
+            FROM changed JOIN audit USING (run_id)
+            """,
+            (
+                enabled, normalized_reason if enabled else None, enabled, enabled,
+                actor_user_id, run_id, expected_version, actor_user_id,
+                json.dumps({"enabled": enabled, "reason": normalized_reason}),
+            ),
+        )
+        row = cursor.fetchone()
+        if row is not None:
+            return _record(row)
+        cursor.execute("SELECT 1 FROM pipeline_runs WHERE run_id = %s", (run_id,))
+        if cursor.fetchone() is None:
+            raise RunNotFoundError(run_id)
+    raise RunVersionConflictError(run_id)
 
 
 def _record(row: Any) -> dict[str, Any]:
