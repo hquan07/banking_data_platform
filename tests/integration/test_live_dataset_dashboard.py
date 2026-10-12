@@ -126,3 +126,37 @@ def test_capability_manifest_is_versioned_and_rejects_unknown_versions():
     with pytest.raises(HTTPError) as unsupported:
         _get("/api/capabilities?version=999", token)
     assert unsupported.value.code == 406
+
+
+def test_investigation_source_event_preserves_run_identity_and_payload():
+    import psycopg2
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    connection = psycopg2.connect(
+        host="localhost", port=5433, dbname=os.environ["POSTGRES_DB"],
+        user=os.environ["POSTGRES_USER"], password=os.environ["POSTGRES_PASSWORD"],
+    )
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT run_id, event_id, payload FROM benchmark_events "
+                "WHERE dataset_id = 'ds3_paysim' ORDER BY ingested_at DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        pytest.skip("DS3 benchmark has no source event")
+
+    run_id, event_id, payload = row
+    token = _login_token()
+    source = _get(
+        f"/api/datasets/ds3_paysim/events/{event_id}?{urlencode({'run_id': str(run_id)})}",
+        token,
+    )
+    assert source["dataset_id"] == "ds3_paysim"
+    assert source["run_id"] == str(run_id)
+    assert source["event_id"] == event_id
+    assert source["payload"] == payload
+    assert {"source_row_id", "event_type", "ground_truth_is_fraud", "source_file"} <= source.keys()

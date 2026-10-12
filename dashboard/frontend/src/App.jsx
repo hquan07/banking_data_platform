@@ -24,6 +24,8 @@ const WORKSPACE_TABS = ['overview', 'fraud', 'security', 'analytics', 'datasets'
 const ADMIN_TABS = ['users', 'rules', 'architecture'];
 
 function readActiveTab() {
+  const linked = new URLSearchParams(window.location.search).get('tab');
+  if ([...WORKSPACE_TABS, ...ADMIN_TABS].includes(linked)) return linked;
   const stored = sessionStorage.getItem('sentinel-active-tab');
   return [...WORKSPACE_TABS, ...ADMIN_TABS].includes(stored) ? stored : 'overview';
 }
@@ -63,7 +65,25 @@ function MainApp() {
     if (tabDatasetId && tabDatasetId !== datasetId) setDatasetId(tabDatasetId);
     setActiveTab(tab);
     sessionStorage.setItem('sentinel-active-tab', tab);
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', tab);
+    if (tab !== 'security') ['case', 'page', 'q', 'status', 'risk'].forEach(key => params.delete(key));
+    if (tab !== 'analytics') ['account', 'event'].forEach(key => params.delete(key));
+    const nextUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
+    if (nextUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.pushState({}, '', nextUrl);
+    }
   };
+
+  useEffect(() => {
+    const restoreLinkedTab = () => {
+      const linked = readActiveTab();
+      setActiveTab(linked);
+      sessionStorage.setItem('sentinel-active-tab', linked);
+    };
+    window.addEventListener('popstate', restoreLinkedTab);
+    return () => window.removeEventListener('popstate', restoreLinkedTab);
+  }, []);
 
   useEffect(() => {
     if (user?.role !== 'ADMIN' && ADMIN_TABS.includes(activeTab)) selectTab('overview');

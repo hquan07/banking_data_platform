@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AuthContext } from './AuthContext';
@@ -15,6 +15,10 @@ export default function AnalyticsTab() {
   const [error, setError] = useState('');
   const containerRef = useRef(null);
   const [width, setWidth] = useState(800);
+  const linkedContext = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return { account: params.get('account'), event: params.get('event') };
+  }, []);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -30,10 +34,20 @@ export default function AnalyticsTab() {
   }, [token]);
   useEffect(() => { const resize = () => setWidth(containerRef.current?.offsetWidth || 800); resize(); window.addEventListener('resize', resize); return () => window.removeEventListener('resize', resize); }, []);
 
+  const visibleGraph = useMemo(() => {
+    if (!linkedContext.account || !graph.links.length) return graph;
+    const endpointId = endpoint => typeof endpoint === 'object' ? endpoint.id : endpoint;
+    const links = graph.links.filter(link => endpointId(link.source) === linkedContext.account || endpointId(link.target) === linkedContext.account);
+    if (!links.length) return graph;
+    const ids = new Set(links.flatMap(link => [endpointId(link.source), endpointId(link.target)]));
+    return { nodes: graph.nodes.filter(node => ids.has(node.id)), links };
+  }, [graph, linkedContext.account]);
+
   return <div className="page-stack">
-    <PageHeader eyebrow="Graph intelligence" title="AML Network" description={`${dataset.label} · Phạm vi cố định cho participant graph PaySim.`} />
+    <PageHeader eyebrow="Graph intelligence" title="AML Network" description={`${dataset.label} · Phạm vi cố định cho participant graph PaySim.${linkedContext.account ? ` Focus: ${linkedContext.account}.` : ''}`} />
+      {linkedContext.event && <div className="case-banner case-banner-success" role="status"><span>Linked investigation evidence · event {linkedContext.event}{linkedContext.account ? ` · account ${linkedContext.account}` : ''}</span></div>}
       <Panel className="col-span-12" title="Transaction network" subtitle="PaySim synthetic BenchmarkAccount graph">
-        <div className="graph-canvas" ref={containerRef}>{loading ? <StateMessage type="loading">Đang tải graph…</StateMessage> : error ? <StateMessage type="error">{error}</StateMessage> : graph.nodes.length ? <ForceGraph2D width={width} height={420} graphData={graph} nodeLabel="name" nodeColor={node => node.group === 1 ? '#fb7185' : '#4f8cff'} nodeRelSize={5} linkColor={() => '#334a6d'} linkDirectionalArrowLength={3} linkDirectionalArrowRelPos={1} backgroundColor="#0b1728" /> : <StateMessage>Chưa có quan hệ graph trong phạm vi này.</StateMessage>}</div>
+        <div className="graph-canvas" ref={containerRef}>{loading ? <StateMessage type="loading">Đang tải graph…</StateMessage> : error ? <StateMessage type="error">{error}</StateMessage> : visibleGraph.nodes.length ? <ForceGraph2D width={width} height={420} graphData={visibleGraph} nodeLabel="name" nodeColor={node => node.id === linkedContext.account ? '#f7b84b' : node.group === 1 ? '#fb7185' : '#4f8cff'} nodeRelSize={5} linkColor={() => '#334a6d'} linkDirectionalArrowLength={3} linkDirectionalArrowRelPos={1} backgroundColor="#0b1728" /> : <StateMessage>Chưa có quan hệ graph trong phạm vi này.</StateMessage>}</div>
       </Panel>
       <Panel className="col-span-6" title="Money flow by type" subtitle="Tổng amount trên graph PaySim">{flow.length ? <ResponsiveContainer width="100%" height={280}><BarChart data={flow}><CartesianGrid stroke="#20314b" vertical={false} /><XAxis dataKey="transaction_type" stroke="#70839e" fontSize={9} /><YAxis stroke="#70839e" fontSize={9} /><Tooltip contentStyle={{ background:'#0d1829', border:'1px solid #263750', fontSize:10 }} /><Bar dataKey="total_amount" name="Total amount" fill="#4f8cff" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer> : <StateMessage>Chưa có money flow.</StateMessage>}</Panel><Panel className="col-span-6" title="Transfer → Cash-out evidence" subtitle="Adjacent source rows, same step và amount; không mặc định participant-linked"><div className="sequence-list">{sequences.slice(0, 8).map(item => <article key={`${item.transfer_event_id}-${item.cashout_event_id}`}><div><strong>{item.transfer_origin} → {item.transfer_destination}</strong><span>{item.cashout_origin} → {item.cashout_destination}</span></div><div><strong>{formatNumber(item.transfer_amount, 2)}</strong><span>{item.participant_linked ? 'Participant linked' : 'Not linked'}</span></div></article>)}</div></Panel>
   </div>;

@@ -140,6 +140,93 @@ async function mockRunWorkspace(page, role = 'ADMIN', transitions = [], manifest
   await expect(page.getByRole('heading', { name: 'Data Runs', level: 2 })).toBeVisible();
 }
 
+async function mockInvestigationWorkspace(page) {
+  const actions = [];
+  let metadataConflict = true;
+  const record = {
+    alert_id: 41, event_id: 'ds3-event-41', payment_id: 'payment-41', account_id: 'C100041',
+    rule_name: 'TRANSFER_CASHOUT_SEQUENCE', amount: 5400, risk_score: 92.4,
+    risk_level: 'HIGH', decision: 'REVIEW', status: 'PENDING', version: 1,
+    dataset_id: 'ds3_paysim', run_id: '11111111-1111-4111-8111-111111111111',
+    trace_id: 'trace-41', priority: 'P2', disposition: null, due_at: '2026-10-13T10:00:00Z',
+    resolution_code: null, closed_at: null, closed_by: null, assignee_id: null,
+    created_at: '2026-10-12T01:00:00Z', updated_at: '2026-10-12T01:00:00Z',
+    xai_explanation: 'Adjacent transfer and cash-out rows require analyst review.',
+    comments: [], evidence: [], audit: [],
+  };
+  const queueRecord = () => ({ ...record, comments: undefined, evidence: undefined, audit: undefined });
+  const audit = action => record.audit.push({
+    audit_id: record.audit.length + 1, actor_user_id: 1, action,
+    old_status: record.status, new_status: record.status, created_at: new Date().toISOString(),
+  });
+
+  await page.route('**/mock-evidence-upload', route => route.fulfill({ status: 200, body: '' }));
+  await page.route('**/api/**', async route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const json = body => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    const fail = (status, detail) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ detail }) });
+
+    if (url.pathname === '/api/auth/login') return json({ access_token: browserToken(), role: 'ADMIN', username: 'admin' });
+    if (url.pathname === '/api/capabilities') return json(capabilityFixture());
+    if (url.pathname === '/api/users') return json([{ id: 1, username: 'admin', role: 'ADMIN' }, { id: 7, username: 'analyst_1', role: 'ANALYST' }]);
+    if (url.pathname === '/api/alerts' && request.method() === 'GET') return json({ total: 1, page: 1, limit: 12, data: [queueRecord()] });
+    if (url.pathname === '/api/alerts/41' && request.method() === 'GET') return json(record);
+    if (url.pathname === '/api/datasets/ds3_paysim/events/ds3-event-41') return json({
+      run_id: record.run_id, event_id: record.event_id, trace_id: record.trace_id,
+      dataset_id: 'ds3_paysim', source_row_id: '41', event_type: 'TRANSFER',
+      relative_time_value: 12, relative_time_unit: 'step', payload: { amount: 5400, origin: 'C100041' },
+      ground_truth_is_fraud: true, source_file: 'paysim.csv', source_kind: 'synthetic_simulation',
+      evaluation: { evaluator_version: 'rules-v2', predicted_fraud: true, max_score: 92.4, triggered_rules: ['TRANSFER_CASHOUT_SEQUENCE'] },
+    });
+    if (url.pathname === '/api/alerts/41' && request.method() === 'PATCH') {
+      if (metadataConflict) { metadataConflict = false; record.version += 1; actions.push('conflict'); return fail(409, 'Case changed; refresh before updating'); }
+      const body = request.postDataJSON(); record.priority = body.priority; record.due_at = body.due_at; record.version += 1;
+      audit('CASE_METADATA_UPDATED'); actions.push('metadata'); return json({ version: record.version, priority: record.priority, due_at: record.due_at });
+    }
+    if (url.pathname === '/api/alerts/41/assignment') {
+      const body = request.postDataJSON(); record.assignee_id = body.assignee_id; record.version += 1;
+      audit('CASE_ASSIGNED'); actions.push('assignment'); return json({ version: record.version, assignee_id: record.assignee_id });
+    }
+    if (url.pathname === '/api/alerts/41/status') {
+      record.status = request.postDataJSON().status; record.version += 1;
+      audit('CASE_UPDATE'); actions.push('investigate'); return json({ status: record.status, version: record.version });
+    }
+    if (url.pathname === '/api/alerts/41/comments') {
+      const body = request.postDataJSON(); record.version += 1;
+      record.comments.push({ comment_id: 1, author_user_id: 1, body: body.body, created_at: new Date().toISOString() });
+      audit('COMMENT_ADDED'); actions.push('comment'); return json({ ...record.comments[0], version: record.version });
+    }
+    if (url.pathname === '/api/evidence/presigned-url') return json({
+      upload_url: 'http://localhost:5173/mock-evidence-upload', object_key: 'alerts/41/0123456789abcdef0123456789abcdef-proof.txt',
+      required_headers: { 'Content-Type': 'text/plain', 'x-amz-meta-sha256': url.searchParams.get('checksum_sha256') },
+    });
+    if (url.pathname === '/api/alerts/41/evidence/complete') {
+      const body = request.postDataJSON(); record.version += 1;
+      record.evidence.push({ evidence_id: 1, original_filename: 'proof.txt', content_type: body.content_type, size_bytes: 14, checksum_sha256: body.checksum_sha256, uploaded_by: 1, created_at: new Date().toISOString() });
+      audit('EVIDENCE_UPLOADED'); actions.push('evidence'); return json({ ...body, version: record.version });
+    }
+    if (url.pathname === '/api/alerts/41/disposition') {
+      const body = request.postDataJSON(); record.status = body.disposition === 'NO_ACTION' || body.disposition === 'DUPLICATE' ? 'IGNORED' : 'RESOLVED';
+      record.disposition = body.disposition; record.resolution_code = body.resolution_code; record.version += 1;
+      audit('CASE_DISPOSITION'); actions.push('resolve'); return json({ status: record.status, disposition: record.disposition, resolution_code: record.resolution_code, version: record.version });
+    }
+    if (url.pathname === '/api/graph/benchmark') return json({ nodes: [{ id: 'C100041', name: 'C100041', group: 1 }, { id: 'M200', name: 'M200', group: 1 }], links: [{ source: 'C100041', target: 'M200', value: 5400 }] });
+    if (url.pathname === '/api/graph/money-flow') return json([]);
+    if (url.pathname === '/api/graph/fraud-sequences') return json({ sequences: [] });
+    if (url.pathname.startsWith('/api/datasets/')) return json([]);
+    if (url.pathname === '/api/health/ready') return json({ status: 'ready' });
+    return json({});
+  });
+
+  await page.goto('/?tab=security&status=PENDING');
+  await page.getByLabel('Username').fill('admin');
+  await page.getByLabel('Password').fill('mock-password');
+  await page.getByRole('button', { name: 'Sign In' }).click();
+  await expect(page.getByRole('heading', { name: 'Investigation Workspace', level: 1 })).toBeVisible();
+  return { actions, record };
+}
+
 async function login(page) {
   const password = process.env.E2E_PASSWORD || environment.DASHBOARD_ADMIN_PASSWORD;
   if (!password) throw new Error('Set E2E_PASSWORD or DASHBOARD_ADMIN_PASSWORD in the repository .env file');
@@ -306,4 +393,39 @@ test('capability runtime failure disables the affected fixed tab with a reason',
   const aml = page.getByRole('button', { name: /AML Network/ });
   await expect(aml).toBeDisabled();
   await expect(aml).toHaveAttribute('title', 'Unavailable dependencies: neo4j');
+});
+
+test('investigation workspace completes an auditable case and recovers from conflicts', async ({ page }) => {
+  const { actions } = await mockInvestigationWorkspace(page);
+  await expect(page.getByLabel('Nguồn dữ liệu')).toHaveCount(0);
+  await expect(page).toHaveURL(/tab=security.*status=PENDING/);
+  await page.getByRole('button', { name: /Case #41/ }).click();
+  await expect(page).toHaveURL(/case=41/);
+  await expect(page.getByRole('heading', { name: 'Case #41', level: 2 })).toBeVisible();
+  await expect(page.getByText('ds3-event-41')).toBeVisible();
+
+  await page.getByLabel('Priority').selectOption('P1');
+  await page.getByRole('button', { name: 'Save metadata' }).click();
+  await expect(page.getByRole('alert')).toContainText('phiên khác');
+  await page.getByLabel('Priority').selectOption('P1');
+  await page.getByRole('button', { name: 'Save metadata' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Priority và SLA' })).toBeVisible();
+
+  await page.getByLabel('Investigator').selectOption('7');
+  await page.getByRole('button', { name: 'Apply assignment' }).click();
+  await page.getByRole('button', { name: 'Start investigation' }).click();
+  await page.getByLabel('Investigation note').fill('Reviewed source event and graph evidence.');
+  await page.getByRole('button', { name: 'Add note' }).click();
+  await expect(page.getByText('Reviewed source event and graph evidence.')).toBeVisible();
+
+  await page.getByLabel('Evidence file').setInputFiles({ name: 'proof.txt', mimeType: 'text/plain', buffer: Buffer.from('case-evidence') });
+  await page.getByRole('button', { name: 'Upload evidence' }).click();
+  await expect(page.getByText('proof.txt')).toBeVisible();
+  await page.getByRole('button', { name: 'Close case' }).click();
+  await expect(page.locator('.case-hero-badges .ui-badge').filter({ hasText: 'RESOLVED' })).toBeVisible();
+  await expect.poll(() => actions).toEqual(['conflict', 'metadata', 'assignment', 'investigate', 'comment', 'evidence', 'resolve']);
+
+  await page.getByRole('button', { name: 'Open relevant AML graph' }).click();
+  await expect(page).toHaveURL(/tab=analytics.*account=C100041.*event=ds3-event-41/);
+  await expect(page.getByText(/Linked investigation evidence/)).toBeVisible();
 });

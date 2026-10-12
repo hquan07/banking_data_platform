@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -551,3 +552,64 @@ def get_dataset_segments(dataset_id: str, current_user: dict = Depends(get_curre
         return {"dataset_id": dataset_id, "segments": response}
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Dataset segments unavailable") from exc
+
+
+@router.get("/{dataset_id}/events/{event_id}")
+def get_dataset_event(
+    dataset_id: str,
+    event_id: str,
+    run_id: UUID | None = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return immutable benchmark source evidence and its latest evaluation."""
+    _database_required()
+    dataset_id = _validate_dataset_id(dataset_id)
+    try:
+        with pg_conn.cursor() as cursor:
+            clauses = ["event.dataset_id = %s", "event.event_id = %s"]
+            params = [dataset_id, event_id]
+            if run_id:
+                clauses.append("event.run_id = %s")
+                params.append(str(run_id))
+            cursor.execute(
+                f"""
+                SELECT event.run_id, event.event_id, event.trace_id, event.dataset_id,
+                       event.source_row_id, event.event_type, event.relative_time_value,
+                       event.relative_time_unit, event.payload, event.ground_truth_is_fraud,
+                       event.source_file, event.source_kind, event.ingested_at,
+                       evaluation.evaluator_version, evaluation.predicted_fraud,
+                       evaluation.max_score, evaluation.triggered_rules,
+                       evaluation.evaluated_at
+                FROM benchmark_events event
+                LEFT JOIN LATERAL (
+                    SELECT evaluator_version, predicted_fraud, max_score,
+                           triggered_rules, evaluated_at
+                    FROM benchmark_evaluations
+                    WHERE run_id = event.run_id AND event_id = event.event_id
+                    ORDER BY evaluated_at DESC, evaluation_id DESC
+                    LIMIT 1
+                ) evaluation ON TRUE
+                WHERE {' AND '.join(clauses)}
+                ORDER BY event.ingested_at DESC
+                LIMIT 1
+                """,
+                params,
+            )
+            row = cursor.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Benchmark source event not found")
+        return {
+            "run_id": row[0], "event_id": row[1], "trace_id": row[2],
+            "dataset_id": row[3], "source_row_id": row[4], "event_type": row[5],
+            "relative_time_value": row[6], "relative_time_unit": row[7],
+            "payload": row[8], "ground_truth_is_fraud": row[9],
+            "source_file": row[10], "source_kind": row[11], "ingested_at": row[12],
+            "evaluation": None if row[13] is None else {
+                "evaluator_version": row[13], "predicted_fraud": row[14],
+                "max_score": row[15], "triggered_rules": row[16], "evaluated_at": row[17],
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Benchmark source event unavailable") from exc
