@@ -1,6 +1,7 @@
 """Opt-in API test for case transitions, optimistic locking, search and audit."""
 
 import json
+import hashlib
 import os
 import uuid
 from urllib.error import HTTPError
@@ -44,11 +45,18 @@ def test_case_lifecycle_and_stale_version():
         with urlopen(login, timeout=10) as response:
             token = json.load(response)["access_token"]
 
-        def api(path, method="GET", body=None):
+        analyst_login = Request(
+            "http://localhost:8000/api/auth/login",
+            data=urlencode({"username": "analyst_1", "password": os.environ["DASHBOARD_ANALYST_PASSWORD"]}).encode(),
+        )
+        with urlopen(analyst_login, timeout=10) as response:
+            analyst_token = json.load(response)["access_token"]
+
+        def api(path, method="GET", body=None, auth_token=token):
             request = Request(
                 f"http://localhost:8000/api{path}",
                 data=json.dumps(body).encode() if body is not None else None,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                headers={"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"},
                 method=method,
             )
             with urlopen(request, timeout=10) as response:
@@ -57,37 +65,106 @@ def test_case_lifecycle_and_stale_version():
         search = api(f"/alerts?account_id={account_id}&limit=10")
         assert search["total"] == 1
         assert search["data"][0]["version"] == version
+        assert search["data"][0]["priority"] == "P3"
+
+        with pytest.raises(HTTPError) as outside_scope:
+            api(f"/alerts/{alert_id}", auth_token=analyst_token)
+        assert outside_scope.value.code == 403
+
+        with pytest.raises(HTTPError) as invalid_due_date:
+            api(f"/alerts/{alert_id}", "PATCH", {
+                "version": version, "due_at": "2020-01-01T00:00:00Z",
+            })
+        assert invalid_due_date.value.code == 422
+
+        case_metadata = api(f"/alerts/{alert_id}", "PATCH", {
+            "version": version, "priority": "P1", "due_at": "2030-01-01T00:00:00Z",
+        })
+        version = case_metadata["version"]
+        with pytest.raises(HTTPError) as stale_metadata:
+            api(f"/alerts/{alert_id}", "PATCH", {"version": version - 1, "priority": "P2"})
+        assert stale_metadata.value.code == 409
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM users WHERE username = 'analyst_1'")
+            analyst_id = cursor.fetchone()[0]
+        assigned = api(f"/alerts/{alert_id}/assignment", "POST", {
+            "version": version, "assignee_id": analyst_id,
+        })
+        version = assigned["version"]
+        with pytest.raises(HTTPError) as analyst_assignment:
+            api(f"/alerts/{alert_id}/assignment", "POST", {
+                "version": version, "assignee_id": analyst_id,
+            }, auth_token=analyst_token)
+        assert analyst_assignment.value.code == 403
+        with pytest.raises(HTTPError) as analyst_export:
+            api("/alerts/export", auth_token=analyst_token)
+        assert analyst_export.value.code == 403
+        detail = api(f"/alerts/{alert_id}", auth_token=analyst_token)
+        assert detail["priority"] == "P1"
+        assert detail["assignee_id"] == analyst_id
 
         changed = api(f"/alerts/{alert_id}/status", "POST", {
             "status": "INVESTIGATING", "version": version, "notes": "E2E investigation",
-        })
+        }, auth_token=analyst_token)
         assert changed["version"] == version + 1
+        version = changed["version"]
         with pytest.raises(HTTPError) as stale:
-            api(f"/alerts/{alert_id}/status", "POST", {"status": "RESOLVED", "version": version})
+            api(f"/alerts/{alert_id}/comments", "POST", {
+                "version": version - 1, "body": "stale comment",
+            }, auth_token=analyst_token)
         assert stale.value.code == 409
 
-        resolved = api(f"/alerts/{alert_id}/status", "POST", {
-            "status": "RESOLVED", "version": changed["version"],
-        })
-        assert resolved["version"] == version + 2
-        presign = api(f"/evidence/presigned-url?alert_id={alert_id}&filename=proof-{suffix}.txt")
+        comment = api(f"/alerts/{alert_id}/comments", "POST", {
+            "version": version, "body": "Reviewed source event and graph evidence.",
+        }, auth_token=analyst_token)
+        version = comment["version"]
+        resolved = api(f"/alerts/{alert_id}/disposition", "POST", {
+            "version": version, "disposition": "FALSE_POSITIVE",
+            "resolution_code": "FALSE_POSITIVE",
+        }, auth_token=analyst_token)
+        version = resolved["version"]
+        assert resolved["status"] == "RESOLVED"
+        assert resolved["closed_by"] == analyst_id
+
+        evidence_body = b"e2e-evidence"
+        checksum = hashlib.sha256(evidence_body).hexdigest()
+        presign = api(
+            f"/evidence/presigned-url?{urlencode({'alert_id': alert_id, 'filename': f'proof-{suffix}.txt', 'checksum_sha256': checksum, 'content_type': 'text/plain'})}"
+        )
         evidence_key = presign["object_key"]
         assert presign["upload_url"].startswith("http://localhost:9000/")
         upload = Request(
-            presign["upload_url"], data=b"e2e-evidence", method="PUT",
-            headers={"Content-Type": "application/octet-stream"},
+            presign["upload_url"], data=evidence_body, method="PUT",
+            headers=presign["required_headers"],
         )
         with urlopen(upload, timeout=10) as response:
             assert response.status == 200
-        evidence = api(f"/alerts/{alert_id}/evidence/complete", "POST", {"object_key": evidence_key})
-        assert evidence["version"] == version + 3
-        repeated = api(f"/alerts/{alert_id}/evidence/complete", "POST", {"object_key": evidence_key})
+        evidence_payload = {
+            "object_key": evidence_key, "version": version,
+            "checksum_sha256": checksum, "content_type": "text/plain",
+        }
+        evidence = api(f"/alerts/{alert_id}/evidence/complete", "POST", evidence_payload)
+        assert evidence["version"] == version + 1
+        evidence_payload["version"] = evidence["version"]
+        repeated = api(f"/alerts/{alert_id}/evidence/complete", "POST", evidence_payload)
         assert repeated["version"] == evidence["version"]
+        detail = api(f"/alerts/{alert_id}")
+        assert detail["comments"][0]["body"].startswith("Reviewed source event")
+        assert detail["evidence"][0]["checksum_sha256"] == checksum
+        assert detail["evidence"][0]["original_filename"] == f"proof-{suffix}.txt"
+        assert detail["disposition"] == "FALSE_POSITIVE"
+        assert detail["resolution_code"] == "FALSE_POSITIVE"
         history = api(f"/alerts/{alert_id}/history")
-        assert [entry["new_status"] for entry in history] == ["INVESTIGATING", "RESOLVED", "RESOLVED"]
+        assert [entry["action"] for entry in history] == [
+            "CASE_METADATA_UPDATED", "CASE_ASSIGNED", "CASE_UPDATE", "COMMENT_ADDED",
+            "CASE_DISPOSITION", "EVIDENCE_UPLOADED",
+        ]
         assert history[-1]["action"] == "EVIDENCE_UPLOADED"
     finally:
         with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM alert_comments WHERE alert_id IN "
+                           "(SELECT alert_id FROM alerts WHERE event_id = %s)", (f"e2e-case-{suffix}",))
             cursor.execute("DELETE FROM evidence_files WHERE alert_id IN "
                            "(SELECT alert_id FROM alerts WHERE event_id = %s)", (f"e2e-case-{suffix}",))
             cursor.execute("DELETE FROM alert_audit_log WHERE alert_id IN "

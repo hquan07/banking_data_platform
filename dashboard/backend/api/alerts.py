@@ -2,10 +2,12 @@
 Alerts CRUD, export, and evidence upload router.
 """
 import csv
+import hashlib
 import io
 import json
 import os
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -25,6 +27,21 @@ from prometheus_client import Histogram
 DB_QUERY_SECONDS = Histogram(
     "case_database_query_seconds", "PostgreSQL query latency for case operations", ("operation",)
 )
+MAX_EVIDENCE_BYTES = 25 * 1024 * 1024
+
+
+def _evidence_sha256(client, object_key: str) -> str:
+    response = client.get_object(Bucket=EVIDENCE_BUCKET, Key=object_key)
+    body = response["Body"]
+    digest = hashlib.sha256()
+    try:
+        for chunk in body.iter_chunks(chunk_size=1024 * 1024):
+            digest.update(chunk)
+    finally:
+        body.close()
+    return digest.hexdigest()
+
+
 class AlertStatusUpdate(BaseModel):
     status: str = Field(..., pattern="^(PENDING|INVESTIGATING|RESOLVED|IGNORED)$")
     version: int = Field(..., ge=1)
@@ -80,7 +97,8 @@ def get_alerts(
                 total = cur.fetchone()[0]
                 cur.execute(
                     "SELECT alert_id, account_id, rule_name, amount, risk_score, status, created_at, "
-                    "xai_explanation, notes, evidence_file_url, assignee_id, version, payment_id, risk_level, trace_id, dataset_id "
+                    "xai_explanation, notes, evidence_file_url, assignee_id, version, payment_id, risk_level, trace_id, dataset_id, "
+                    "priority, disposition, due_at, resolution_code, closed_at, closed_by "
                     "FROM alerts" + where_sql + " ORDER BY created_at DESC, alert_id DESC LIMIT %s OFFSET %s",
                     (*params, limit, offset),
                 )
@@ -104,6 +122,12 @@ def get_alerts(
                         "risk_level": row[13],
                         "trace_id": row[14],
                         "dataset_id": row[15],
+                        "priority": row[16],
+                        "disposition": row[17],
+                        "due_at": row[18],
+                        "resolution_code": row[19],
+                        "closed_at": row[20],
+                        "closed_by": row[21],
                     })
                 return {"total": total, "page": page, "limit": limit, "data": data}
         except Exception as e:
@@ -151,6 +175,9 @@ def update_alert_status(alert_id: int, update: AlertStatusUpdate, current_user: 
                 set_parts.extend(("updated_at = NOW()", "version = version + 1"))
                 if update.status == "RESOLVED":
                     set_parts.append("resolved_at = NOW()")
+                if update.status in {"RESOLVED", "IGNORED"}:
+                    set_parts.extend(("closed_at = NOW()", "closed_by = %s"))
+                    params.append(current_user["id"])
 
                 details = {
                     "old_assignee_id": existing_assignee,
@@ -245,14 +272,15 @@ def export_alerts(
             where_sql = " WHERE " + " AND ".join(clauses) if clauses else ""
             cur.execute(
                 "SELECT alert_id, dataset_id, account_id, payment_id, rule_name, amount, risk_score, "
-                "risk_level, status, created_at FROM alerts" + where_sql + " ORDER BY created_at DESC",
+                "risk_level, status, priority, disposition, due_at, resolution_code, closed_at, "
+                "created_at FROM alerts" + where_sql + " ORDER BY created_at DESC",
                 params,
             )
             rows = cur.fetchall()
 
             output = io.StringIO()
             writer = csv.writer(output)
-            writer.writerow(["Alert ID", "Dataset", "Account ID", "Payment ID", "Rule Name", "Amount", "Risk Score", "Risk Level", "Status", "Created At"])
+            writer.writerow(["Alert ID", "Dataset", "Account ID", "Payment ID", "Rule Name", "Amount", "Risk Score", "Risk Level", "Status", "Priority", "Disposition", "Due At", "Resolution Code", "Closed At", "Created At"])
             for row in rows:
                 writer.writerow(row)
 
@@ -264,7 +292,13 @@ def export_alerts(
 
 
 @router.get("/evidence/presigned-url")
-def get_presigned_url(filename: str, alert_id: int, current_user: dict = Depends(get_current_user)):
+def get_presigned_url(
+    filename: str,
+    alert_id: int,
+    checksum_sha256: str = Query(..., pattern="^[a-fA-F0-9]{64}$"),
+    content_type: str = Query("application/octet-stream", min_length=1, max_length=120),
+    current_user: dict = Depends(get_current_user),
+):
     safe_name = Path(filename).name
     if not safe_name or safe_name != filename or len(safe_name) > 255:
         raise HTTPException(status_code=422, detail="Invalid filename")
@@ -281,7 +315,8 @@ def get_presigned_url(filename: str, alert_id: int, current_user: dict = Depends
     if not client:
         raise HTTPException(status_code=500, detail="MinIO is not connected")
 
-    object_key = f"alerts/{alert_id}/{safe_name}"
+    checksum_sha256 = checksum_sha256.lower()
+    object_key = f"alerts/{alert_id}/{uuid.uuid4().hex}-{safe_name}"
     try:
         import boto3
         from botocore.config import Config
@@ -296,11 +331,21 @@ def get_presigned_url(filename: str, alert_id: int, current_user: dict = Depends
         )
         url = public_client.generate_presigned_url(
             "put_object",
-            Params={"Bucket": EVIDENCE_BUCKET, "Key": object_key, "ContentType": "application/octet-stream"},
+            Params={
+                "Bucket": EVIDENCE_BUCKET, "Key": object_key, "ContentType": content_type,
+                "Metadata": {"sha256": checksum_sha256},
+            },
             ExpiresIn=600,
         )
 
-        return {"upload_url": url, "object_key": object_key}
+        return {
+            "upload_url": url,
+            "object_key": object_key,
+            "required_headers": {
+                "Content-Type": content_type,
+                "x-amz-meta-sha256": checksum_sha256,
+            },
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -309,23 +354,36 @@ def get_presigned_url(filename: str, alert_id: int, current_user: dict = Depends
 
 class EvidenceComplete(BaseModel):
     object_key: str = Field(..., min_length=1, max_length=500)
+    version: int = Field(..., ge=1)
+    checksum_sha256: str = Field(..., pattern="^[a-fA-F0-9]{64}$")
+    content_type: str = Field(..., min_length=1, max_length=120)
 
 
 @router.post("/alerts/{alert_id}/evidence/complete")
 def complete_evidence(alert_id: int, payload: EvidenceComplete, current_user: dict = Depends(get_current_user)):
     prefix = f"alerts/{alert_id}/"
-    filename = payload.object_key.removeprefix(prefix)
-    if not payload.object_key.startswith(prefix) or not filename or Path(filename).name != filename:
+    stored_name = payload.object_key.removeprefix(prefix)
+    object_token, separator, filename = stored_name.partition("-")
+    if (
+        not payload.object_key.startswith(prefix)
+        or separator != "-"
+        or len(object_token) != 32
+        or any(character not in "0123456789abcdef" for character in object_token.lower())
+        or not filename
+        or Path(filename).name != filename
+    ):
         raise HTTPException(status_code=422, detail="Invalid evidence object key")
     if not pg_conn:
         raise HTTPException(status_code=503, detail="Alerts database unavailable")
     with pg_conn.cursor() as cur:
-        cur.execute("SELECT assignee_id FROM alerts WHERE alert_id = %s", (alert_id,))
+        cur.execute("SELECT assignee_id, version FROM alerts WHERE alert_id = %s", (alert_id,))
         row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Alert not found")
     if current_user["role"] != "ADMIN" and row[0] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Alert is outside your scope")
+    if row[1] != payload.version:
+        raise HTTPException(status_code=409, detail="Alert changed; refresh before updating")
     client = get_s3_client()
     if not client:
         raise HTTPException(status_code=503, detail="Evidence store unavailable")
@@ -333,14 +391,31 @@ def complete_evidence(alert_id: int, payload: EvidenceComplete, current_user: di
         metadata = client.head_object(Bucket=EVIDENCE_BUCKET, Key=payload.object_key)
     except Exception as exc:
         raise HTTPException(status_code=422, detail="Evidence object not uploaded") from exc
+    checksum_sha256 = payload.checksum_sha256.lower()
+    object_checksum = (metadata.get("Metadata") or {}).get("sha256", "").lower()
+    if object_checksum != checksum_sha256:
+        raise HTTPException(status_code=422, detail="Evidence checksum metadata mismatch")
+    if metadata.get("ContentType") != payload.content_type:
+        raise HTTPException(status_code=422, detail="Evidence content type mismatch")
+    if metadata["ContentLength"] > MAX_EVIDENCE_BYTES:
+        raise HTTPException(status_code=422, detail="Evidence exceeds the 25 MiB limit")
+    try:
+        actual_checksum = _evidence_sha256(client, payload.object_key)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Evidence checksum unavailable") from exc
+    if actual_checksum != checksum_sha256:
+        raise HTTPException(status_code=422, detail="Evidence content checksum mismatch")
     download_url = f"{os.environ.get('MINIO_PUBLIC_ENDPOINT', 'http://localhost:9000')}/{EVIDENCE_BUCKET}/{payload.object_key}"
     try:
         with pg_conn.cursor() as cur:
             cur.execute(
-                """WITH inserted AS (
+                """WITH candidate AS (
+                    SELECT alert_id FROM alerts WHERE alert_id = %s AND version = %s
+                ), inserted AS (
                     INSERT INTO evidence_files
-                        (alert_id, object_key, original_filename, content_type, size_bytes, uploaded_by)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                        (alert_id, object_key, original_filename, content_type, size_bytes,
+                         checksum_sha256, uploaded_by)
+                    SELECT alert_id, %s, %s, %s, %s, %s, %s FROM candidate
                     ON CONFLICT (object_key) DO NOTHING RETURNING alert_id
                 ), changed AS (
                     UPDATE alerts SET evidence_file_url = %s, version = version + 1, updated_at = NOW()
@@ -352,16 +427,34 @@ def complete_evidence(alert_id: int, payload: EvidenceComplete, current_user: di
                     SELECT alert_id, %s, 'EVIDENCE_UPLOADED', status, status, %s::jsonb
                     FROM changed RETURNING audit_id
                 ) SELECT changed.version FROM changed JOIN audit ON TRUE""",
-                (alert_id, payload.object_key, filename, metadata.get("ContentType", "application/octet-stream"),
-                 metadata["ContentLength"], current_user["id"], download_url, current_user["id"],
-                 json.dumps({"object_key": payload.object_key, "size_bytes": metadata["ContentLength"]})),
+                (alert_id, payload.version, payload.object_key, filename, payload.content_type,
+                 metadata["ContentLength"], checksum_sha256, current_user["id"], download_url,
+                 current_user["id"], json.dumps({
+                     "object_key": payload.object_key,
+                     "size_bytes": metadata["ContentLength"],
+                     "checksum_sha256": checksum_sha256,
+                     "content_type": payload.content_type,
+                 })),
             )
             changed = cur.fetchone()
             if changed:
                 version = changed[0]
             else:
-                cur.execute("SELECT version FROM alerts WHERE alert_id = %s", (alert_id,))
-                version = cur.fetchone()[0]
-        return {"object_key": payload.object_key, "download_url": download_url, "version": version}
+                cur.execute(
+                    "SELECT alerts.version FROM alerts JOIN evidence_files USING (alert_id) "
+                    "WHERE alerts.alert_id = %s AND evidence_files.object_key = %s",
+                    (alert_id, payload.object_key),
+                )
+                existing = cur.fetchone()
+                if existing is None:
+                    raise HTTPException(status_code=409, detail="Alert changed; refresh before updating")
+                version = existing[0]
+        return {
+            "object_key": payload.object_key, "download_url": download_url,
+            "checksum_sha256": checksum_sha256, "content_type": payload.content_type,
+            "version": version,
+        }
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Evidence metadata unavailable") from exc
